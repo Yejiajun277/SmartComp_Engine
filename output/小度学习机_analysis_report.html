@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能竞品分析报告 — 小度学习机</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; background: #f1f5f9; color: #1e293b; }
+    </style>
+</head>
+<body>
+<div style="max-width:1100px;margin:0 auto;padding:24px;">
+
+    <!-- 报告头部 -->
+    <div style="background:linear-gradient(135deg,#1e40af,#3b82f6);border-radius:20px;padding:40px;margin-bottom:28px;color:#fff;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+                <h1 style="font-size:28px;font-weight:700;margin-bottom:8px;">🔍 智能竞品分析报告</h1>
+                <div style="font-size:20px;opacity:0.9;margin-bottom:12px;">小度学习机</div>
+                <div style="font-size:14px;opacity:0.75;">分析竞品 5 个 · 生成时间 2026-05-01 09:30</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="background:rgba(255,255,255,0.2);border-radius:12px;padding:12px 20px;">
+                    <div style="font-size:12px;opacity:0.8;">协作模式</div>
+                    <div style="font-size:15px;font-weight:600;">串行采集 → 并行分析 → 串行汇总</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 竞品发现 -->
+    <div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:16px;">步步高学习机</strong>
+                        <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;">直接竞品</span>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">主打精准提分与全科资源，硬件护眼认证</p>
+                </div>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:16px;">作业帮学习机</strong>
+                        <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;">直接竞品</span>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">销量第一，海量题库与AI超级老师辅导</p>
+                </div>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:16px;">科大讯飞学习机</strong>
+                        <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;">直接竞品</span>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">专注语音识别与自然语言处理，智能评测</p>
+                </div>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:16px;">学而思学习机</strong>
+                        <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;">直接竞品</span>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">优质教育内容与自研大模型，王牌培优体系</p>
+                </div>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:16px;">普通平板</strong>
+                        <span style="background:#f59e0b;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;">间接竞品</span>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">通用平板设备，缺乏专业护眼与学习辅导功能</p>
+                </div></div></div>
+
+    <!-- 逐竞品对比（核心板块） -->
+    
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:18px;color:#1e293b;">⚔️ 小度学习机 vs 步步高学习机</h3>
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:500;">对比分析</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 14px;text-align:left;font-size:13px;width:100px;">维度</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#1e40af;font-weight:600;">小度学习机</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#991b1b;font-weight:600;">步步高学习机</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI精准学与个性化路径</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">教材同步与校内跟进</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">低龄兴趣启蒙与素质拓展</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">高年级应试提分与备考体系</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI 1对1辅导与互动答疑</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">作业全流程管控与专注力监测</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">体系化自研内容与名师课程</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">中高考同源技术与考情分析</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">护眼设计与家长管控</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">泛智能生态与多场景联动</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">买断硬件后免费使用基础同步教材及附赠的洪恩终生会员等低龄启蒙内容</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件价格约2598-2798元（部分型号享国补500元），无后续软件订阅费，购机附赠键盘、打印机、皮套等实物</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件一次性买断+实物赠品捆绑</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">暂无具体市占率，处于行业第二梯队，京东主流型号评论数2-5万条，用户基数较大</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;">↘ 下降</span></td>
+                </tr></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">小度更侧重AI精准学及提分闭环，能更好满足高年级应试需求；背靠百度具备泛智能生态整合优势。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.6;">步步高在低龄段兴趣启蒙（洪恩系列等）和素质拓展内容上更丰富，品牌历史悠久且家长信任度极高。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
+                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">1. 品牌历史悠久，家长信任度高，口碑推荐率高；2. 低龄段兴趣启蒙和素质拓展内容（洪恩系列、大语文、STEM）丰富；3. 教材同步能力强；4. 护眼设计与家长管控功能完善；5. 售后服务体系健全。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">1. 课程侧重兴趣启蒙，对高年级应试提分需求支持较弱，缺乏像竞品那样的备考体系与提分闭环；2. 价格相对市面上部分单功能产品偏高。</div>
+                    </div>
+                </div></div>
+            </div>
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:18px;color:#1e293b;">⚔️ 小度学习机 vs 作业帮学习机</h3>
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:500;">对比分析</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 14px;text-align:left;font-size:13px;width:100px;">维度</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#1e40af;font-weight:600;">小度学习机</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#991b1b;font-weight:600;">作业帮学习机</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI精准学与个性化路径</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">教材同步与校内跟进</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">低龄兴趣启蒙与素质拓展</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">高年级应试提分与备考体系</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI 1对1辅导与互动答疑</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">作业全流程管控与专注力监测</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">体系化自研内容与名师课程</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">中高考同源技术与考情分析</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">护眼设计与家长管控</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">泛智能生态与多场景联动</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">买断硬件后免费使用AI超级老师、百亿级题库及沉浸式管控功能</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件价格2000-4000元（P60约2224-2534元，T30为3299元，Ultra系列更高），无后续软件订阅费</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件一次性买断</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">全渠道销量份额约32.6%（2025年），线上销量/销额份额超31%（2026年Q1），稳居行业第一</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;">↗ 上升</span></td>
+                </tr></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">小度具备全屋智能生态优势，在泛智能应用场景和低龄趣味互动覆盖上更广。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.6;">作业帮教培基因深厚，AI超级老师实现从工具到代理的突破，作业全流程管控与专注力监测直击家长痛点，题库资源极丰富。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
+                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">1. AI教学能力行业领先：通过中国信通院4+级最高等级评估，AI超级老师实现从工具到代理的突破；2. 教培内容资源深厚：依托近10年沉淀的百亿级学情大数据与名师课程，题库资源丰富；3. 作业全流程管控：沉浸模式与专注力监测直击家长无法全程监督的痛点；4. 市场先发与规模优势：在主流价位段销量具有绝对统治力。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">搜索结果中未明确指出作业帮相比小度的核心劣势。但据文本推断，小度背靠百度具有“技术或生态优势”，作业帮在泛智能生态整合上可能弱于小度；同时作业帮高度侧重教培提分，对于低龄趣味互动及泛智能应用场景的覆盖可能不如具备全屋智能生态的小度。</div>
+                    </div>
+                </div></div>
+            </div>
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:18px;color:#1e293b;">⚔️ 小度学习机 vs 科大讯飞学习机</h3>
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:500;">对比分析</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 14px;text-align:left;font-size:13px;width:100px;">维度</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#1e40af;font-weight:600;">小度学习机</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#991b1b;font-weight:600;">科大讯飞学习机</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI精准学与个性化路径</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">教材同步与校内跟进</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">低龄兴趣启蒙与素质拓展</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">高年级应试提分与备考体系</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI 1对1辅导与互动答疑</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">作业全流程管控与专注力监测</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">体系化自研内容与名师课程</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">中高考同源技术与考情分析</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">护眼设计与家长管控</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">泛智能生态与多场景联动</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">买断硬件后免费使用精准学算法及中高考同源口语评测技术</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件价格1888-6499元（入门款1888元，中端主力2000-5000元，高端旗舰6000元以上），无后续软件订阅费</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件一次性买断，高配置与AI技术双重溢价</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">全渠道销量份额约12.1%（2025年H1），行业第三，主导6000元以上高端市场</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;text-align:center;"><span style="color:#64748b;">→ 稳定</span></td>
+                </tr></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">小度在低龄趣味互动及泛智能生态整合上更具优势，且性价比相对更高。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.6;">科大讯飞AI技术壁垒高，拥有中高考同源技术与口语评测算法，精准学算法深度与诊断准确率行业领先，高端市场统治力强。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
+                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">1. AI技术壁垒高，拥有中高考同源技术与口语评测算法；2. 高端市场统治力强，占据6000元以上价格段主导；3. 精准学算法深度与诊断准确率高；4. 品牌口碑好，在十大名牌排名中位列第一，有技术沉淀。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">1. 低龄启蒙资源相对较弱，体验不如专门启蒙APP；2. 高端机型价格偏高，部分型号存在硬件升级溢价情况。与小度学习机相比的具体劣势暂无数据。</div>
+                    </div>
+                </div></div>
+            </div>
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:18px;color:#1e293b;">⚔️ 小度学习机 vs 学而思学习机</h3>
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:500;">对比分析</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 14px;text-align:left;font-size:13px;width:100px;">维度</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#1e40af;font-weight:600;">小度学习机</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#991b1b;font-weight:600;">学而思学习机</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI精准学与个性化路径</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">教材同步与校内跟进</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">低龄兴趣启蒙与素质拓展</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">高年级应试提分与备考体系</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI 1对1辅导与互动答疑</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">作业全流程管控与专注力监测</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">体系化自研内容与名师课程</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">中高考同源技术与考情分析</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">护眼设计与家长管控</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">泛智能生态与多场景联动</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">买断硬件后免费使用全系标配的1600万分钟课程、16亿+题库及自研AI大模型，承诺内容无隐性消费</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件价格2698-6099元（P4为2698元，X5为5899元，2promax为6099元）</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件一次性买断，内容全量标配无订阅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">全渠道销量份额约19.8%（2025年H1），位居高端学习机销量与销额双第一</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;">↗ 上升</span></td>
+                </tr></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">小度背靠百度具有更强的通用AI技术底座和泛智能生态整合能力，应用场景不局限于学习。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.6;">学而思拥有22年教研积淀的自研内容体系（内容护城河），苏格拉底式AI讲题重引导思考而非直接给答案，自研大模型资质领先。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
+                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">1. 内容护城河：22年教研积淀，3000+自有教研团队，95%原S级名师授课，行业唯一通过电子国审备案的自研内容（专属电子出版物编号，不会突然下架）。2. AI技术资质：自研九章大模型获中国信通院5级认证，小思AI 1对1超级教育智能体v3.0获信通院4+级行业最高认证，并接入DeepSeek大模型互补。3. 行业标准制定者：深度参与AIIA/T 0267-2026《智能体技术要求与评估方法 行业应用 智能教学》制定。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">暂无数据</div>
+                    </div>
+                </div></div>
+            </div>
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:18px;color:#1e293b;">⚔️ 小度学习机 vs 普通平板</h3>
+                    <span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:500;">对比分析</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 14px;text-align:left;font-size:13px;width:100px;">维度</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#1e40af;font-weight:600;">小度学习机</th>
+                                <th style="padding:10px 14px;text-align:center;font-size:13px;color:#991b1b;font-weight:600;">普通平板</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI精准学与个性化路径</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">教材同步与校内跟进</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">低龄兴趣启蒙与素质拓展</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">高年级应试提分与备考体系</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">AI 1对1辅导与互动答疑</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">作业全流程管控与专注力监测</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">体系化自研内容与名师课程</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">中高考同源技术与考情分析</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">护眼设计与家长管控</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">泛智能生态与多场景联动</td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                        <td style="padding:8px 14px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td>
+                    </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">买断硬件后仅免费使用基础系统，无内置体系化学习资源与管控功能</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件价格2999-8999元起（支持24期免息及教育优惠），学习软件及优质内容需额外按需订阅或买断</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">硬件一次性买断+分期付款+软件按需订阅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">在4000-6000元价位段占比较大（苹果iPad为主），作为非专业学习设备分流部分泛学习需求</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;text-align:center;"><span style="color:#64748b;">→ 稳定</span></td>
+                </tr></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">小度具备专属的AI精准学、提分闭环及体系化内置学习资源，拥有底层家长管控与防沉迷护眼设计。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.6;">普通平板系统开放、应用生态极丰富，性能优越且多任务处理能力强，适用场景远不止学习。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
+                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">应用生态丰富，支持各类软件及手写笔配件；性能优越，多任务处理能力强；适用场景更广泛（不仅限于学习）；购买渠道优惠多（分期、教育优惠、平台补贴）。</div>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">系统开放导致娱乐干扰多，孩子易分心；缺乏专为学生设计的管控功能（无底层限制、无家长审批、无白名单）；无体系化内置学习资源，需家长额外找资源买会员；缺乏AI辅导和个性化学习路径规划功能；同等配置下价格偏高，性价比不如学习机。</div>
+                    </div>
+                </div></div>
+            </div>
+
+    <!-- 功能对比矩阵（总览） -->
+    
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">🔧 功能对比矩阵（总览）</h2>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:12px 16px;text-align:left;font-size:13px;border-right:1px solid #e2e8f0;">功能</th>
+                                <th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">小度学习机</th><th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">步步高学习机</th><th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">作业帮学习机</th><th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">科大讯飞学习机</th><th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">学而思学习机</th><th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">普通平板</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">AI精准学与个性化路径</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">教材同步与校内跟进</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">低龄兴趣启蒙与素质拓展</td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">高年级应试提分与备考体系</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">AI 1对1辅导与互动答疑</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">作业全流程管控与专注力监测</td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">体系化自研内容与名师课程</td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">中高考同源技术与考情分析</td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">护眼设计与家长管控</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td></tr><tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">泛智能生态与多场景联动</td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#f59e0b;font-size:18px;">🔶</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#ef4444;font-size:18px;">❌</span></td><td style="padding:10px 16px;text-align:center;"><span style="color:#22c55e;font-size:18px;">✅</span></td></tr></tbody>
+                    </table>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:#94a3b8;">
+                    <span>✅ 支持</span><span>🔶 部分支持</span><span>❌ 不支持</span><span>❓ 未知</span>
+                </div>
+            </div>
+
+    <!-- 定价分析 -->
+    
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">💰 定价策略对比</h2>
+                <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
+                    <thead>
+                        <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">竞品</th>
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">免费版</th>
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">付费版</th>
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">定价模式</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">步步高学习机</td>
+                    <td style="padding:10px 16px;font-size:13px;">买断硬件后免费使用基础同步教材及附赠的洪恩终生会员等低龄启蒙内容</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件价格约2598-2798元（部分型号享国补500元），无后续软件订阅费，购机附赠键盘、打印机、皮套等实物</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件一次性买断+实物赠品捆绑</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">作业帮学习机</td>
+                    <td style="padding:10px 16px;font-size:13px;">买断硬件后免费使用AI超级老师、百亿级题库及沉浸式管控功能</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件价格2000-4000元（P60约2224-2534元，T30为3299元，Ultra系列更高），无后续软件订阅费</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件一次性买断</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">科大讯飞学习机</td>
+                    <td style="padding:10px 16px;font-size:13px;">买断硬件后免费使用精准学算法及中高考同源口语评测技术</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件价格1888-6499元（入门款1888元，中端主力2000-5000元，高端旗舰6000元以上），无后续软件订阅费</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件一次性买断，高配置与AI技术双重溢价</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">学而思学习机</td>
+                    <td style="padding:10px 16px;font-size:13px;">买断硬件后免费使用全系标配的1600万分钟课程、16亿+题库及自研AI大模型，承诺内容无隐性消费</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件价格2698-6099元（P4为2698元，X5为5899元，2promax为6099元）</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件一次性买断，内容全量标配无订阅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">普通平板</td>
+                    <td style="padding:10px 16px;font-size:13px;">买断硬件后仅免费使用基础系统，无内置体系化学习资源与管控功能</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件价格2999-8999元起（支持24期免息及教育优惠），学习软件及优质内容需额外按需订阅或买断</td>
+                    <td style="padding:10px 16px;font-size:13px;">硬件一次性买断+分期付款+软件按需订阅</td>
+                </tr></tbody>
+                </table>
+                
+                <div style="margin-top:16px;padding:12px 16px;background:#f0fdf4;border-radius:8px;font-size:14px;">
+                    <strong>性价比排名：</strong><span style="margin-right:12px;font-size:14px;">🥇 作业帮学习机</span><span style="margin-right:12px;font-size:14px;">🥈 学而思学习机</span><span style="margin-right:12px;font-size:14px;">🥉 步步高学习机</span><span style="margin-right:12px;font-size:14px;">4. 科大讯飞学习机</span><span style="margin-right:12px;font-size:14px;">5. 普通平板</span>
+                </div>
+                <div style="margin-top:16px;padding:12px 16px;background:#fffbeb;border-radius:8px;font-size:14px;line-height:1.8;"><strong>策略分析：</strong>学习机行业普遍采用“硬件一次性买断+内容免费”的定价模型，与普通平板“硬件+软件双重收费”形成鲜明对比，旨在消除家长的后续付费焦虑。各品牌通过硬件配置和内容护城河拉开价格梯度：科大讯飞和学而思凭借独家AI算法与自研教研资源占据5000-6000元以上高端市场，享受技术溢价；作业帮和步步高卡位2000-4000元中端市场，以性价比和实物赠品策略获客；普通平板虽硬件性能强且支持分期，但隐性成本高且缺乏管控，在学习场景下定价逻辑不占优。</div>
+            </div>
+
+    <!-- 市场分析 -->
+    
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📈 市场格局分析</h2>
+                
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">普通平板</div>
+                    <div style="flex:1;margin:0 12px;">
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:100.0%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">在4000-6000元价位段占比较大（苹果iPad为主），作为非专业学习设备分流部分泛学习需求</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;"><span style="color:#64748b;">→ 稳定</span></div>
+                </div>
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">作业帮学习机</div>
+                    <div style="flex:1;margin:0 12px;">
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:5.0%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">全渠道销量份额约32.6%（2025年），线上销量/销额份额超31%（2026年Q1），稳居行业第一</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;"><span style="color:#22c55e;">↗ 上升</span></div>
+                </div>
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">学而思学习机</div>
+                    <div style="flex:1;margin:0 12px;">
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:5.0%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">全渠道销量份额约19.8%（2025年H1），位居高端学习机销量与销额双第一</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;"><span style="color:#22c55e;">↗ 上升</span></div>
+                </div>
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">科大讯飞学习机</div>
+                    <div style="flex:1;margin:0 12px;">
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:5.0%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">全渠道销量份额约12.1%（2025年H1），行业第三，主导6000元以上高端市场</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;"><span style="color:#64748b;">→ 稳定</span></div>
+                </div>
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">步步高学习机</div>
+                    <div style="flex:1;margin:0 12px;">
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:5.0%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">暂无具体市占率，处于行业第二梯队，京东主流型号评论数2-5万条，用户基数较大</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;"><span style="color:#ef4444;">↘ 下降</span></div>
+                </div>
+                
+                <div style="margin-top:20px;">
+                    <h3 style="font-size:16px;color:#475569;margin-bottom:12px;">👥 用户口碑</h3>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">作业帮学习机</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">9.4/10</div>
+                        <div><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">AI超级老师1对1辅导</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">大尺寸类纸屏护眼</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">精准诊断提分</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">闲置率高达70%</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">功能不贴合易浪费</span></div>
+                    </div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">学而思学习机</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">9.5/10</div>
+                        <div><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">自研课程专业</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">新课标覆盖全</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">无隐性消费</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">AI引导思考不给答案</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">让家长省心</span></div>
+                    </div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">科大讯飞学习机</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">9.0/10</div>
+                        <div><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">AI诊断准确率高</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">护眼效果好</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">英语启蒙趣味强</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">低龄模式敷衍</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">硬件升级溢价高</span></div>
+                    </div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">步步高学习机</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">8.0/10</div>
+                        <div><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">老牌子值得信赖</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">屏幕清晰护眼</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">英语学习好帮手</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">价格偏高</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">高年级提分支持弱</span></div>
+                    </div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">普通平板</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">8.0/10</div>
+                        <div><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">性能优越</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">应用生态丰富</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">多任务处理强</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">缺乏专属学习功能</span><span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">容易分心</span></div>
+                    </div></div>
+                </div>
+                <div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;"><strong>增长趋势：</strong>整体市场呈现结构性增长与分化趋势。作业帮凭借主流价位段和AI功能实现爆发式增长（同比增速达500%），学而思依托内容优势在高端市场快速崛起；科大讯飞在高端市场保持稳定并向下拓展中端；步步高等老牌增长承压，趋于稳定或下滑；普通平板在专业学习场景下被学习机替代的趋势明显。同时，行业整体面临高闲置率的增长隐患，从硬件驱动向AI与内容驱动转型是核心增长引擎。</div>
+                <div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;"><strong>渠道分析：</strong>全渠道布局与国家补贴（国补）成为行业标配策略。作业帮、学而思、科大讯飞均采用线上（京东、抖音、淘宝等）+线下全渠道覆盖，并积极借力国补政策降低购买门槛促转化；步步高侧重京东等主流电商及满减赠品促销。在渠道信任度构建上，学而思和作业帮注重权威机构（信通院、沙利文等）背书与行业标准制定，学而思还通过大模型（DeepSeek）与教辅生态合作强化渠道内容壁垒；普通平板则依赖品牌直营店、教育优惠及长周期免息分期策略。</div>
+            </div>
+
+    <!-- 本产品差异化定位 -->
+    
+        <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">🧭 小度学习机 差异化定位</h2>
+
+            <!-- 定位声明 -->
+            <div style="background:linear-gradient(135deg,#1e293b,#334155);border-radius:12px;padding:20px;margin-bottom:20px;color:#fff;">
+                <div style="font-size:12px;opacity:0.7;margin-bottom:6px;">定位声明</div>
+                <div style="font-size:16px;font-weight:600;line-height:1.6;">以泛智能生态为护城河的AI全场景伴学中枢，打破传统学习机单一学习场景与高闲置困局，实现“学习沉浸管控+生活智能联动”的双模体验。</div>
+            </div>
+
+            
+            
+            <div style="margin-bottom:16px;">
+                <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:8px;">💪 领先优势（多数竞品不具备）</div>
+                <div><span style="background:#dbeafe;color:#1e40af;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;margin:4px;display:inline-block;">⚡ AI 1对1辅导与互动答疑</span><span style="background:#dbeafe;color:#1e40af;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;margin:4px;display:inline-block;">⚡ 泛智能生态与多场景联动</span></div>
+            </div>
+            
+            <div style="margin-bottom:16px;">
+                <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:8px;">💎 核心差异化亮点</div>
+                <ul style="margin:0;padding-left:20px;line-height:1.8;"><li style="padding:4px 0;font-size:14px;color:#475569;">✦ 泛智能生态与全屋智能联动（小度独有优势，打破单一学习场景）</li><li style="padding:4px 0;font-size:14px;color:#475569;">✦ 中高考同源技术与本地化考情分析（科大讯飞核心壁垒）</li><li style="padding:4px 0;font-size:14px;color:#475569;">✦ 作业全流程沉浸式托管与专注力摄像头监测（作业帮特色痛点解决方案）</li><li style="padding:4px 0;font-size:14px;color:#475569;">✦ 22年自研课程体系与苏格拉底式引导讲题（学而思内容与教学法护城河）</li><li style="padding:4px 0;font-size:14px;color:#475569;">✦ 低龄段洪恩系列APP游戏闯关启蒙及素质拓展（步步高差异化定位）</li></ul>
+            </div>
+
+            <div style="margin-top:20px;"><div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:12px;">⚔️ 逐竞品差异化锚点</div>
+                <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs 步步高学习机 我方胜出</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">小度更侧重AI精准学及提分闭环，能更好满足高年级应试需求；背靠百度具备泛智能生态整合优势。</div>
+                    </div>
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs 步步高学习机 需追赶</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">步步高在低龄段兴趣启蒙（洪恩系列等）和素质拓展内容上更丰富，品牌历史悠久且家长信任度极高。</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs 作业帮学习机 我方胜出</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">小度具备全屋智能生态优势，在泛智能应用场景和低龄趣味互动覆盖上更广。</div>
+                    </div>
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs 作业帮学习机 需追赶</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">作业帮教培基因深厚，AI超级老师实现从工具到代理的突破，作业全流程管控与专注力监测直击家长痛点，题库资源极丰富。</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs 科大讯飞学习机 我方胜出</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">小度在低龄趣味互动及泛智能生态整合上更具优势，且性价比相对更高。</div>
+                    </div>
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs 科大讯飞学习机 需追赶</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">科大讯飞AI技术壁垒高，拥有中高考同源技术与口语评测算法，精准学算法深度与诊断准确率行业领先，高端市场统治力强。</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs 学而思学习机 我方胜出</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">小度背靠百度具有更强的通用AI技术底座和泛智能生态整合能力，应用场景不局限于学习。</div>
+                    </div>
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs 学而思学习机 需追赶</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">学而思拥有22年教研积淀的自研内容体系（内容护城河），苏格拉底式AI讲题重引导思考而非直接给答案，自研大模型资质领先。</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs 普通平板 我方胜出</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">小度具备专属的AI精准学、提分闭环及体系化内置学习资源，拥有底层家长管控与防沉迷护眼设计。</div>
+                    </div>
+                    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
+                        <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs 普通平板 需追赶</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">普通平板系统开放、应用生态极丰富，性能优越且多任务处理能力强，适用场景远不止学习。</div>
+                    </div>
+                </div></div>
+        </div>
+
+    <!-- 分隔线 -->
+    <div style="text-align:center;margin:32px 0;font-size:20px;color:#cbd5e1;">━━━━━━━━━━━  策略建议  ━━━━━━━━━━━</div>
+
+    <!-- 策略建议 -->
+    
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="margin:0 0 16px 0;font-size:20px;color:#1e293b;">🎯 差异化策略</h2>
+                <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:12px;">
+                    <strong style="font-size:15px;">核心差异：</strong>
+                    <span style="font-size:15px;">全场景AI伴学与泛智能生态联动（打破学习机高闲置率痛点）</span>
+                </div>
+                <ul style="margin:0;padding-left:20px;line-height:1.8;"><li style="padding:4px 0;font-size:14px;">✦ 独家全屋智能联动优势，非学习时段化身家庭智能中枢，解决行业70%高闲置率痛点</li><li style="padding:4px 0;font-size:14px;">✦ 百度AI大模型底座支撑，在AI精准学、互动答疑与本地化考情分析上具备通用技术降维打击能力</li><li style="padding:4px 0;font-size:14px;">✦ 学习/生活双模无缝切换，兼顾家长严管控诉求与孩子全场景陪伴，跳出纯教培内卷</li></ul>
+            </div>
+    
+        <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📋 行动方案</h2>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:280px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">P0</span>
+                    <strong style="font-size:15px;">推出“学习+生活”双模系统，学习时段强制沉浸管控，非学习时段无缝切换至小度全屋智能中枢模式（语音助手、家居控制、影音娱乐），主打“不闲置的学习机”</strong>
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:4px;">⏰ 3个月内完成系统OTA升级与新品首发</div>
+                <div style="font-size:13px;color:#475569;">🎯 直击行业闲置率痛点，提升产品日活至行业平均水平的2倍以上，转化率提升20%</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:280px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <span style="background:#f59e0b;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">P1</span>
+                    <strong style="font-size:15px;">深化百度AI大模型应用，推出“AI规划师+AI答疑导师”功能，将泛智能数据（作息、习惯）与精准学算法结合，生成个性化学习与生活作息闭环方案</strong>
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:4px;">⏰ 6个月内完成核心功能开发与内测</div>
+                <div style="font-size:13px;color:#475569;">🎯 构建AI技术差异化壁垒，弥补教研深度短板，提升高年级应试提分场景的家长信任度</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:280px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <span style="background:#22c55e;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">P2</span>
+                    <strong style="font-size:15px;">制定“生态套件”定价与渠道策略，推出“学习机+智能台灯/词典笔/智能家居”国补组合包，卡位2000-3500元价格带，以生态总价值对抗竞品单一硬件性价比</strong>
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:4px;">⏰ 3个月内配合新品上市落地，覆盖核心线上渠道与线下体验店</div>
+                <div style="font-size:13px;color:#475569;">🎯 避开与作业帮的纯硬件价格战，提升客单价与综合毛利率，借助国补实现销量爆发</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:280px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <span style="background:#94a3b8;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">P3</span>
+                    <strong style="font-size:15px;">发起“告别吃灰”品牌营销战役，联合权威机构发布《学习机闲置率白皮书》，强化小度“全天候AI伴学中枢”心智，对比传统学习机的单一场景局限</strong>
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:4px;">⏰ 6-9个月内实施全渠道营销推广</div>
+                <div style="font-size:13px;color:#475569;">🎯 建立品类新标准，抢占泛学习场景心智，品牌差异化认知度提升30%</div>
+            </div></div>
+        </div>
+    
+        <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <h2 style="margin:0 0 12px 0;font-size:20px;color:#1e293b;">⚠️ 风险评估</h2>
+            <p style="font-size:15px;line-height:1.8;color:#475569;margin:0;">竞品可能通过系统升级引入泛生活应用或接入其他智能家居生态，削弱我方生态独占优势。家长可能担忧生活模式会分散孩子注意力，与严格管控诉求产生冲突，需在产品交互上做好物理或软件隔离。中端市场价格战极其激烈，作业帮可能凭借规模效应进一步下探价格，挤压我方利润空间。</p>
+        </div>
+
+    <!-- 三维分析摘要 -->
+    <div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>📊 三维分析摘要</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                <div style="font-size:24px;margin-bottom:8px;">🔧</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:6px;">产品分析</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;">小度独有泛智能生态与全屋智能联动优势，但在纯教培内容深度与精准学算法壁垒上弱于学而思与科大讯飞。</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                <div style="font-size:24px;margin-bottom:8px;">💰</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:6px;">定价分析</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;">行业普遍硬件买断内容免费，小度处于中端性价比区间，需通过生态附加值跳出纯硬件价格战。</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
+                <div style="font-size:24px;margin-bottom:8px;">📈</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:6px;">市场分析</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;">市场呈寡头格局且面临70%高闲置率痛点，国补是关键转化杠杆，AI与内容是核心驱动力。</div>
+            </div></div></div>
+
+    
+            <div style="background:linear-gradient(135deg,#1e3a5f,#1e293b);border-radius:16px;padding:28px;margin-bottom:24px;color:#fff;">
+                <h2 style="margin:0 0 12px 0;font-size:20px;">💡 综合建议</h2>
+                <p style="font-size:15px;line-height:1.8;margin:0;opacity:0.95;">小度应避开学而思与科大讯飞的高端教培内卷，跳出作业帮的中端价格战，以“打破闲置”为切入点，将泛智能生态转化为核心竞争壁垒。通过学习与生活双模切换，解决行业高闲置痛点，配合国补与生态套件营销，稳固2000-3500元价格带，建立“不闲置的AI学习机”差异化心智。</p>
+            </div>
+
+    
+            <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-top:24px;">
+                <div style="font-size:13px;font-weight:600;color:#64748b;margin-bottom:8px;">⏱️ 耗时统计</div>
+                <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>竞品发现</span><span>51.81s</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>数据采集</span><span>235.81s</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>并行分析</span><span>132.49s</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>策略建议</span><span>43.69s</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:700;font-size:14px;"><span>总耗时</span><span>463.81s</span></div>
+            </div>
+
+    <!-- 页脚 -->
+    <div style="text-align:center;padding:24px 0;font-size:12px;color:#94a3b8;">
+        智能竞品分析多Agent系统 · 串行采集 → 并行分析 → 串行汇总
+    </div>
+
+</div>
+</body>
+</html>
