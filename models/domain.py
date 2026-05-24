@@ -1,145 +1,317 @@
 # -*- coding: utf-8 -*-
 """
-models/domain.py — 领域模型定义
+models/domain.py - 竞品分析领域模型
 """
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
+
+
+def now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class RelevanceLevel(Enum):
-    """竞品相关性等级"""
-    HIGH = "HIGH"       # 直接竞品
-    MEDIUM = "MEDIUM"   # 间接竞品
-    LOW = "LOW"         # 潜在竞品
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
 
 
 class Priority(Enum):
-    """行动优先级"""
-    P0 = "P0"   # 最高优先级，立即行动
-    P1 = "P1"   # 高优先级，短期行动
-    P2 = "P2"   # 中优先级，中期规划
-    P3 = "P3"   # 低优先级，长期关注
+    P0 = "P0"
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+
+
+@dataclass
+class Citation:
+    id: str
+    title: str = ""
+    url: str = ""
+    snippet: str = ""
+    source_type: str = "web"
+    collected_at: str = field(default_factory=now_iso)
+    confidence: float = 0.6
 
 
 @dataclass
 class CompetitorInfo:
-    """竞品基本信息"""
-    name: str                               # 竞品名称
-    brief: str = ""                         # 简要描述
-    relevance: str = "HIGH"                 # 相关性等级
+    name: str
+    brief: str = ""
+    relevance: str = RelevanceLevel.HIGH.value
 
 
 @dataclass
 class CompetitorList:
-    """竞品发现结果"""
-    product_name: str                       # 用户产品名称
-    product_category: str = ""              # 产品类别
+    product_name: str
+    product_category: str = ""
     competitors: list[CompetitorInfo] = field(default_factory=list)
     search_keywords_used: list[str] = field(default_factory=list)
 
 
 @dataclass
+class ResearchTask:
+    id: str
+    competitor: str
+    topic: str
+    query: str
+    priority: str = Priority.P1.value
+    retry_count: int = 0
+
+
+@dataclass
+class ResearchEvidence:
+    competitor: str
+    topic: str
+    summary: str = ""
+    source_urls: list[str] = field(default_factory=list)
+    raw_text: str = ""
+    citations: list[Citation] = field(default_factory=list)
+    error: str = ""
+
+
+@dataclass
+class CoverageGap:
+    competitor: str
+    topic: str
+    reason: str
+
+
+@dataclass
+class ResearchCoverage:
+    required_topics: list[str] = field(default_factory=list)
+    completed_topics: dict[str, list[str]] = field(default_factory=dict)
+    failed_tasks: list[dict[str, str]] = field(default_factory=list)
+    coverage_gaps: list[CoverageGap] = field(default_factory=list)
+
+
+@dataclass
+class EvidenceBundle:
+    competitor: str
+    topic: str
+    summary: str = ""
+    citations: list[Citation] = field(default_factory=list)
+    raw_text: str = ""
+    coverage_status: str = "complete"
+    extracted_at: str = field(default_factory=now_iso)
+    task_id: str = ""
+
+
+@dataclass
 class CompetitorData:
-    """单个竞品的采集数据"""
-    name: str                               # 竞品名称
-    product_features: str = ""              # 产品功能描述
-    pricing_info: str = ""                  # 定价信息
-    market_share: str = ""                  # 市场份额
-    user_reviews: str = ""                  # 用户评价
-    strengths: str = ""                     # 优势
-    weaknesses: str = ""                    # 劣势
-    channels: str = ""                      # 渠道策略
-    search_sources: list[str] = field(default_factory=list)  # 搜索原文
+    name: str
+    product_features: str = ""
+    pricing_info: str = ""
+    market_share: str = ""
+    user_reviews: str = ""
+    strengths: str = ""
+    weaknesses: str = ""
+    channels: str = ""
+    search_sources: list[str] = field(default_factory=list)
+    research_evidence: list[ResearchEvidence] = field(default_factory=list)
+
+
+@dataclass
+class FeatureNode:
+    name: str
+    description: str = ""
+    supported_competitors: list[str] = field(default_factory=list)
+    children: list["FeatureNode"] = field(default_factory=list)
 
 
 @dataclass
 class FeatureComparison:
-    """功能对比项"""
-    feature: str                            # 功能名称
-    values: dict[str, str] = field(default_factory=dict)  # 竞品→状态(✅/🔶/❌)
+    feature: str
+    values: dict[str, str] = field(default_factory=dict)
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass
 class CompetitiveAdvantage:
-    """竞争优势/劣势"""
-    competitor: str                         # 竞品名称
-    our_advantage: str = ""                 # 我方优势
-    their_advantage: str = ""               # 对方优势
+    competitor: str
+    our_advantage: str = ""
+    their_advantage: str = ""
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass
-class ProductAnalysis:
-    """产品分析结果"""
-    feature_matrix: list[FeatureComparison] = field(default_factory=list)
-    competitive_advantages: list[CompetitiveAdvantage] = field(default_factory=list)
-    differentiation_points: list[str] = field(default_factory=list)
-    summary: str = ""
+class PricingModel:
+    competitor: str
+    model: str = ""
+    free_tier: str = ""
+    paid_tier: str = ""
+    billing_basis: str = ""
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass
 class PricingItem:
-    """定价信息项"""
-    competitor: str                         # 竞品名称
-    free_tier: str = ""                     # 免费版内容
-    paid_tier: str = ""                     # 付费版内容
-    pricing_model: str = ""                 # 定价模型
-
-
-@dataclass
-class PricingAnalysis:
-    """定价分析结果"""
-    pricing_comparison: list[PricingItem] = field(default_factory=list)
-    pricing_strategy_analysis: str = ""
-    value_ranking: list[str] = field(default_factory=list)
-    summary: str = ""
+    competitor: str
+    free_tier: str = ""
+    paid_tier: str = ""
+    pricing_model: str = ""
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MarketShareItem:
-    """市场份额项"""
-    competitor: str                         # 竞品名称
-    share_estimate: str = ""                # 份额估算
-    trend: str = ""                         # 趋势
+    competitor: str
+    share_estimate: str = ""
+    trend: str = ""
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass
 class UserReputation:
-    """用户口碑"""
-    score: str = ""                         # 评分
-    keywords: list[str] = field(default_factory=list)  # 关键词
+    score: str = ""
+    keywords: list[str] = field(default_factory=list)
+    citations: list[str] = field(default_factory=list)
+
+
+@dataclass
+class UserPersona:
+    name: str
+    segment: str = ""
+    needs: list[str] = field(default_factory=list)
+    complaints: list[str] = field(default_factory=list)
+    preferred_channels: list[str] = field(default_factory=list)
+    citations: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ConclusionItem:
+    id: str
+    dimension: str
+    statement: str
+    citations: list[str] = field(default_factory=list)
+    confidence: float = 0.6
+    evidence_topics: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MessageEnvelope:
+    task_id: str
+    agent_role: str
+    payload_type: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    citations: list[str] = field(default_factory=list)
+    quality_flags: list[str] = field(default_factory=list)
+    retry_count: int = 0
+
+
+@dataclass
+class AnalysisBundle:
+    dimension: str
+    findings: list[ConclusionItem] = field(default_factory=list)
+    citations: list[Citation] = field(default_factory=list)
+    confidence: float = 0.6
+    message: MessageEnvelope | None = None
+
+
+@dataclass
+class ProductAnalysis:
+    feature_matrix: list[FeatureComparison] = field(default_factory=list)
+    competitive_advantages: list[CompetitiveAdvantage] = field(default_factory=list)
+    differentiation_points: list[str] = field(default_factory=list)
+    feature_tree: list[FeatureNode] = field(default_factory=list)
+    conclusions: list[ConclusionItem] = field(default_factory=list)
+    citations: list[Citation] = field(default_factory=list)
+    message: MessageEnvelope | None = None
+    summary: str = ""
+
+
+@dataclass
+class PricingAnalysis:
+    pricing_comparison: list[PricingItem] = field(default_factory=list)
+    pricing_strategy_analysis: str = ""
+    value_ranking: list[str] = field(default_factory=list)
+    pricing_models: list[PricingModel] = field(default_factory=list)
+    conclusions: list[ConclusionItem] = field(default_factory=list)
+    citations: list[Citation] = field(default_factory=list)
+    message: MessageEnvelope | None = None
+    summary: str = ""
 
 
 @dataclass
 class MarketAnalysis:
-    """市场分析结果"""
     market_share_data: list[MarketShareItem] = field(default_factory=list)
     growth_trends: str = ""
     user_reputation: dict[str, UserReputation] = field(default_factory=dict)
     channel_analysis: str = ""
+    user_personas: list[UserPersona] = field(default_factory=list)
+    conclusions: list[ConclusionItem] = field(default_factory=list)
+    citations: list[Citation] = field(default_factory=list)
+    message: MessageEnvelope | None = None
     summary: str = ""
+
+
+@dataclass
+class QAIssue:
+    issue_type: str
+    severity: str
+    target_agent: str
+    reason: str
+    required_fix: str
+    related_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
 class ActionItem:
-    """行动方案项"""
-    priority: str                           # P0/P1/P2/P3
-    action: str                             # 行动描述
-    timeline: str = ""                      # 时间线
-    expected_impact: str = ""               # 预期效果
+    priority: str
+    action: str
+    timeline: str = ""
+    expected_impact: str = ""
+    citations: list[str] = field(default_factory=list)
+
+
+@dataclass
+class TraceEvent:
+    node: str
+    status: str
+    started_at: str
+    ended_at: str
+    latency_seconds: float
+    prompt: str = ""
+    input_summary: str = ""
+    output_summary: str = ""
+    token_usage: dict[str, int] = field(default_factory=dict)
+    error: str = ""
+    decision: str = ""
+    version: str = "v2"
 
 
 @dataclass
 class StrategyReport:
-    """策略建议报告（最终输出）"""
-    product_name: str                       # 产品名称
-    competitor_count: int = 0               # 竞品数量
-    overall_positioning: str = ""           # 整体定位
-    differentiation_strategy: dict = field(default_factory=dict)
+    product_name: str
+    competitor_count: int = 0
+    overall_positioning: str = ""
+    differentiation_strategy: dict[str, Any] = field(default_factory=dict)
     action_plan: list[ActionItem] = field(default_factory=list)
     risk_assessment: str = ""
-    product_analysis_summary: str = ""      # 产品分析摘要
-    pricing_analysis_summary: str = ""      # 定价分析摘要
-    market_analysis_summary: str = ""       # 市场分析摘要
+    product_analysis_summary: str = ""
+    pricing_analysis_summary: str = ""
+    market_analysis_summary: str = ""
+    coverage_gaps: list[CoverageGap] = field(default_factory=list)
+    qa_issues: list[QAIssue] = field(default_factory=list)
+    citations: list[Citation] = field(default_factory=list)
     summary: str = ""
-    raw_llm_logs: list[dict] = field(default_factory=list)
+    status: str = "success"
+    run_id: str = ""
+    raw_llm_logs: list[dict[str, Any]] = field(default_factory=list)
+
+
+def to_dict(value: Any) -> Any:
+    if is_dataclass(value):
+        return {key: to_dict(item) for key, item in asdict(value).items()}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, list):
+        return [to_dict(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): to_dict(item) for key, item in value.items()}
+    return value

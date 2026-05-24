@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "competitive_analysis_workflow": "./agent.py:competitive_analysis_workflow",
+    "competitive_analysis_assistant": "./agent.py:competitive_analysis_assistant"
+  },
+  "env": ".env"
+}

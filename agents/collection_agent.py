@@ -1,24 +1,38 @@
 # -*- coding: utf-8 -*-
 """
-agents/collection_agent.py — 数据采集Agent
-
-职责：对每个竞品，采集产品功能、定价、用户评价、市场份额等信息
-LLM调用：1+N次（维度拆解 + 逐竞品汇总）
-外部工具：百度AI搜索
-提示词来源：prompts/collection_agent.md
+agents/collection_agent.py - 结构化证据采集 Agent
 """
 
+from __future__ import annotations
+
+import re
+from collections import defaultdict
+
+import config
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorList, CompetitorData
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
-import config
-import json
+from models.domain import (
+    Citation,
+    CompetitorData,
+    CoverageGap,
+    EvidenceBundle,
+    ResearchCoverage,
+    ResearchEvidence,
+    ResearchTask,
+)
+
+
+TOPIC_FIELD_MAP = {
+    "product_features": "product_features",
+    "pricing_info": "pricing_info",
+    "market_share": "market_share",
+    "user_reviews": "user_reviews",
+    "channels": "channels",
+}
 
 
 class CollectionAgent(BaseAgent):
-    """数据采集Agent — 逐竞品深度采集"""
-
     def __init__(self):
         prompts = load_prompts("collection_agent")
         super().__init__(
@@ -28,84 +42,162 @@ class CollectionAgent(BaseAgent):
         self._prompt_collect = prompts["prompt_collect"]
         self.search_client = SearchClient()
 
-    async def run(self, product_description: str,
-                  competitor_list: CompetitorList) -> dict[str, CompetitorData]:
-        """
-        主运行逻辑：逐竞品搜索+汇总
+    async def run(
+        self,
+        product_description: str,
+        tasks: list[ResearchTask],
+        retry_count: int = 0,
+    ) -> dict:
+        grouped_bundles: dict[str, list[EvidenceBundle]] = defaultdict(list)
+        grouped_evidence: dict[str, list[ResearchEvidence]] = defaultdict(list)
+        coverage = ResearchCoverage(required_topics=sorted({task.topic for task in tasks}))
 
-        Args:
-            product_description: 用户产品描述
-            competitor_list: 竞品列表
-
-        Returns:
-            dict[str, CompetitorData]: 竞品名称 → 采集数据
-        """
-        self._log(f"📊 开始采集数据，共{len(competitor_list.competitors)}个竞品")
-
-        result_data = {}
-        product_name = competitor_list.product_name
-
-        for i, comp in enumerate(competitor_list.competitors):
-            self._log(f"   采集 {i+1}/{len(competitor_list.competitors)}: {comp.name}")
-            data = self._collect_competitor(product_name, product_description, comp.name)
-            result_data[comp.name] = data
-
-        self._log(f"✅ 数据采集完成: {len(result_data)}个竞品")
-        return result_data
-
-    def _collect_competitor(self, product_name: str,
-                            product_description: str,
-                            competitor_name: str) -> CompetitorData:
-        """采集单个竞品数据"""
-        # 生成搜索查询
-        queries = [
-            f"{competitor_name} 产品功能介绍",
-            f"{competitor_name} 定价 价格 收费标准",
-            f"{competitor_name} 市场份额 用户量 评测",
-            f"{competitor_name} vs {product_name} 对比",
-        ]
-
-        # 执行搜索
-        search_results = self.search_client.batch_search(queries)
-
-        # 提取搜索文本
-        all_text = ""
-        sources = []
-        for sr in search_results:
-            query = sr.get("query", "")
-            result = sr.get("result")
-            text = SearchClient.extract_text(result) if result else ""
-            if text:
-                all_text += f"\n--- 搜索: {query} ---\n{text[:1500]}\n"
-                sources.append(text[:500])
-
-        # LLM汇总提取
-        if config.ENABLE_LLM and all_text:
-            prompt = self._prompt_collect.format(
-                product_name=product_name,
-                product_description=product_description,
-                competitor_name=competitor_name,
-                search_results=all_text[:8000],
-            )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
-            if result:
-                return CompetitorData(
-                    name=competitor_name,
-                    product_features=result.get("product_features", ""),
-                    pricing_info=result.get("pricing_info", ""),
-                    market_share=result.get("market_share", ""),
-                    user_reviews=result.get("user_reviews", ""),
-                    strengths=result.get("strengths", ""),
-                    weaknesses=result.get("weaknesses", ""),
-                    channels=result.get("channels", ""),
-                    search_sources=sources,
-                )
+        for task in tasks:
+            evidence, bundle = self._collect_task(product_description, task, retry_count)
+            grouped_evidence[task.competitor].append(evidence)
+            grouped_bundles[task.competitor].append(bundle)
+            if bundle.coverage_status == "complete":
+                coverage.completed_topics.setdefault(task.competitor, []).append(task.topic)
             else:
-                self._log(f"   ⚠️ {competitor_name} LLM汇总失败，降级到规则引擎")
+                coverage.failed_tasks.append(
+                    {
+                        "competitor": task.competitor,
+                        "topic": task.topic,
+                        "query": task.query,
+                        "error": evidence.error or "evidence_incomplete",
+                    }
+                )
+                coverage.coverage_gaps.append(
+                    CoverageGap(
+                        competitor=task.competitor,
+                        topic=task.topic,
+                        reason=evidence.error or "missing_or_weak_evidence",
+                    )
+                )
 
-        # Fallback: 规则引擎提取
-        return CompetitorData(
-            name=competitor_name,
-            product_features=all_text[:500] if all_text else "数据采集失败",
-            search_sources=sources,
+        competitors_data = {
+            competitor: self._build_competitor_data(competitor, bundles, grouped_evidence[competitor])
+            for competitor, bundles in grouped_bundles.items()
+        }
+        self._log(f"完成证据采集，竞品数={len(competitors_data)}")
+        return {
+            "competitors_data": competitors_data,
+            "research_evidence": dict(grouped_evidence),
+            "research_coverage": coverage,
+            "evidence_bundles": dict(grouped_bundles),
+        }
+
+    def _collect_task(
+        self,
+        product_description: str,
+        task: ResearchTask,
+        retry_count: int,
+    ) -> tuple[ResearchEvidence, EvidenceBundle]:
+        last_error = ""
+        result = None
+        for _ in range(2):
+            try:
+                result = self.search_client.search(task.query)
+                break
+            except Exception as exc:  # pragma: no cover
+                last_error = str(exc)
+
+        text = SearchClient.extract_text(result) if result else ""
+        refs = SearchClient.extract_references(result) if result else []
+        citations = self._build_citations(task, refs)
+        summary = self._summarize_task(product_description, task, text)
+        coverage_status = "complete" if text and citations else "partial"
+        error = "" if coverage_status == "complete" else (last_error or "citation_missing")
+
+        evidence = ResearchEvidence(
+            competitor=task.competitor,
+            topic=task.topic,
+            summary=summary,
+            source_urls=[citation.url for citation in citations if citation.url],
+            raw_text=text[:1500],
+            citations=citations,
+            error=error,
         )
+        bundle = EvidenceBundle(
+            competitor=task.competitor,
+            topic=task.topic,
+            summary=summary,
+            citations=citations,
+            raw_text=text[:2000],
+            coverage_status=coverage_status,
+            task_id=task.id,
+        )
+        return evidence, bundle
+
+    def _summarize_task(self, product_description: str, task: ResearchTask, text: str) -> str:
+        trimmed = text[:5000]
+        if not trimmed:
+            return ""
+        if config.ENABLE_LLM:
+            prompt = self._prompt_collect.format(
+                product_name=product_description,
+                product_description=product_description,
+                competitor_name=task.competitor,
+                search_results=trimmed,
+            )
+            parsed = self.ask_llm_json(prompt, max_tokens=2048)
+            value = parsed.get(TOPIC_FIELD_MAP.get(task.topic, ""), "")
+            if value:
+                return str(value)
+        return trimmed[:400]
+
+    @staticmethod
+    def _build_citations(task: ResearchTask, refs: list[dict]) -> list[Citation]:
+        citations: list[Citation] = []
+        for index, item in enumerate(refs[:6], start=1):
+            url = str(item.get("url", "")).strip()
+            title = str(item.get("title", "")).strip() or f"{task.competitor}-{task.topic}-{index}"
+            snippet = str(
+                item.get("summary")
+                or item.get("content")
+                or item.get("snippet")
+                or ""
+            ).strip()
+            citations.append(
+                Citation(
+                    id=f"{task.id}:citation:{index}",
+                    title=title,
+                    url=url,
+                    snippet=snippet[:280],
+                    confidence=0.7 if url else 0.4,
+                )
+            )
+        return citations
+
+    def _build_competitor_data(
+        self,
+        competitor: str,
+        bundles: list[EvidenceBundle],
+        evidence_items: list[ResearchEvidence],
+    ) -> CompetitorData:
+        topic_map = {bundle.topic: bundle for bundle in bundles}
+        merged_text = " ".join(bundle.summary for bundle in bundles if bundle.summary)
+        sources = [citation.url for bundle in bundles for citation in bundle.citations if citation.url]
+        empty_bundle = EvidenceBundle(competitor=competitor, topic="")
+        return CompetitorData(
+            name=competitor,
+            product_features=topic_map.get("product_features", empty_bundle).summary,
+            pricing_info=topic_map.get("pricing_info", empty_bundle).summary,
+            market_share=topic_map.get("market_share", empty_bundle).summary,
+            user_reviews=topic_map.get("user_reviews", empty_bundle).summary,
+            strengths=self._extract_strengths(merged_text),
+            weaknesses=self._extract_weaknesses(merged_text),
+            channels=topic_map.get("channels", empty_bundle).summary,
+            search_sources=sources,
+            research_evidence=evidence_items,
+        )
+
+    @staticmethod
+    def _extract_strengths(text: str) -> str:
+        parts = re.findall(r"[^。.!?]*(?:领先|优势|强|好评|增长|集成|自动化)[^。.!?]*", text)
+        return "；".join(parts[:4])[:400]
+
+    @staticmethod
+    def _extract_weaknesses(text: str) -> str:
+        parts = re.findall(r"[^。.!?]*(?:不足|问题|投诉|昂贵|复杂|弱|限制)[^。.!?]*", text)
+        return "；".join(parts[:4])[:400]

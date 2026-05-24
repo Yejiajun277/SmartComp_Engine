@@ -115,6 +115,12 @@ class SearchClient:
         return "\n".join(texts)
 
     @staticmethod
+    def extract_references(search_result: dict) -> list[dict]:
+        if not search_result:
+            return []
+        return list(search_result.get("references", []))
+
+    @staticmethod
     def _build_search_prompt(query: str, recency: str) -> str:
         recency_hint = {
             "day": "优先最近1天内的信息",

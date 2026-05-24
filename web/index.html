@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>竞品分析 Agent Demo</title>
+  <style>
+    :root {
+      --bg: #f5efe4;
+      --paper: #fffaf2;
+      --ink: #142033;
+      --muted: #6b7280;
+      --line: #e6dac6;
+      --accent: #145c7a;
+      --accent-2: #d97706;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(20,92,122,0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(217,119,6,0.10), transparent 24%),
+        var(--bg);
+      color: var(--ink);
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 18px 80px; }
+    .hero, .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(20,32,51,0.06);
+    }
+    .hero { padding: 28px; margin-bottom: 20px; }
+    .title { font-size: 34px; line-height: 1; margin: 0 0 10px; }
+    .subtitle { color: var(--muted); max-width: 760px; line-height: 1.7; }
+    .grid { display: grid; grid-template-columns: 420px 1fr; gap: 18px; }
+    .card { padding: 22px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    textarea, input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    textarea { min-height: 150px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      color: white;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #1f7ea2);
+    }
+    button.secondary {
+      background: linear-gradient(135deg, #7c5b37, var(--accent-2));
+    }
+    .toolbar { display: flex; gap: 10px; margin-top: 14px; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .kpi {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .kpi .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .kpi .value { font-size: 20px; font-weight: 700; }
+    .dag, .trace, .issues, .sources {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .node, .trace-item, .issue-item, .source-item {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .node .state {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(20,92,122,0.10);
+      color: var(--accent);
+    }
+    .muted { color: var(--muted); }
+    .report-link { display: inline-block; margin-right: 12px; color: var(--accent); }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    @media (max-width: 920px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1 class="title">AI 竞品分析 Agent 协作 Demo</h1>
+      <div class="subtitle">演示链路：竞品发现 → 研究规划 → 证据采集 → 并行分析 → QA 打回闭环 → 报告与 Trace 落盘。页面会展示运行结果、DAG 节点状态、QA 问题和引用来源。</div>
+    </section>
+    <section class="grid">
+      <div class="card">
+        <label for="desc">产品描述</label>
+        <textarea id="desc">分析飞书，关注定位、定价、功能树和用户画像。</textarea>
+        <div class="row" style="margin-top:12px;">
+          <div>
+            <label for="count">最大竞品数</label>
+            <input id="count" type="number" value="5" min="1" max="8">
+          </div>
+          <div>
+            <label for="topics">关注主题（逗号分隔）</label>
+            <input id="topics" value="product_features,pricing_info,market_share,user_reviews,channels">
+          </div>
+        </div>
+        <div class="toolbar">
+          <button id="run">启动分析</button>
+          <button class="secondary" id="refresh">刷新最近运行</button>
+        </div>
+        <pre id="status">等待运行...</pre>
+      </div>
+      <div class="card">
+        <div class="kpis">
+          <div class="kpi"><div class="label">运行 ID</div><div class="value" id="runId">-</div></div>
+          <div class="kpi"><div class="label">状态</div><div class="value" id="runStatus">-</div></div>
+          <div class="kpi"><div class="label">竞品数</div><div class="value" id="competitorCount">-</div></div>
+          <div class="kpi"><div class="label">QA 问题</div><div class="value" id="qaCount">-</div></div>
+        </div>
+        <div>
+          <a class="report-link" id="reportJson" href="#" target="_blank">报告 JSON</a>
+          <a class="report-link" id="reportHtml" href="#" target="_blank">报告 HTML</a>
+        </div>
+        <h3>DAG 状态</h3>
+        <div class="dag" id="dag"></div>
+        <h3>QA 问题</h3>
+        <div class="issues" id="issues"></div>
+        <h3>引用来源</h3>
+        <div class="sources" id="sources"></div>
+      </div>
+    </section>
+    <section class="card" style="margin-top:18px;">
+      <h3>Trace</h3>
+      <div class="trace" id="trace"></div>
+    </section>
+  </main>
+  <script>
+    const state = { latestRunId: "" };
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      return response.json();
+    }
+
+    function setStatus(text) {
+      document.getElementById("status").textContent = text;
+    }
+
+    function renderDag(traces) {
+      const container = document.getElementById("dag");
+      container.innerHTML = "";
+      traces.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "node";
+        div.innerHTML = `
+          <strong>${item.node}</strong>
+          <div class="muted">${item.output_summary || ""}</div>
+          <span class="state">${item.decision || item.status}</span>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function renderIssues(issues) {
+      const container = document.getElementById("issues");
+      container.innerHTML = "";
+      if (!issues.length) {
+        container.innerHTML = `<div class="issue-item muted">无</div>`;
+        return;
+      }
+      issues.forEach(issue => {
+        const div = document.createElement("div");
+        div.className = "issue-item";
+        div.innerHTML = `<strong>${issue.target_agent}</strong><div>${issue.reason}</div><div class="muted">${issue.required_fix}</div>`;
+        container.appendChild(div);
+      });
+    }
+
+    function renderSources(citations) {
+      const container = document.getElementById("sources");
+      container.innerHTML = "";
+      if (!citations.length) {
+        container.innerHTML = `<div class="source-item muted">无</div>`;
+        return;
+      }
+      citations.slice(0, 8).forEach(item => {
+        const div = document.createElement("div");
+        div.className = "source-item";
+        div.innerHTML = `<a href="${item.url || '#'}" target="_blank">${item.title || item.url || item.id}</a><div class="muted">${item.snippet || ""}</div>`;
+        container.appendChild(div);
+      });
+    }
+
+    function renderTrace(traces) {
+      const container = document.getElementById("trace");
+      container.innerHTML = "";
+      traces.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "trace-item";
+        div.innerHTML = `
+          <strong>${item.node}</strong>
+          <div class="muted">决策: ${item.decision || "-"} · 延迟: ${item.latency_seconds || 0}s</div>
+          <div>输入: ${item.input_summary || ""}</div>
+          <div>输出: ${item.output_summary || ""}</div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function applyRun(result) {
+      const report = result.report?.report || result.report || {};
+      const runId = result.run_id || result.runId || result.run_id || "";
+      state.latestRunId = runId;
+      document.getElementById("runId").textContent = runId || "-";
+      document.getElementById("runStatus").textContent = result.status || report.status || "-";
+      document.getElementById("competitorCount").textContent = report.competitor_count ?? "-";
+      document.getElementById("qaCount").textContent = (report.qa_issues || []).length;
+      if (result.report_paths?.json) {
+        document.getElementById("reportJson").href = `/api/runs/${runId}/report`;
+      }
+      if (result.report_paths?.html) {
+        document.getElementById("reportHtml").href = `/api/runs/${runId}/html`;
+      }
+      setStatus(JSON.stringify(result.trace_summary || {}, null, 2));
+    }
+
+    async function loadRun(runId) {
+      const result = await api(`/api/runs/${runId}`);
+      const report = result.report?.report || {};
+      applyRun({
+        run_id: runId,
+        status: result.summary?.final_status || report.status,
+        report_paths: result.summary?.report_paths || {},
+        trace_summary: result.summary || {},
+        report: result.report,
+      });
+      renderDag(result.traces || []);
+      renderIssues(report.qa_issues || []);
+      renderSources(report.citations || []);
+      renderTrace(result.traces || []);
+    }
+
+    document.getElementById("run").addEventListener("click", async () => {
+      setStatus("运行中...");
+      const payload = {
+        product_description: document.getElementById("desc").value,
+        max_competitors: Number(document.getElementById("count").value || 5),
+        focus_topics: document.getElementById("topics").value.split(",").map(x => x.trim()).filter(Boolean),
+        use_llm: true,
+      };
+      const result = await api("/api/runs", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      applyRun(result);
+      if (result.run_id) {
+        await loadRun(result.run_id);
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", async () => {
+      if (state.latestRunId) {
+        await loadRun(state.latestRunId);
+        return;
+      }
+      const list = await api("/api/runs");
+      const latest = list.runs?.[0]?.run_id;
+      if (latest) {
+        await loadRun(latest);
+      } else {
+        setStatus("暂无运行记录");
+      }
+    });
+  </script>
+</body>
+</html>

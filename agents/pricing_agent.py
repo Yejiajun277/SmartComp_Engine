@@ -1,108 +1,210 @@
 # -*- coding: utf-8 -*-
 """
-agents/pricing_agent.py — 定价分析Agent
-
-职责：对比各竞品定价策略、促销模式、性价比
-LLM调用：1次
-外部工具：无
-提示词来源：prompts/pricing_agent.md
+agents/pricing_agent.py - 定价分析 Agent
 """
 
+from __future__ import annotations
+
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorData, PricingAnalysis, PricingItem
-from core.prompt_loader import load as load_prompts
-import config
-import json
+from models.domain import (
+    Citation,
+    ConclusionItem,
+    EvidenceBundle,
+    MessageEnvelope,
+    PricingAnalysis,
+    PricingItem,
+    PricingModel,
+)
 
 
 class PricingAgent(BaseAgent):
-    """定价分析Agent — 价格策略对比"""
-
     def __init__(self):
-        prompts = load_prompts("pricing_agent")
         super().__init__(
             agent_id="PricingAgent",
-            system_prompt=prompts["system_prompt"],
+            system_prompt="你负责基于结构化证据做定价与计费分析。",
         )
-        self._prompt_analyze = prompts["prompt_analyze"]
 
-    async def run(self, product_name: str,
-                  competitors_data: dict[str, CompetitorData]) -> PricingAnalysis:
-        """
-        主运行逻辑：全量数据分析定价对比
+    async def run(
+        self,
+        product_name: str,
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+    ) -> PricingAnalysis:
+        pricing_comparison: list[PricingItem] = []
+        pricing_models: list[PricingModel] = []
+        conclusions: list[ConclusionItem] = []
+        citations = self._collect_unique_citations(evidence_bundles)
 
-        Args:
-            product_name: 用户产品名称
-            competitors_data: 竞品采集数据
-
-        Returns:
-            PricingAnalysis: 定价分析结果
-        """
-        self._log("💰 开始定价分析...")
-
-        competitors_text = self._build_competitors_text(product_name, competitors_data)
-
-        if config.ENABLE_LLM:
-            prompt = self._prompt_analyze.format(
-                product_name=product_name,
-                competitors_text=competitors_text,
+        model_counts: dict[str, int] = {}
+        free_tier_count = 0
+        evidence_summaries: list[str] = []
+        for competitor, bundles in evidence_bundles.items():
+            bundle = self._find_bundle(bundles, "pricing_info")
+            summary = bundle.summary if bundle else ""
+            evidence_summaries.append(summary)
+            model = self._guess_model(summary)
+            free_tier = self._extract_free_tier(summary)
+            paid_tier = self._extract_paid_tier(summary)
+            billing_basis = self._extract_billing_basis(summary, model)
+            citation_ids = [item.id for item in bundle.citations[:3]] if bundle else []
+            pricing_comparison.append(
+                PricingItem(
+                    competitor=competitor,
+                    free_tier=free_tier,
+                    paid_tier=paid_tier,
+                    pricing_model=model,
+                    citations=citation_ids,
+                )
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
-            if result:
-                analysis = self._parse_pricing_analysis(result)
-                self._log(f"✅ 定价分析完成: {len(analysis.pricing_comparison)}个竞品定价对比")
-                return analysis
-            else:
-                self._log("⚠️ LLM定价分析失败，降级到规则引擎")
+            pricing_models.append(
+                PricingModel(
+                    competitor=competitor,
+                    model=model,
+                    free_tier=free_tier,
+                    paid_tier=paid_tier,
+                    billing_basis=billing_basis,
+                    citations=citation_ids,
+                )
+            )
+            model_counts[model] = model_counts.get(model, 0) + 1
+            if "免费" in free_tier:
+                free_tier_count += 1
 
-        return self._rule_analyze(product_name, competitors_data)
+        ranked = sorted(
+            pricing_comparison,
+            key=lambda item: (0 if "免费" in item.free_tier else 1, -len(item.paid_tier), item.competitor),
+        )
+        value_ranking = [item.competitor for item in ranked]
+        dominant_model = max(model_counts.items(), key=lambda item: item[1])[0] if model_counts else "subscription"
 
-    def _build_competitors_text(self, product_name: str,
-                                 competitors_data: dict[str, CompetitorData]) -> str:
-        """构建竞品定价数据文本"""
-        lines = []
-        for name, data in competitors_data.items():
-            label = name if name != product_name else f"{name}(我方产品)"
-            lines.append(f"\n### {label}")
-            lines.append(f"- 定价信息: {data.pricing_info[:300]}")
-            lines.append(f"- 优势: {data.strengths[:200]}")
-            lines.append(f"- 劣势: {data.weaknesses[:200]}")
-        return "\n".join(lines)
-
-    def _parse_pricing_analysis(self, result: dict) -> PricingAnalysis:
-        """解析LLM返回的定价分析结果"""
-        pricing_comparison = []
-        for pc in result.get("pricing_comparison", []):
-            pricing_comparison.append(PricingItem(
-                competitor=pc.get("competitor", ""),
-                free_tier=pc.get("free_tier", ""),
-                paid_tier=pc.get("paid_tier", ""),
-                pricing_model=pc.get("pricing_model", ""),
-            ))
-
-        return PricingAnalysis(
-            pricing_comparison=pricing_comparison,
-            pricing_strategy_analysis=result.get("pricing_strategy_analysis", ""),
-            value_ranking=result.get("value_ranking", []),
-            summary=result.get("summary", ""),
+        conclusions.append(
+            ConclusionItem(
+                id="pricing:conclusion:1",
+                dimension="pricing",
+                statement=f"竞品当前以 {dominant_model} 为主导计费模式，说明采购决策仍然偏向可解释、可预算的商业模型。",
+                citations=[citation.id for citation in citations[:3]],
+                confidence=0.71,
+                evidence_topics=["pricing_info"],
+            )
+        )
+        conclusions.append(
+            ConclusionItem(
+                id="pricing:conclusion:2",
+                dimension="pricing",
+                statement=f"{free_tier_count} 个竞品明确保留免费或低门槛入口，这意味着试用转化仍是该赛道的重要获客方式。",
+                citations=[citation.id for citation in citations[:3]],
+                confidence=0.68,
+                evidence_topics=["pricing_info"],
+            )
+        )
+        conclusions.append(
+            ConclusionItem(
+                id="pricing:conclusion:3",
+                dimension="pricing",
+                statement="如果我方只强调价格高低，而不解释适用场景、席位边界和增购逻辑，用户很难真正理解方案价值。",
+                citations=[citation.id for citation in citations[1:4] or citations[:2]],
+                confidence=0.64,
+                evidence_topics=["pricing_info"],
+            )
         )
 
-    def _rule_analyze(self, product_name: str,
-                       competitors_data: dict[str, CompetitorData]) -> PricingAnalysis:
-        """规则引擎定价分析"""
-        import re
-        pricing_comparison = []
-        for name, data in competitors_data.items():
-            pricing_comparison.append(PricingItem(
-                competitor=name,
-                free_tier=data.pricing_info[:100] if data.pricing_info else "未知",
-                paid_tier="",
-                pricing_model="",
-            ))
+        pricing_strategy_analysis = (
+            f"从现有证据看，竞品多数采用 {dominant_model} 或混合计费，把基础能力作为进入门槛，把进阶能力、席位扩展或 AI 能力作为增购点。"
+            "这类设计的核心目标不是单纯提价，而是让不同规模团队可以先进入、再逐步升级。"
+            "因此我方在报告里应把“免费入口、升级节点、计费单位、增购理由”讲完整，否则对比只会停留在片段价格。"
+        )
 
+        message = MessageEnvelope(
+            task_id=f"{product_name}:pricing",
+            agent_role=self.agent_id,
+            payload_type="pricing_analysis",
+            payload={
+                "pricing_model_count": len(pricing_models),
+                "comparison_count": len(pricing_comparison),
+                "dominant_model": dominant_model,
+            },
+            citations=[citation.id for citation in citations],
+        )
+        self._log(f"定价分析完成，模型数={len(pricing_models)}")
         return PricingAnalysis(
             pricing_comparison=pricing_comparison,
-            pricing_strategy_analysis="(规则引擎分析，详情请启用LLM)",
-            value_ranking=[],
-            summary="基于搜索结果的简单定价信息提取（建议启用LLM获得深度分析）",
+            pricing_strategy_analysis=pricing_strategy_analysis,
+            value_ranking=value_ranking,
+            pricing_models=pricing_models,
+            conclusions=conclusions,
+            citations=citations,
+            message=message,
+            summary=self._build_summary(pricing_comparison, pricing_models, dominant_model),
         )
+
+    def _build_summary(
+        self,
+        pricing_comparison: list[PricingItem],
+        pricing_models: list[PricingModel],
+        dominant_model: str,
+    ) -> str:
+        free_names = [item.competitor for item in pricing_comparison if "免费" in item.free_tier][:4]
+        basis_names = [f"{item.competitor} 采用 {item.billing_basis}" for item in pricing_models[:3]]
+        paragraph_1 = (
+            f"从免费/付费层级看，{', '.join(free_names) if free_names else '大部分竞品'} 都保留了低门槛入口，"
+            "先让团队试用，再通过高级功能、席位或算力能力完成升级。"
+        )
+        paragraph_2 = (
+            f"从计费模式看，当前主导模型是 {dominant_model}。"
+            f"{'；'.join(basis_names) if basis_names else '现有公开信息仍以套餐与席位计费为主。'}"
+        )
+        paragraph_3 = (
+            "从价格带表达看，报告不能只放“贵/便宜”判断，必须同时解释什么功能留在免费版、什么能力触发升级，以及升级后是否形成真正价值闭环。"
+        )
+        return "\n\n".join([paragraph_1, paragraph_2, paragraph_3])
+
+    @staticmethod
+    def _find_bundle(bundles: list[EvidenceBundle], topic: str) -> EvidenceBundle | None:
+        for bundle in bundles:
+            if bundle.topic == topic:
+                return bundle
+        return None
+
+    @staticmethod
+    def _guess_model(summary: str) -> str:
+        text = summary.lower()
+        if "按量" in summary or "usage" in text or "调用" in summary:
+            return "usage-based"
+        if "用户" in summary or "seat" in text or "席位" in summary:
+            return "per-seat"
+        if "免费" in summary or "freemium" in text:
+            return "freemium"
+        return "subscription"
+
+    @staticmethod
+    def _extract_free_tier(summary: str) -> str:
+        if not summary:
+            return "未知"
+        if "免费" in summary:
+            return summary[:80]
+        return "未明确披露免费层"
+
+    @staticmethod
+    def _extract_paid_tier(summary: str) -> str:
+        if not summary:
+            return "未知"
+        return summary[:160]
+
+    @staticmethod
+    def _extract_billing_basis(summary: str, model: str) -> str:
+        text = summary.lower()
+        if "席位" in summary or "seat" in text or "用户" in summary:
+            return "seat"
+        if "按量" in summary or "调用" in summary or "usage" in text:
+            return "usage"
+        if model == "freemium":
+            return "mixed"
+        return "package"
+
+    @staticmethod
+    def _collect_unique_citations(evidence_bundles: dict[str, list[EvidenceBundle]]) -> list[Citation]:
+        seen: dict[str, Citation] = {}
+        for bundles in evidence_bundles.values():
+            for bundle in bundles:
+                for citation in bundle.citations:
+                    seen.setdefault(citation.id, citation)
+        return list(seen.values())

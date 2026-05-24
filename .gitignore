@@ -1,6 +1,11 @@
 .env
+output/
+.langgraph_api/
+pytest-cache-files-*/
+tests/
 __pycache__/
 *.py[cod]
 .python-version
 .venv/
 venv/
+runs/

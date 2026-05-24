@@ -1,0 +1,5 @@
+from workflow.graph import build_analysis_graph
+from workflow.platform_graph import build_platform_assistant_graph
+
+competitive_analysis_workflow = build_analysis_graph()
+competitive_analysis_assistant = build_platform_assistant_graph()
