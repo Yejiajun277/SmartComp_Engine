@@ -16,6 +16,7 @@ from core.run_store import ensure_run_dirs, new_run_id, write_artifact, write_re
 from models.domain import (
     CompetitorList,
     MessageEnvelope,
+    QAIssue,
     StrategyReport,
     now_iso,
     to_dict,
@@ -252,6 +253,8 @@ class WorkflowNodes:
             market_analysis=state.get("market_analysis"),
             coverage=state.get("research_coverage"),
             qa_round=state.get("qa_round", 0),
+            product_name=self._resolve_product_name(state),
+            competitor_count=len(state.get("competitor_list").competitors) if state.get("competitor_list") else 0,
         )
         issues = result["issues"]
         decision = result["next_action"]
@@ -302,16 +305,19 @@ class WorkflowNodes:
             payload["product_analysis"] = await self.agents.product_agent.run(
                 self._resolve_product_name(state),
                 state.get("evidence_bundles", {}),
+                state.get("competitors_data", {}),
             )
         if "PricingAgent" in targets:
             payload["pricing_analysis"] = await self.agents.pricing_agent.run(
                 self._resolve_product_name(state),
                 state.get("evidence_bundles", {}),
+                state.get("competitors_data", {}),
             )
         if "MarketAgent" in targets:
             payload["market_analysis"] = await self.agents.market_agent.run(
                 self._resolve_product_name(state),
                 state.get("evidence_bundles", {}),
+                state.get("competitors_data", {}),
             )
         self._persist_trace(
             run_id=state["run_id"],
@@ -349,11 +355,14 @@ class WorkflowNodes:
             market_analysis,
         )
         report.run_id = state["run_id"]
-        report.qa_issues = state.get("qa_issues", [])
+        report.qa_issues = [
+            *state.get("qa_issues", []),
+            *self._strategy_quality_issues(report),
+        ]
         if state.get("research_coverage") is not None:
             report.coverage_gaps = state["research_coverage"].coverage_gaps
         if report.qa_issues:
-            report.status = "degraded" if state.get("qa_round", 0) >= 2 else "reviewed"
+            report.status = "degraded"
         write_artifact(state["run_id"], "strategy_report", to_dict(report))
         self._persist_trace(
             run_id=state["run_id"],
@@ -371,6 +380,35 @@ class WorkflowNodes:
             "timing_records": [{"name": "strategy", "duration": time.time() - start}],
             "logs": [{"node": "build_strategy_report", "status": "success"}],
         }
+
+    @staticmethod
+    def _strategy_quality_issues(report: StrategyReport) -> list[QAIssue]:
+        issues: list[QAIssue] = []
+        if len(report.action_plan) < 3:
+            issues.append(
+                QAIssue(
+                    issue_type="thin_action_plan",
+                    severity="high",
+                    target_agent="StrategyAgent",
+                    reason=f"行动方案不足 3 条，当前仅 {len(report.action_plan)} 条。",
+                    required_fix="补足至少 3 条按优先级排列、带时间线和预期效果的行动方案。",
+                    related_ids=["strategy:action_plan"],
+                )
+            )
+        generic_terms = ("重写为什么现在应该选你", "把最核心的 1-2 个高频场景", "继续做一份泛化对标")
+        joined_actions = " ".join(item.action for item in report.action_plan)
+        if any(term in report.summary or term in joined_actions for term in generic_terms):
+            issues.append(
+                QAIssue(
+                    issue_type="template_strategy",
+                    severity="medium",
+                    target_agent="StrategyAgent",
+                    reason="策略建议仍存在模板化表达。",
+                    required_fix="用具体产品、竞品、功能、价格或市场机会替换泛化表达。",
+                    related_ids=["strategy:summary"],
+                )
+            )
+        return issues
 
     async def build_empty_report(self, state: AnalysisState) -> dict[str, Any]:
         product_name = (
@@ -458,6 +496,7 @@ class WorkflowNodes:
         analysis = await agent.run(
             self._resolve_product_name(state),
             state.get("evidence_bundles", {}),
+            state.get("competitors_data", {}),
         )
         write_artifact(state["run_id"], dimension + "_analysis", to_dict(analysis))
         self._persist_trace(

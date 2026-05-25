@@ -35,6 +35,7 @@ class Citation:
     url: str = ""
     snippet: str = ""
     source_type: str = "web"
+    source_quality: str = "aggregator"
     collected_at: str = field(default_factory=now_iso)
     confidence: float = 0.6
 
@@ -97,6 +98,9 @@ class EvidenceBundle:
     summary: str = ""
     citations: list[Citation] = field(default_factory=list)
     raw_text: str = ""
+    key_facts: list[str] = field(default_factory=list)
+    evidence_quotes: list[str] = field(default_factory=list)
+    source_quality: str = "aggregator"
     coverage_status: str = "complete"
     extracted_at: str = field(default_factory=now_iso)
     task_id: str = ""
@@ -136,6 +140,9 @@ class CompetitiveAdvantage:
     competitor: str
     our_advantage: str = ""
     their_advantage: str = ""
+    their_strength: str = ""
+    their_weakness: str = ""
+    recommended_countermove: str = ""
     citations: list[str] = field(default_factory=list)
 
 
@@ -146,6 +153,10 @@ class PricingModel:
     free_tier: str = ""
     paid_tier: str = ""
     billing_basis: str = ""
+    entry_offer: str = ""
+    upgrade_trigger: str = ""
+    pricing_signal: str = ""
+    pricing_risk: str = ""
     citations: list[str] = field(default_factory=list)
 
 
@@ -155,6 +166,11 @@ class PricingItem:
     free_tier: str = ""
     paid_tier: str = ""
     pricing_model: str = ""
+    entry_offer: str = ""
+    upgrade_trigger: str = ""
+    billing_unit: str = ""
+    pricing_signal: str = ""
+    pricing_risk: str = ""
     citations: list[str] = field(default_factory=list)
 
 
@@ -163,6 +179,9 @@ class MarketShareItem:
     competitor: str
     share_estimate: str = ""
     trend: str = ""
+    market_position: str = ""
+    growth_signal: str = ""
+    channel_motion: str = ""
     citations: list[str] = field(default_factory=list)
 
 
@@ -170,6 +189,8 @@ class MarketShareItem:
 class UserReputation:
     score: str = ""
     keywords: list[str] = field(default_factory=list)
+    highlights: list[str] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
     citations: list[str] = field(default_factory=list)
 
 
@@ -180,6 +201,7 @@ class UserPersona:
     needs: list[str] = field(default_factory=list)
     complaints: list[str] = field(default_factory=list)
     preferred_channels: list[str] = field(default_factory=list)
+    persona_summary: str = ""
     citations: list[str] = field(default_factory=list)
 
 

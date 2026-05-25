@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import re
 
+import config
 from agents.base_agent import BaseAgent
+from core.prompt_loader import load as load_prompts
 from models.domain import (
     Citation,
+    CompetitorData,
     ConclusionItem,
     EvidenceBundle,
     MarketAnalysis,
@@ -22,188 +25,274 @@ from models.domain import (
 
 class MarketAgent(BaseAgent):
     def __init__(self):
+        prompts = load_prompts("market_agent")
         super().__init__(
             agent_id="MarketAgent",
-            system_prompt="你负责基于结构化证据做市场、口碑和用户画像分析。",
+            system_prompt=prompts["system_prompt"],
         )
+        self._prompt_analyze = prompts["prompt_analyze"]
 
     async def run(
         self,
         product_name: str,
         evidence_bundles: dict[str, list[EvidenceBundle]],
+        competitors_data: dict[str, CompetitorData] | None = None,
     ) -> MarketAnalysis:
-        share_items: list[MarketShareItem] = []
-        user_reputation: dict[str, UserReputation] = {}
-        personas: list[UserPersona] = []
-        conclusions: list[ConclusionItem] = []
+        competitors_data = competitors_data or self._build_competitors_data(evidence_bundles)
         citations = self._collect_unique_citations(evidence_bundles)
 
-        growth_signals = 0
-        channel_terms: list[str] = []
-        for competitor, bundles in evidence_bundles.items():
-            market_bundle = self._find_bundle(bundles, "market_share")
-            review_bundle = self._find_bundle(bundles, "user_reviews")
-            channel_bundle = self._find_bundle(bundles, "channels")
-            market_summary = market_bundle.summary if market_bundle else ""
-            review_text = review_bundle.summary if review_bundle else ""
-            channel_text = channel_bundle.summary if channel_bundle else ""
+        if config.ENABLE_LLM:
+            prompt = self._prompt_analyze.format(
+                product_name=product_name,
+                competitors_text=self._build_competitors_text(competitors_data, evidence_bundles),
+            )
+            result = self.ask_llm_json(prompt, max_tokens=4096)
+            if result:
+                analysis = self._parse_market_analysis(product_name, result, evidence_bundles, competitors_data, citations)
+                if analysis.market_share_data:
+                    self._log(f"市场 LLM 分析完成，竞品数={len(analysis.market_share_data)}")
+                    return analysis
+            self._log("市场 LLM 分析失败，降级到规则引擎")
 
-            trend = self._infer_trend(market_summary)
-            if trend == "增长":
-                growth_signals += 1
+        analysis = self._rule_analyze(product_name, competitors_data, evidence_bundles, citations)
+        self._log(f"市场规则分析完成，竞品数={len(analysis.market_share_data)}")
+        return analysis
+
+    def _parse_market_analysis(
+        self,
+        product_name: str,
+        result: dict,
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        competitors_data: dict[str, CompetitorData],
+        citations: list[Citation],
+    ) -> MarketAnalysis:
+        default_citations = [item.id for item in citations[:3]]
+        share_items: list[MarketShareItem] = []
+        for item in result.get("market_share_data", []):
+            competitor = str(item.get("competitor", "")).strip()
+            if not competitor:
+                continue
+            citation_ids = self._competitor_citation_ids(evidence_bundles, competitor, "market_share", 3)
+            share_estimate = str(item.get("share_estimate", "")).strip()
+            trend = str(item.get("trend", "")).strip()
             share_items.append(
                 MarketShareItem(
                     competitor=competitor,
-                    share_estimate=(market_summary[:140] if market_summary else "未知"),
+                    share_estimate=share_estimate,
                     trend=trend,
-                    citations=[item.id for item in (market_bundle.citations[:3] if market_bundle else [])],
+                    market_position=self._market_position(share_estimate),
+                    growth_signal=self._growth_signal(share_estimate, trend),
+                    channel_motion=self._channel_motion(competitors_data.get(competitor)),
+                    citations=citation_ids or default_citations,
                 )
             )
-            user_reputation[competitor] = UserReputation(
-                score=self._score(review_text),
-                keywords=self._keywords(review_text)[:6],
-                citations=[item.id for item in (review_bundle.citations[:3] if review_bundle else [])],
-            )
-            personas.append(
-                UserPersona(
-                    name=f"{competitor} 核心用户",
-                    segment=self._segment(channel_text, review_text),
-                    needs=self._keywords(f"{channel_text} {market_summary}")[:4],
-                    complaints=self._complaints(review_text),
-                    preferred_channels=self._keywords(channel_text)[:4],
-                    citations=[
-                        item.id
-                        for item in (
-                            (review_bundle.citations if review_bundle else [])
-                            + (channel_bundle.citations if channel_bundle else [])
-                        )[:4]
-                    ],
+
+        reputation: dict[str, UserReputation] = {}
+        raw_reputation = result.get("user_reputation", {})
+        if isinstance(raw_reputation, dict):
+            for competitor, item in raw_reputation.items():
+                if not isinstance(item, dict):
+                    continue
+                citation_ids = self._competitor_citation_ids(evidence_bundles, competitor, "user_reviews", 3)
+                keywords = [str(value).strip() for value in item.get("keywords", []) if str(value).strip()]
+                reputation[str(competitor)] = UserReputation(
+                    score=str(item.get("score", "")).strip(),
+                    keywords=keywords[:8],
+                    highlights=[value for value in keywords if not self._is_risk_word(value)][:3],
+                    risks=[value for value in keywords if self._is_risk_word(value)][:3],
+                    citations=citation_ids or default_citations,
                 )
-            )
-            channel_terms.extend(self._keywords(channel_text)[:3])
 
-        conclusions.append(
-            ConclusionItem(
-                id="market:conclusion:1",
-                dimension="market",
-                statement=f"在 {len(share_items)} 个竞品里，有 {growth_signals} 个呈现明显增长信号，说明赛道仍在扩张而不是单纯存量替换。",
-                citations=[citation.id for citation in citations[:3]],
-                confidence=0.7,
-                evidence_topics=["market_share"],
-            )
-        )
-        conclusions.append(
-            ConclusionItem(
-                id="market:conclusion:2",
-                dimension="market",
-                statement="用户评价最有价值的部分不是好评本身，而是对复杂度、交付周期、售后响应等问题的反复提及，这些往往直接决定续费与口碑扩散。",
-                citations=[citation.id for citation in citations[1:4] or citations[:2]],
-                confidence=0.67,
-                evidence_topics=["user_reviews"],
-            )
-        )
-        conclusions.append(
-            ConclusionItem(
-                id="market:conclusion:3",
-                dimension="market",
-                statement="渠道与画像信息显示，竞品多数不是在争夺抽象用户，而是在争夺明确的团队场景与组织类型，因此报告中的 ICP 必须落到可执行用户群。",
-                citations=[citation.id for citation in citations[:3]],
-                confidence=0.66,
-                evidence_topics=["channels", "user_reviews"],
-            )
-        )
-
-        growth_trends = (
-            "公开证据显示，这条赛道仍然由增长、替换和能力升级共同驱动。"
-            "有的竞品靠市场份额和客户规模建立头部优势，有的竞品则靠细分场景和生态位置切入。"
-            "因此市场判断应关注增长来源，而不是只看单点规模。"
-        )
-        channel_analysis = (
-            "渠道侧能看到明显的生态合作、直销和服务商分工。"
-            f"当前高频出现的渠道关键词包括：{', '.join(list(dict.fromkeys(channel_terms))[:6]) or '生态、伙伴、直销'}。"
-            "这说明成交逻辑通常和场景方案、实施能力绑定。"
-        )
-
-        message = MessageEnvelope(
-            task_id=f"{product_name}:market",
-            agent_role=self.agent_id,
-            payload_type="market_analysis",
-            payload={
-                "market_share_count": len(share_items),
-                "persona_count": len(personas),
-                "growth_signals": growth_signals,
-            },
-            citations=[citation.id for citation in citations],
-        )
-        self._log(f"市场分析完成，画像数={len(personas)}")
+        personas = self._build_personas(competitors_data, evidence_bundles, default_citations)
+        growth_trends = str(result.get("growth_trends", "")).strip()
+        channel_analysis = str(result.get("channel_analysis", "")).strip()
+        summary = str(result.get("summary", "")).strip()
+        conclusions = self._build_conclusions(growth_trends, channel_analysis, summary, default_citations)
         return MarketAnalysis(
             market_share_data=share_items,
             growth_trends=growth_trends,
-            user_reputation=user_reputation,
+            user_reputation=reputation,
             channel_analysis=channel_analysis,
             user_personas=personas,
             conclusions=conclusions,
             citations=citations,
-            message=message,
-            summary=self._build_summary(share_items, user_reputation, personas),
+            message=MessageEnvelope(
+                task_id=f"{product_name}:market",
+                agent_role=self.agent_id,
+                payload_type="market_analysis",
+                payload={"market_share_count": len(share_items), "llm": True},
+                citations=[citation.id for citation in citations],
+            ),
+            summary=summary or growth_trends,
         )
 
-    def _build_summary(
+    def _rule_analyze(
         self,
-        share_items: list[MarketShareItem],
-        user_reputation: dict[str, UserReputation],
-        personas: list[UserPersona],
+        product_name: str,
+        competitors_data: dict[str, CompetitorData],
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        citations: list[Citation],
+    ) -> MarketAnalysis:
+        share_items: list[MarketShareItem] = []
+        reputation: dict[str, UserReputation] = {}
+        for competitor, data in competitors_data.items():
+            citation_ids = self._competitor_citation_ids(evidence_bundles, competitor, "market_share", 3)
+            trend = self._infer_trend(data.market_share)
+            share_items.append(
+                MarketShareItem(
+                    competitor=competitor,
+                    share_estimate=data.market_share[:160] or "暂无可比市场份额信息。",
+                    trend=trend,
+                    market_position=self._market_position(data.market_share),
+                    growth_signal=self._growth_signal(data.market_share, trend),
+                    channel_motion=self._channel_motion(data),
+                    citations=citation_ids,
+                )
+            )
+            review_citations = self._competitor_citation_ids(evidence_bundles, competitor, "user_reviews", 3)
+            keywords = self._keywords(data.user_reviews)
+            reputation[competitor] = UserReputation(
+                score=self._score(data.user_reviews),
+                keywords=keywords[:8],
+                highlights=[word for word in keywords if not self._is_risk_word(word)][:3],
+                risks=[word for word in keywords if self._is_risk_word(word)][:3],
+                citations=review_citations,
+            )
+
+        personas = self._build_personas(competitors_data, evidence_bundles, [item.id for item in citations[:3]])
+        growth = self._build_growth_trends(share_items)
+        channel = self._build_channel_analysis(competitors_data)
+        summary = (
+            "市场层面应优先判断相对位置、增长方向和渠道抓手。"
+            "\n\n"
+            "公开信息不足以支持精确份额时，应把结论写成相对格局和机会窗口。"
+            "\n\n"
+            "用户口碑和渠道信息要服务于 ICP 与落地动作，而不是只做信息摘录。"
+        )
+        return MarketAnalysis(
+            market_share_data=share_items,
+            growth_trends=growth,
+            user_reputation=reputation,
+            channel_analysis=channel,
+            user_personas=personas,
+            conclusions=self._build_conclusions(growth, channel, summary, [item.id for item in citations[:3]]),
+            citations=citations,
+            message=MessageEnvelope(
+                task_id=f"{product_name}:market",
+                agent_role=self.agent_id,
+                payload_type="market_analysis",
+                payload={"market_share_count": len(share_items), "llm": False},
+                citations=[citation.id for citation in citations],
+            ),
+            summary=summary,
+        )
+
+    @staticmethod
+    def _build_competitors_text(
+        competitors_data: dict[str, CompetitorData],
+        evidence_bundles: dict[str, list[EvidenceBundle]],
     ) -> str:
-        share_lines = [f"{item.competitor}：{item.trend}" for item in share_items[:4]]
-        reputation_lines = [
-            f"{competitor} 口碑关键词：{', '.join(profile.keywords[:4]) or '暂无'}"
-            for competitor, profile in list(user_reputation.items())[:2]
-        ]
-        persona_lines = [
-            f"{persona.name} 关注 {', '.join(persona.needs[:3]) or '效率与协作'}。"
-            for persona in personas[:2]
-        ]
-        paragraph_1 = (
-            "从市场格局看，公开信息能提供趋势判断，但未必能提供完全可比的精确市占率。"
-            f"{'；'.join(share_lines) if share_lines else '当前更适合做相对强弱判断。'}"
-        )
-        paragraph_2 = (
-            "从用户口碑看，真实竞争不只发生在功能层，而是发生在上手难度、实施体验和问题响应速度。"
-            f"{' '.join(reputation_lines)}"
-        )
-        paragraph_3 = (
-            "从用户画像与渠道看，竞品普遍围绕明确组织类型和场景成交。"
-            f"{' '.join(persona_lines)}"
-        )
-        return "\n\n".join([paragraph_1, paragraph_2, paragraph_3])
+        lines: list[str] = []
+        for name, data in competitors_data.items():
+            lines.append(f"\n### {name}")
+            lines.append(f"- 市场份额/规模: {data.market_share[:1000]}")
+            lines.append(f"- 用户口碑: {data.user_reviews[:900]}")
+            lines.append(f"- 渠道/生态: {data.channels[:900]}")
+            lines.append(f"- 产品与优势: {(data.product_features + ' ' + data.strengths)[:600]}")
+            bundle_facts = []
+            for bundle in evidence_bundles.get(name, []):
+                if bundle.topic in {"market_share", "user_reviews", "channels"}:
+                    bundle_facts.extend(bundle.key_facts[:2])
+            if bundle_facts:
+                lines.append(f"- 市场证据: {'；'.join(bundle_facts[:8])}")
+        return "\n".join(lines)
 
     @staticmethod
-    def _find_bundle(bundles: list[EvidenceBundle], topic: str) -> EvidenceBundle | None:
-        for bundle in bundles:
-            if bundle.topic == topic:
-                return bundle
-        return None
+    def _build_competitors_data(evidence_bundles: dict[str, list[EvidenceBundle]]) -> dict[str, CompetitorData]:
+        data: dict[str, CompetitorData] = {}
+        for competitor, bundles in evidence_bundles.items():
+            topic_map = {bundle.topic: bundle for bundle in bundles}
+            data[competitor] = CompetitorData(
+                name=competitor,
+                product_features=topic_map.get("product_features", EvidenceBundle(competitor, "")).summary,
+                pricing_info=topic_map.get("pricing_info", EvidenceBundle(competitor, "")).summary,
+                market_share=topic_map.get("market_share", EvidenceBundle(competitor, "")).summary,
+                user_reviews=topic_map.get("user_reviews", EvidenceBundle(competitor, "")).summary,
+                channels=topic_map.get("channels", EvidenceBundle(competitor, "")).summary,
+            )
+        return data
 
     @staticmethod
-    def _collect_unique_citations(evidence_bundles: dict[str, list[EvidenceBundle]]) -> list[Citation]:
-        seen: dict[str, Citation] = {}
-        for bundles in evidence_bundles.values():
-            for bundle in bundles:
-                for citation in bundle.citations:
-                    seen.setdefault(citation.id, citation)
-        return list(seen.values())
+    def _build_conclusions(growth: str, channel: str, summary: str, citations: list[str]) -> list[ConclusionItem]:
+        statements = [growth, channel, summary]
+        return [
+            ConclusionItem(
+                id=f"market:conclusion:{index}",
+                dimension="market",
+                statement=statement.split("。")[0][:160],
+                citations=citations,
+                confidence=0.72,
+                evidence_topics=["market_share", "channels", "user_reviews"],
+            )
+            for index, statement in enumerate(statements, start=1)
+            if statement
+        ]
+
+    def _build_personas(
+        self,
+        competitors_data: dict[str, CompetitorData],
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        fallback_citations: list[str],
+    ) -> list[UserPersona]:
+        personas: list[UserPersona] = []
+        for competitor, data in competitors_data.items():
+            citations = self._competitor_citation_ids(evidence_bundles, competitor, "channels", 2)
+            personas.append(
+                UserPersona(
+                    name=f"{competitor} 核心用户",
+                    segment=self._segment(data.channels, data.user_reviews),
+                    needs=self._needs(data.channels, data.market_share),
+                    complaints=self._complaints(data.user_reviews),
+                    preferred_channels=self._preferred_channels(data.channels),
+                    persona_summary=f"{self._segment(data.channels, data.user_reviews)} 更关注 {'、'.join(self._needs(data.channels, data.market_share)[:2])}。",
+                    citations=citations or fallback_citations,
+                )
+            )
+        return personas
+
+    @staticmethod
+    def _market_position(text: str) -> str:
+        if any(token in text for token in ("第一", "领先", "头部", "覆盖", "市占")):
+            return "更像头部平台或强势玩家"
+        if any(token in text for token in ("细分", "垂直", "场景", "蓝海")):
+            return "更像场景型强者"
+        return "当前更适合做相对位置判断"
+
+    @staticmethod
+    def _growth_signal(text: str, trend: str) -> str:
+        if trend:
+            return f"趋势判断为 {trend}。"
+        if any(token in text for token in ("增长", "提升", "突破", "扩大", "渗透")):
+            return text[:100]
+        return "公开信息更多在描述位置，而不是明确增长。"
+
+    @staticmethod
+    def _channel_motion(data: CompetitorData | None) -> str:
+        if not data or not data.channels:
+            return "渠道动作信息有限。"
+        return data.channels[:120]
 
     @staticmethod
     def _infer_trend(text: str) -> str:
-        if any(token in text for token in ("增长", "扩大", "领先", "提升")):
-            return "增长"
-        if any(token in text for token in ("下滑", "放缓", "承压")):
-            return "承压"
-        return "待核验"
+        if any(token in text for token in ("增长", "扩大", "领先", "提升", "突破", "上升")):
+            return "上升"
+        if any(token in text for token in ("下滑", "放缓", "承压", "下降")):
+            return "下降"
+        return "稳定"
 
     @staticmethod
     def _score(text: str) -> str:
-        if any(token in text for token in ("投诉", "问题", "复杂", "不足", "退费")):
+        if any(token in text for token in ("投诉", "问题", "复杂", "不足", "退款", "推诿")):
             return "中性偏谨慎"
         if text:
             return "中性偏正向"
@@ -212,19 +301,84 @@ class MarketAgent(BaseAgent):
     @staticmethod
     def _segment(channel_text: str, review_text: str) -> str:
         text = f"{channel_text} {review_text}"
-        if any(token in text for token in ("企业", "组织", "团队", "协同")):
-            return "企业团队"
-        if any(token in text for token in ("商家", "销售", "客户")):
+        if any(token in text for token in ("企业", "组织", "团队", "协同", "政务")):
+            return "企业协同团队"
+        if any(token in text for token in ("销售", "客户", "私域", "运营")):
             return "业务增长团队"
+        if any(token in text for token in ("开发者", "API", "模型", "代码")):
+            return "开发者与技术团队"
         return "泛团队用户"
+
+    @staticmethod
+    def _needs(channel_text: str, market_text: str) -> list[str]:
+        words = MarketAgent._keywords(f"{channel_text} {market_text}")
+        filtered = [word for word in words if word not in {"企业", "团队", "客户", "用户", "市场"}]
+        return filtered[:4] or ["效率提升", "业务增长"]
+
+    @staticmethod
+    def _complaints(text: str) -> list[str]:
+        parts = re.findall(r"[^。！？!?]*(?:复杂|问题|投诉|限制|昂贵|不足|退款|推诿)[^。！？!?]*", text or "")
+        return [part.strip()[:48] for part in parts[:3]]
+
+    @staticmethod
+    def _preferred_channels(text: str) -> list[str]:
+        words = MarketAgent._keywords(text)
+        keep = [word for word in words if any(token in word for token in ("生态", "伙伴", "直销", "区域", "服务", "代理", "官网"))]
+        return keep[:4] or words[:4]
 
     @staticmethod
     def _keywords(text: str) -> list[str]:
         words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|[\u4e00-\u9fff]{2,8}", text or "")
-        return list(dict.fromkeys(word.lower() for word in words[:16]))
+        result: list[str] = []
+        for word in words:
+            lowered = word.lower()
+            if lowered not in result:
+                result.append(lowered)
+        return result[:16]
 
     @staticmethod
-    def _complaints(text: str) -> list[str]:
-        parts = re.findall(r"[^。！？!?]*(?:复杂|问题|投诉|限制|昂贵|不足|退费)[^。！？!?]*", text or "")
-        cleaned = [part.strip() for part in parts if part.strip()]
-        return cleaned[:4]
+    def _is_risk_word(text: str) -> bool:
+        return any(token in text for token in ("投诉", "复杂", "不足", "退款", "限制", "贵", "推诿", "问题"))
+
+    @staticmethod
+    def _build_growth_trends(share_items: list[MarketShareItem]) -> str:
+        if not share_items:
+            return "当前市场信息有限，建议优先补齐官方或研究机构披露。"
+        leading = "；".join(f"{item.competitor}: {item.growth_signal}" for item in share_items[:3])
+        return f"公开资料更适合判断相对位置和增长方向。{leading}"
+
+    @staticmethod
+    def _build_channel_analysis(competitors_data: dict[str, CompetitorData]) -> str:
+        motions = [
+            f"{name}: {data.channels[:80]}" for name, data in competitors_data.items() if data.channels
+        ][:3]
+        return "；".join(motions) or "渠道侧公开信息有限，需补齐生态伙伴、销售方式和目标客群。"
+
+    @staticmethod
+    def _collect_unique_citations(evidence_bundles: dict[str, list[EvidenceBundle]]) -> list[Citation]:
+        seen: dict[str, Citation] = {}
+        priority = {"official": 4, "media": 3, "community": 2, "complaint": 1, "aggregator": 0}
+        for bundles in evidence_bundles.values():
+            for bundle in bundles:
+                for citation in bundle.citations:
+                    seen.setdefault(citation.id, citation)
+        return sorted(
+            seen.values(),
+            key=lambda item: (priority.get(item.source_quality, 0), item.confidence, item.title),
+            reverse=True,
+        )
+
+    @staticmethod
+    def _competitor_citation_ids(
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        competitor: str,
+        topic: str | None = None,
+        limit: int = 3,
+    ) -> list[str]:
+        ids = [
+            citation.id
+            for bundle in evidence_bundles.get(competitor, [])
+            if topic is None or bundle.topic == topic
+            for citation in bundle.citations
+        ]
+        return list(dict.fromkeys(ids))[:limit]

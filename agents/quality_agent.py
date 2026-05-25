@@ -31,9 +31,23 @@ class QualityAgent(BaseAgent):
         market_analysis: MarketAnalysis | None,
         coverage: ResearchCoverage | None,
         qa_round: int,
+        product_name: str = "",
+        competitor_count: int = 0,
         max_rounds: int = 2,
     ) -> dict:
         issues: list[QAIssue] = []
+
+        if competitor_count < 3:
+            issues.append(
+                QAIssue(
+                    issue_type="insufficient_competitors",
+                    severity="high",
+                    target_agent="DiscoveryAgent",
+                    reason=f"竞品数量不足，当前仅 {competitor_count} 个，报告容易退化成单点对比。",
+                    required_fix="补充到至少 3 个核心竞品后再生成正式报告。",
+                    related_ids=["competitor_list"],
+                )
+            )
 
         if product_analysis is None or not product_analysis.feature_tree:
             issues.append(
@@ -46,6 +60,33 @@ class QualityAgent(BaseAgent):
                     related_ids=["product:feature_tree"],
                 )
             )
+
+        if product_analysis is not None:
+            if len(product_analysis.feature_matrix) < 8:
+                issues.append(
+                    QAIssue(
+                        issue_type="thin_feature_matrix",
+                        severity="high",
+                        target_agent="ProductAgent",
+                        reason=f"功能矩阵维度不足，当前仅 {len(product_analysis.feature_matrix)} 个。",
+                        required_fix="动态提炼 8-15 个行业相关功能维度，恢复旧报告的信息密度。",
+                        related_ids=["product:feature_matrix"],
+                    )
+                )
+            if product_name and not any(
+                product_name in item.values or any(product_name in key for key in item.values)
+                for item in product_analysis.feature_matrix
+            ):
+                issues.append(
+                    QAIssue(
+                        issue_type="missing_own_product_matrix",
+                        severity="high",
+                        target_agent="ProductAgent",
+                        reason=f"功能矩阵缺少我方产品 {product_name}。",
+                        required_fix="feature_matrix.values 必须包含我方产品和所有竞品。",
+                        related_ids=["product:feature_matrix"],
+                    )
+                )
 
         if pricing_analysis is None or not pricing_analysis.pricing_models:
             issues.append(
