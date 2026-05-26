@@ -81,7 +81,6 @@ class ProductAgent(BaseAgent):
         citations: list[Citation],
     ) -> ProductAnalysis:
         competitor_names = list(evidence_bundles)
-        default_citations = [item.id for item in citations[:3]]
         feature_matrix: list[FeatureComparison] = []
         feature_tree: list[FeatureNode] = []
 
@@ -96,12 +95,19 @@ class ProductAgent(BaseAgent):
             }
             if not normalized_values.get(product_name):
                 normalized_values[product_name] = self._infer_product_value(feature, values)
-            citation_ids = self._topic_citation_ids(evidence_bundles, "product_features", limit=3)
+            competitor_citations = self._feature_competitor_citations(
+                evidence_bundles,
+                normalized_values,
+                topic="product_features",
+                limit_per_competitor=2,
+            )
+            citation_ids = self._collect_feature_citations(competitor_citations, limit=4)
             feature_matrix.append(
                 FeatureComparison(
                     feature=feature,
                     values=normalized_values,
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
+                    competitor_citations=competitor_citations,
                 )
             )
             feature_tree.append(
@@ -130,7 +136,7 @@ class ProductAgent(BaseAgent):
                     their_strength=self._trim(str(item.get("their_strength", item.get("their_advantage", ""))).strip(), 76),
                     their_weakness=self._trim(str(item.get("their_weakness", "")).strip(), 120),
                     recommended_countermove=self._trim(str(item.get("recommended_countermove", "")).strip(), 120),
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
                 )
             )
 
@@ -138,6 +144,7 @@ class ProductAgent(BaseAgent):
             str(item).strip() for item in result.get("differentiation_points", []) if str(item).strip()
         ][:5]
         summary = str(result.get("summary", "")).strip()
+        default_citations = [item.id for item in citations[:3]]
         conclusions = self._build_conclusions(
             summary=summary,
             points=differentiation_points,
@@ -178,7 +185,7 @@ class ProductAgent(BaseAgent):
 
         for feature, keywords in FALLBACK_FEATURE_KEYWORDS.items():
             values: dict[str, str] = {product_name: "🔶"}
-            feature_citations: list[str] = []
+            competitor_citations: dict[str, list[str]] = {}
             supported: list[str] = []
             for competitor in competitor_names:
                 data = competitors_data[competitor]
@@ -189,13 +196,19 @@ class ProductAgent(BaseAgent):
                 if value == "✅":
                     supported.append(competitor)
                     feature_support_counts[feature] += 1
-                feature_citations.extend(self._competitor_citation_ids(evidence_bundles, competitor, "product_features", 2))
+                competitor_citations[competitor] = self._competitor_citation_ids(
+                    evidence_bundles,
+                    competitor,
+                    "product_features",
+                    2,
+                )
 
             feature_matrix.append(
                 FeatureComparison(
                     feature=feature,
                     values=values,
-                    citations=self._dedupe(feature_citations) or [item.id for item in citations[:3]],
+                    citations=self._collect_feature_citations(competitor_citations, limit=4),
+                    competitor_citations=competitor_citations,
                 )
             )
             feature_tree.append(
@@ -354,7 +367,14 @@ class ProductAgent(BaseAgent):
     @staticmethod
     def _collect_unique_citations(evidence_bundles: dict[str, list[EvidenceBundle]]) -> list[Citation]:
         seen: dict[str, Citation] = {}
-        priority = {"official": 4, "media": 3, "community": 2, "complaint": 1, "aggregator": 0}
+        priority = {
+            "official": 5,
+            "media": 4,
+            "community": 3,
+            "complaint": 2,
+            "aggregator": 1,
+            "low_quality": 0,
+        }
         for bundles in evidence_bundles.values():
             for bundle in bundles:
                 for citation in bundle.citations:
@@ -393,6 +413,35 @@ class ProductAgent(BaseAgent):
             if topic is None or bundle.topic == topic
             for citation in bundle.citations
         ]
+        return ProductAgent._dedupe(ids)[:limit]
+
+    @staticmethod
+    def _feature_competitor_citations(
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        values: dict[str, str],
+        topic: str,
+        limit_per_competitor: int = 2,
+    ) -> dict[str, list[str]]:
+        competitor_citations: dict[str, list[str]] = {}
+        for competitor, value in values.items():
+            if not str(value or "").strip():
+                continue
+            competitor_citations[competitor] = ProductAgent._competitor_citation_ids(
+                evidence_bundles,
+                competitor,
+                topic=topic,
+                limit=limit_per_competitor,
+            )
+        return competitor_citations
+
+    @staticmethod
+    def _collect_feature_citations(
+        competitor_citations: dict[str, list[str]],
+        limit: int = 4,
+    ) -> list[str]:
+        ids: list[str] = []
+        for citation_ids in competitor_citations.values():
+            ids.extend(citation_ids)
         return ProductAgent._dedupe(ids)[:limit]
 
     @staticmethod

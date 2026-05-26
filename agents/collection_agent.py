@@ -5,8 +5,10 @@ agents/collection_agent.py - 结构化证据采集 Agent
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
+from pathlib import Path
 from urllib.parse import urlparse
 
 import config
@@ -32,6 +34,35 @@ TOPIC_FIELD_MAP = {
     "channels": "channels",
 }
 
+PROFILE_FIELDS = (
+    "product_strengths",
+    "channel_strengths",
+    "reputation_strengths",
+    "product_weaknesses",
+    "reputation_weaknesses",
+)
+
+SOURCE_QUALITY_CONFIDENCE = {
+    "official": 0.9,
+    "media": 0.76,
+    "community": 0.58,
+    "complaint": 0.45,
+    "aggregator": 0.42,
+    "low_quality": 0.28,
+}
+
+SOURCE_QUALITY_PRIORITY = {
+    "official": 5,
+    "media": 4,
+    "community": 3,
+    "complaint": 2,
+    "aggregator": 1,
+    "low_quality": 0,
+}
+
+QUALITY_LEVELS = ("official", "media", "community", "complaint", "aggregator", "low_quality")
+WEAKNESS_TOKENS = ("不足", "问题", "投诉", "限制", "复杂", "门槛", "偏贵", "缺少", "不支持", "续航焦虑")
+
 
 class CollectionAgent(BaseAgent):
     def __init__(self):
@@ -41,7 +72,9 @@ class CollectionAgent(BaseAgent):
             system_prompt=prompts["system_prompt"],
         )
         self._prompt_collect = prompts["prompt_collect"]
+        self._prompt_profile = prompts["prompt_profile"]
         self.search_client = SearchClient()
+        self._source_quality_profiles = self._load_source_quality_profiles()
 
     async def run(
         self,
@@ -59,22 +92,23 @@ class CollectionAgent(BaseAgent):
             grouped_bundles[task.competitor].append(bundle)
             if bundle.coverage_status == "complete":
                 coverage.completed_topics.setdefault(task.competitor, []).append(task.topic)
-            else:
-                coverage.failed_tasks.append(
-                    {
-                        "competitor": task.competitor,
-                        "topic": task.topic,
-                        "query": task.query,
-                        "error": evidence.error or "evidence_incomplete",
-                    }
+                continue
+
+            coverage.failed_tasks.append(
+                {
+                    "competitor": task.competitor,
+                    "topic": task.topic,
+                    "query": task.query,
+                    "error": evidence.error or "evidence_incomplete",
+                }
+            )
+            coverage.coverage_gaps.append(
+                CoverageGap(
+                    competitor=task.competitor,
+                    topic=task.topic,
+                    reason=evidence.error or "missing_or_weak_evidence",
                 )
-                coverage.coverage_gaps.append(
-                    CoverageGap(
-                        competitor=task.competitor,
-                        topic=task.topic,
-                        reason=evidence.error or "missing_or_weak_evidence",
-                    )
-                )
+            )
 
         competitors_data = {
             competitor: self._build_competitor_data(competitor, bundles, grouped_evidence[competitor])
@@ -153,26 +187,25 @@ class CollectionAgent(BaseAgent):
                 return self._compact_summary(str(value))
         return self._fallback_summary(trimmed)
 
-    @staticmethod
-    def _build_citations(task: ResearchTask, refs: list[dict]) -> list[Citation]:
+    def _build_citations(
+        self,
+        task: ResearchTask,
+        refs: list[dict],
+    ) -> list[Citation]:
         citations: list[Citation] = []
         for index, item in enumerate(refs[:6], start=1):
             url = str(item.get("url", "")).strip()
             title = str(item.get("title", "")).strip() or f"{task.competitor}-{task.topic}-{index}"
-            snippet = str(
-                item.get("summary")
-                or item.get("content")
-                or item.get("snippet")
-                or ""
-            ).strip()
+            snippet = str(item.get("summary") or item.get("content") or item.get("snippet") or "").strip()
+            quality = self._infer_source_quality(url, title)
             citations.append(
                 Citation(
                     id=f"{task.id}:citation:{index}",
                     title=title,
                     url=url,
                     snippet=snippet[:280],
-                    source_quality=CollectionAgent._infer_source_quality(url, title),
-                    confidence=0.82 if CollectionAgent._infer_source_quality(url, title) == "official" else 0.68 if url else 0.4,
+                    source_quality=quality,
+                    confidence=SOURCE_QUALITY_CONFIDENCE.get(quality, 0.4 if url else 0.2),
                 )
             )
         return citations
@@ -184,23 +217,62 @@ class CollectionAgent(BaseAgent):
         evidence_items: list[ResearchEvidence],
     ) -> CompetitorData:
         topic_map = {bundle.topic: bundle for bundle in bundles}
-        merged_text = " ".join(bundle.summary for bundle in bundles if bundle.summary)
         sources = [citation.url for bundle in bundles for citation in bundle.citations if citation.url]
         empty_bundle = EvidenceBundle(competitor=competitor, topic="")
-        strengths = self._extract_competitor_strengths(bundles)
-        weaknesses = self._extract_competitor_weaknesses(bundles)
+        profile = self._summarize_competitor_profile(competitor, topic_map)
+        product_strengths = profile.get("product_strengths", "")
+        channel_strengths = profile.get("channel_strengths", "")
+        reputation_strengths = profile.get("reputation_strengths", "")
+        product_weaknesses = profile.get("product_weaknesses", "")
+        reputation_weaknesses = profile.get("reputation_weaknesses", "")
+
         return CompetitorData(
             name=competitor,
             product_features=topic_map.get("product_features", empty_bundle).summary,
             pricing_info=topic_map.get("pricing_info", empty_bundle).summary,
             market_share=topic_map.get("market_share", empty_bundle).summary,
             user_reviews=topic_map.get("user_reviews", empty_bundle).summary,
-            strengths=strengths or self._extract_strengths(merged_text),
-            weaknesses=weaknesses or self._extract_weaknesses(merged_text),
+            product_strengths=product_strengths,
+            channel_strengths=channel_strengths,
+            reputation_strengths=reputation_strengths,
+            product_weaknesses=product_weaknesses,
+            reputation_weaknesses=reputation_weaknesses,
+            strengths=product_strengths,
+            weaknesses=product_weaknesses or reputation_weaknesses,
             channels=topic_map.get("channels", empty_bundle).summary,
             search_sources=sources,
             research_evidence=evidence_items,
         )
+
+    def _summarize_competitor_profile(
+        self,
+        competitor: str,
+        topic_map: dict[str, EvidenceBundle],
+    ) -> dict[str, str]:
+        fallback = {
+            "product_strengths": self._fallback_topic_summary(topic_map.get("product_features")),
+            "channel_strengths": self._fallback_topic_summary(topic_map.get("channels")),
+            "reputation_strengths": self._fallback_topic_summary(topic_map.get("user_reviews")),
+            "product_weaknesses": self._fallback_topic_weakness(topic_map.get("product_features")),
+            "reputation_weaknesses": self._fallback_topic_weakness(topic_map.get("user_reviews")),
+        }
+        if not config.ENABLE_LLM:
+            return fallback
+
+        prompt = self._prompt_profile.format(
+            competitor_name=competitor,
+            product_features_text=self._bundle_profile_text(topic_map.get("product_features")),
+            channels_text=self._bundle_profile_text(topic_map.get("channels")),
+            user_reviews_text=self._bundle_profile_text(topic_map.get("user_reviews")),
+        )
+        parsed = self.ask_llm_json(prompt, max_tokens=1200)
+        if not parsed:
+            return fallback
+
+        return {
+            field: self._compact_profile_field(str(parsed.get(field, "")).strip(), fallback=fallback[field])
+            for field in PROFILE_FIELDS
+        }
 
     @staticmethod
     def _compact_summary(text: str) -> str:
@@ -231,15 +303,15 @@ class CollectionAgent(BaseAgent):
 
     @staticmethod
     def _split_sentences(text: str) -> list[str]:
-        raw_parts = re.split(r"[\n\r]+|[。！？!?；;]+", text or "")
-        return [part.strip(" -•\t") for part in raw_parts if part.strip(" -•\t")]
+        raw_parts = re.split(r"[\n\r]+|[。！？；;]+", text or "")
+        return [part.strip(" -\t") for part in raw_parts if part.strip(" -\t")]
 
     @staticmethod
     def _trim_sentence(text: str, max_len: int = 72) -> str:
-        compact = re.sub(r"\s+", " ", text).strip(" -•\t")
+        compact = re.sub(r"\s+", " ", text).strip(" -\t")
         if len(compact) <= max_len:
             return compact
-        cut = compact[:max_len].rstrip("，,；;：:")
+        cut = compact[:max_len].rstrip("，、；:：")
         return f"{cut}..."
 
     def _extract_key_facts(self, summary: str, raw_text: str) -> list[str]:
@@ -270,56 +342,82 @@ class CollectionAgent(BaseAgent):
 
     @staticmethod
     def _pick_source_quality(citations: list[Citation]) -> str:
-        priorities = {"official": 4, "media": 3, "community": 2, "complaint": 1, "aggregator": 0}
         ranked = sorted(
             (citation.source_quality for citation in citations),
-            key=lambda item: priorities.get(item, 0),
+            key=lambda item: SOURCE_QUALITY_PRIORITY.get(item, 0),
             reverse=True,
         )
         return ranked[0] if ranked else "aggregator"
 
-    @staticmethod
-    def _infer_source_quality(url: str, title: str) -> str:
+    def _infer_source_quality(self, url: str, title: str) -> str:
         host = urlparse(url).netloc.lower()
         title_lower = (title or "").lower()
-        if any(token in host for token in ("feishu.cn", "larksuite.com", "weixin.qq.com", "dingtalk.com", "qq.com")):
-            return "official"
+        default_profile = self._source_quality_profiles.get("default", {})
+
+        for quality in QUALITY_LEVELS:
+            tokens = default_profile.get(quality) or []
+            if self._match_host_tokens(host, tokens):
+                return quality
+
         if any(token in host for token in ("gov.cn", "edu.cn")):
             return "official"
-        if any(token in host for token in ("36kr.com", "iyiou.com", "caixin.com", "guancha.cn", "chinanews.com")):
-            return "media"
-        if any(token in host for token in ("sohu.com", "163.com", "sina.com", "ifeng.com", "docin.com", "csdn.net")):
-            return "aggregator"
-        if any(token in host for token in ("zhihu.com", "xiaohongshu.com", "weibo.com")):
+        if any(token in host for token in ("zhihu.com", "xiaohongshu.com", "weibo.com", "reddit.com")):
             return "community"
         if any(token in host for token in ("315", "tousu", "heimao", "blackcat")) or "投诉" in title_lower:
             return "complaint"
+        if any(token in host for token in ("sina.com", "sina.cn", "sohu.com", "163.com", "ifeng.com", "docin.com", "csdn.net")):
+            return "aggregator"
         if host:
             return "media"
         return "aggregator"
 
-    def _extract_competitor_strengths(self, bundles: list[EvidenceBundle]) -> str:
-        candidates: list[str] = []
-        for bundle in bundles:
-            for fact in bundle.key_facts:
-                if any(token in fact for token in ("领先", "增长", "支持", "接入", "覆盖", "开放", "协同", "自动化", "ai")):
-                    candidates.append(fact)
-        return "；".join(candidates[:2])[:120]
-
-    def _extract_competitor_weaknesses(self, bundles: list[EvidenceBundle]) -> str:
-        candidates: list[str] = []
-        for bundle in bundles:
-            for fact in bundle.key_facts + bundle.evidence_quotes:
-                if any(token in fact for token in ("复杂", "门槛", "投诉", "退款", "不足", "限制", "成本", "推诿")):
-                    candidates.append(fact)
-        return "；".join(candidates[:2])[:120]
+    @staticmethod
+    def _match_host_tokens(host: str, tokens: list[str]) -> bool:
+        return any(token and token in host for token in tokens)
 
     @staticmethod
-    def _extract_strengths(text: str) -> str:
-        parts = re.findall(r"[^。.!?]*(?:领先|优势|强|好评|增长|集成|自动化)[^。.!?]*", text)
-        return "；".join(parts[:4])[:400]
+    def _load_source_quality_profiles() -> dict[str, dict[str, list[str]]]:
+        file_path = Path(__file__).resolve().parents[1] / "source_quality_profiles.json"
+        if not file_path.is_file():
+            return {}
+        with file_path.open("r", encoding="utf-8") as file:
+            return json.load(file)
 
     @staticmethod
-    def _extract_weaknesses(text: str) -> str:
-        parts = re.findall(r"[^。.!?]*(?:不足|问题|投诉|昂贵|复杂|弱|限制)[^。.!?]*", text)
-        return "；".join(parts[:4])[:400]
+    def _bundle_profile_text(bundle: EvidenceBundle | None) -> str:
+        if not bundle:
+            return ""
+        facts = "；".join(bundle.key_facts[:3])
+        quotes = "；".join(bundle.evidence_quotes[:2])
+        parts = [bundle.summary, facts, quotes]
+        return "\n".join(part for part in parts if part)
+
+    def _fallback_topic_summary(self, bundle: EvidenceBundle | None) -> str:
+        if not bundle:
+            return ""
+        candidates = bundle.key_facts + self._split_sentences(bundle.summary)
+        for sentence in candidates:
+            cleaned = self._compact_profile_field(sentence)
+            if cleaned:
+                return cleaned
+        return ""
+
+    def _fallback_topic_weakness(self, bundle: EvidenceBundle | None) -> str:
+        if not bundle:
+            return ""
+        candidates = bundle.key_facts + bundle.evidence_quotes + self._split_sentences(bundle.summary)
+        for sentence in candidates:
+            lowered = sentence.lower()
+            if any(token in sentence or token in lowered for token in WEAKNESS_TOKENS):
+                cleaned = self._compact_profile_field(sentence)
+                if cleaned:
+                    return cleaned
+        return ""
+
+    def _compact_profile_field(self, text: str, fallback: str = "") -> str:
+        cleaned = self._trim_sentence((text or "").strip(), 80)
+        if not cleaned:
+            return fallback
+        if cleaned in {"暂无数据", "待验证"}:
+            return cleaned
+        return cleaned

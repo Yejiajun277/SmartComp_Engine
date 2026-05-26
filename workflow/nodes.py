@@ -353,6 +353,7 @@ class WorkflowNodes:
             product_analysis,
             pricing_analysis,
             market_analysis,
+            state.get("evidence_bundles", {}),
         )
         report.run_id = state["run_id"]
         report.qa_issues = [

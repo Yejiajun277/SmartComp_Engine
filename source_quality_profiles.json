@@ -1,0 +1,40 @@
+{
+  "default": {
+    "official": [
+      "gov.cn",
+      "edu.cn"
+    ],
+    "media": [
+      "36kr.com",
+      "iyiou.com",
+      "caixin.com",
+      "guancha.cn",
+      "chinanews.com"
+    ],
+    "community": [
+      "zhihu.com",
+      "xiaohongshu.com",
+      "weibo.com",
+      "reddit.com"
+    ],
+    "complaint": [
+      "315",
+      "tousu",
+      "heimao",
+      "blackcat"
+    ],
+    "aggregator": [
+      "sohu.com",
+      "163.com",
+      "ifeng.com",
+      "docin.com",
+      "csdn.net"
+    ],
+    "low_quality": [
+      "zhidemai.com",
+      "smzdm.com",
+      "chinabgao.com",
+      "sina.cn"
+    ]
+  }
+}

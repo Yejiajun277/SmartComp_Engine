@@ -21,6 +21,7 @@ from models.domain import (
     CompetitorData,
     CompetitorList,
     CompetitiveAdvantage,
+    EvidenceBundle,
     FeatureComparison,
     MarketAnalysis,
     MarketShareItem,
@@ -49,7 +50,9 @@ class StrategyAgent(BaseAgent):
         product_analysis: ProductAnalysis,
         pricing_analysis: PricingAnalysis,
         market_analysis: MarketAnalysis,
+        evidence_bundles: dict[str, list[EvidenceBundle]] | None = None,
     ) -> StrategyReport:
+        evidence_bundles = evidence_bundles or {}
         merged_citations = self._merge_citations(
             product_analysis.citations,
             pricing_analysis.citations,
@@ -59,7 +62,13 @@ class StrategyAgent(BaseAgent):
         if config.ENABLE_LLM:
             prompt = self._prompt_strategy.format(
                 product_name=product_name,
-                analysis_text=self._build_analysis_text(product_name, product_analysis, pricing_analysis, market_analysis),
+                analysis_text=self._build_analysis_text(
+                    product_name,
+                    product_analysis,
+                    pricing_analysis,
+                    market_analysis,
+                    evidence_bundles,
+                ),
             )
             result = self.ask_llm_json(prompt, max_tokens=4096)
             if result:
@@ -71,6 +80,7 @@ class StrategyAgent(BaseAgent):
                     pricing_analysis=pricing_analysis,
                     market_analysis=market_analysis,
                     citations=merged_citations,
+                    evidence_bundles=evidence_bundles,
                 )
                 if report.action_plan and report.overall_positioning:
                     self._log(f"策略 LLM 报告生成完成，行动项={len(report.action_plan)}")
@@ -177,6 +187,7 @@ class StrategyAgent(BaseAgent):
         product_analysis: ProductAnalysis,
         pricing_analysis: PricingAnalysis,
         market_analysis: MarketAnalysis,
+        evidence_bundles: dict[str, list[EvidenceBundle]],
     ) -> str:
         lines: list[str] = []
 
@@ -225,6 +236,10 @@ class StrategyAgent(BaseAgent):
                     f"- {item.name}: {item.segment}; 需求={','.join(item.needs)}; "
                     f"抱怨={','.join(item.complaints)}; 渠道={','.join(item.preferred_channels)}"
                 )
+        evidence_snapshot = StrategyAgent._build_evidence_snapshot(evidence_bundles)
+        if evidence_snapshot:
+            lines.append("\n## 四、原始证据快照")
+            lines.extend(evidence_snapshot)
         return "\n".join(lines)
 
     def _parse_strategy_report(
@@ -236,6 +251,7 @@ class StrategyAgent(BaseAgent):
         pricing_analysis: PricingAnalysis,
         market_analysis: MarketAnalysis,
         citations: list[Citation],
+        evidence_bundles: dict[str, list[EvidenceBundle]],
     ) -> StrategyReport:
         product_citation_ids = self._take_conclusion_citations(product_analysis.conclusions, limit=3)
         pricing_citation_ids = self._take_conclusion_citations(pricing_analysis.conclusions, limit=3)
@@ -258,7 +274,7 @@ class StrategyAgent(BaseAgent):
                 )
             )
 
-        return StrategyReport(
+        report = StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
             overall_positioning=str(result.get("overall_positioning", "")).strip(),
@@ -275,6 +291,88 @@ class StrategyAgent(BaseAgent):
             citations=citations,
             summary=str(result.get("summary", "")).strip(),
         )
+        return self._post_validate_report(report, evidence_bundles)
+
+    def _post_validate_report(
+        self,
+        report: StrategyReport,
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+    ) -> StrategyReport:
+        evidence_text = self._build_evidence_reference_text(evidence_bundles)
+        report.overall_positioning = self._sanitize_claim_text(report.overall_positioning, evidence_text)
+        report.risk_assessment = self._sanitize_claim_text(report.risk_assessment, evidence_text)
+        report.product_analysis_summary = self._sanitize_claim_text(report.product_analysis_summary, evidence_text)
+        report.pricing_analysis_summary = self._sanitize_claim_text(report.pricing_analysis_summary, evidence_text)
+        report.market_analysis_summary = self._sanitize_claim_text(report.market_analysis_summary, evidence_text)
+        report.summary = self._sanitize_claim_text(report.summary, evidence_text)
+        for item in report.action_plan:
+            item.action = self._sanitize_claim_text(item.action, evidence_text)
+            item.expected_impact = self._sanitize_claim_text(item.expected_impact, evidence_text)
+        return report
+
+    @staticmethod
+    def _build_evidence_snapshot(evidence_bundles: dict[str, list[EvidenceBundle]]) -> list[str]:
+        lines: list[str] = []
+        for competitor, bundles in evidence_bundles.items():
+            for bundle in bundles[:5]:
+                facts = "；".join(bundle.key_facts[:2])
+                quotes = "；".join(bundle.evidence_quotes[:2])
+                citation_ids = ",".join(citation.id for citation in bundle.citations[:3] if citation.id)
+                snapshot = " | ".join(
+                    part
+                    for part in [
+                        f"{competitor}/{bundle.topic}",
+                        facts,
+                        quotes,
+                        f"citations={citation_ids}" if citation_ids else "",
+                    ]
+                    if part
+                )
+                if snapshot:
+                    lines.append(f"- {snapshot}")
+        return lines[:20]
+
+    @staticmethod
+    def _build_evidence_reference_text(evidence_bundles: dict[str, list[EvidenceBundle]]) -> str:
+        parts: list[str] = []
+        for bundles in evidence_bundles.values():
+            for bundle in bundles:
+                parts.append(bundle.summary)
+                parts.extend(bundle.key_facts[:4])
+                parts.extend(bundle.evidence_quotes[:3])
+                parts.extend(citation.snippet for citation in bundle.citations[:3])
+        return " ".join(part for part in parts if part).lower()
+
+    @staticmethod
+    def _sanitize_claim_text(text: str, evidence_text: str) -> str:
+        cleaned = " ".join((text or "").split())
+        if not cleaned:
+            return cleaned
+
+        exclusive_terms = ("首个", "唯一", "第一", "全面领先", "全系标配")
+        for term in exclusive_terms:
+            if term in cleaned:
+                cleaned = cleaned.replace(term, "")
+
+        claim_pattern = re.compile(
+            r"\d+(?:\.\d+)?\s*(?:"
+            r"万\+?(?:订单|单|辆|台)?|"
+            r"万元|元|"
+            r"订单|单|辆|台|"
+            r"%|km|公里|TOPS|秒"
+            r")"
+        )
+        unsupported_claims = [
+            match.group(0)
+            for match in claim_pattern.finditer(cleaned)
+            if match.group(0).lower() not in evidence_text
+        ]
+        for claim in unsupported_claims:
+            cleaned = cleaned.replace(claim, "待验证")
+
+        cleaned = re.sub(r"[，,]?\s*待验证(?:到|以上|以下|左右)?", "，待验证", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ，,;；")
+        return cleaned or "待验证"
 
     @staticmethod
     def _merge_citations(*citation_lists: list[Citation]) -> list[Citation]:
@@ -283,7 +381,14 @@ class StrategyAgent(BaseAgent):
             for citation in citations:
                 seen.setdefault(citation.id, citation)
 
-        priority = {"official": 4, "media": 3, "community": 2, "complaint": 1, "aggregator": 0}
+        priority = {
+            "official": 5,
+            "media": 4,
+            "community": 3,
+            "complaint": 2,
+            "aggregator": 1,
+            "low_quality": 0,
+        }
         return sorted(
             seen.values(),
             key=lambda item: (priority.get(item.source_quality, 0), item.confidence, item.title),
@@ -304,7 +409,12 @@ class StrategyAgent(BaseAgent):
             counter += 1
         return numbered
 
-    def render_citation_links(self, citation_ids: list[str], citation_map: dict[str, Citation]) -> str:
+    def render_citation_links(
+        self,
+        citation_ids: list[str],
+        citation_map: dict[str, Citation],
+        empty_label: str = "",
+    ) -> str:
         badges = []
         for citation_id in list(dict.fromkeys(item for item in citation_ids if item))[:3]:
             citation = citation_map.get(citation_id)
@@ -316,6 +426,8 @@ class StrategyAgent(BaseAgent):
                 f'<a class="cite-badge" href="#citation-{number}" title="{title}">[{number}]</a>'
             )
         if not badges:
+            if empty_label:
+                return f'<span class="cite-empty">{escape(empty_label)}</span>'
             return ""
         return '<span class="cite-list">' + "".join(badges) + "</span>"
 
@@ -406,6 +518,7 @@ class StrategyAgent(BaseAgent):
             product_analysis,
             citation_map,
             competitor_list,
+            competitors_data,
         )
 
         # 区块7：策略建议
@@ -643,6 +756,13 @@ class StrategyAgent(BaseAgent):
       background: #dbeafe;
       text-decoration: none;
     }}
+    .cite-empty {{
+      display: inline-block;
+      margin-left: 6px;
+      color: var(--amber);
+      font-size: 12px;
+      vertical-align: middle;
+    }}
     .citation-list {{
       display: grid;
       gap: 14px;
@@ -816,9 +936,10 @@ class StrategyAgent(BaseAgent):
             for item in product_analysis.feature_matrix[:12]:
                 product_value = self._find_matrix_value(item.values, product_name)
                 competitor_value = self._find_matrix_value(item.values, competitor_name)
+                competitor_citations = self._feature_citation_ids_for(item, competitor_name)
                 rows.append(
                     "<tr>"
-                    f"<td>{escape(item.feature)}{self.render_citation_links(item.citations, citation_map)}</td>"
+                    f"<td>{escape(item.feature)}{self.render_citation_links(competitor_citations, citation_map, '（暂无直接引用）')}</td>"
                     f'<td style="text-align:center;">{escape(self._feature_value_text(product_value))}</td>'
                     f'<td style="text-align:center;">{escape(self._feature_value_text(competitor_value))}</td>'
                     "</tr>"
@@ -828,7 +949,7 @@ class StrategyAgent(BaseAgent):
             if pricing_item:
                 rows.append(
                     "<tr>"
-                    f"<td>定价策略{self.render_citation_links(pricing_item.citations, citation_map)}</td>"
+                    f"<td>定价策略{self.render_citation_links(pricing_item.citations, citation_map, '（暂无直接引用）')}</td>"
                     "<td>—</td>"
                     f"<td>{escape(pricing_item.free_tier or pricing_item.entry_offer or '暂无')}<span class=\"cell-note\">付费：{escape(pricing_item.paid_tier or '暂无')} · 升级：{escape(pricing_item.upgrade_trigger or '暂无')}</span></td>"
                     "</tr>"
@@ -838,7 +959,7 @@ class StrategyAgent(BaseAgent):
             if market_item:
                 rows.append(
                     "<tr>"
-                    f"<td>市场位置{self.render_citation_links(market_item.citations, citation_map)}</td>"
+                    f"<td>市场位置{self.render_citation_links(market_item.citations, citation_map, '（暂无直接引用）')}</td>"
                     "<td>—</td>"
                     f"<td>{escape(market_item.share_estimate or market_item.market_position or '暂无')}<span class=\"cell-note\">趋势：{escape(market_item.trend or '待补充')} · 位置：{escape(market_item.market_position or '待补充')}</span></td>"
                     "</tr>"
@@ -851,6 +972,8 @@ class StrategyAgent(BaseAgent):
 
             advantage = self._find_advantage(product_analysis.competitive_advantages, competitor_name)
             competitor_data = self._find_competitor_data(competitors_data, competitor_name)
+            product_strength = self._competitor_product_strength(competitor_data, advantage)
+            product_weakness = self._competitor_product_weakness(competitor_data, advantage)
             compare_cards = [
                 self._render_compare_card(
                     "我方优势",
@@ -868,15 +991,29 @@ class StrategyAgent(BaseAgent):
                 ),
                 self._render_compare_card(
                     "对方长处",
-                    (competitor_data.strengths if competitor_data else "") or (advantage.their_strength if advantage else ""),
+                    product_strength,
                     "good",
                     advantage.citations if advantage else [],
                     citation_map,
                 ),
                 self._render_compare_card(
                     "对方短板",
-                    (competitor_data.weaknesses if competitor_data else "") or (advantage.their_weakness if advantage else ""),
+                    product_weakness,
                     "warn",
+                    advantage.citations if advantage else [],
+                    citation_map,
+                ),
+                self._render_compare_card(
+                    "渠道优势",
+                    self._competitor_channel_strength(competitor_data),
+                    "muted",
+                    advantage.citations if advantage else [],
+                    citation_map,
+                ),
+                self._render_compare_card(
+                    "口碑信号",
+                    self._competitor_reputation_signal(competitor_data),
+                    "muted",
                     advantage.citations if advantage else [],
                     citation_map,
                 ),
@@ -941,15 +1078,16 @@ class StrategyAgent(BaseAgent):
         for item in feature_matrix:
             cells = []
             for name in competitor_names:
+                cell_citations = self._feature_citation_ids_for(item, name)
                 cells.append(
-                    f'<td style="text-align:center;">{escape(self._feature_value_text(self._find_matrix_value(item.values, name)))}</td>'
+                    f'<td style="text-align:center;">{escape(self._feature_value_text(self._find_matrix_value(item.values, name)))}{self.render_citation_links(cell_citations, citation_map)}</td>'
                 )
             supported_count = sum(
                 1 for name in competitor_names if self._is_supported(self._find_matrix_value(item.values, name))
             )
             rows.append(
                 "<tr>"
-                f"<td>{escape(item.feature)}{self.render_citation_links(item.citations, citation_map)}</td>"
+                f"<td>{escape(item.feature)}</td>"
                 + "".join(cells)
                 + f"<td>{supported_count}</td>"
                 "</tr>"
@@ -987,7 +1125,7 @@ class StrategyAgent(BaseAgent):
         for item in pricing_items:
             rows.append(
                 "<tr>"
-                f"<td>{escape(item.competitor)}{self.render_citation_links(item.citations, citation_map)}</td>"
+                f"<td>{escape(item.competitor)}{self.render_citation_links(item.citations, citation_map, '（暂无直接引用）')}</td>"
                 f"<td>{escape(item.free_tier or '暂无')}<span class=\"cell-note\">入口：{escape(item.entry_offer or '暂无')}</span></td>"
                 f"<td>{escape(item.paid_tier or '暂无')}<span class=\"cell-note\">升级：{escape(item.upgrade_trigger or '暂无')}</span></td>"
                 f"<td>{escape(item.pricing_model or item.billing_unit or '暂无')}<span class=\"cell-note\">风险：{escape(item.pricing_risk or '未见明显风险')}</span></td>"
@@ -1079,7 +1217,7 @@ class StrategyAgent(BaseAgent):
                 f'<div style="width:80px;text-align:right;flex-shrink:0;">{self._render_trend_badge(item.trend)}</div>'
                 "</div>"
                 + (
-                    f'<div class="section-note" style="margin-left:132px;">{escape("；".join(detail_parts))}{self.render_citation_links(item.citations, citation_map)}</div>'
+                    f'<div class="section-note" style="margin-left:132px;">{escape("；".join(detail_parts))}{self.render_citation_links(item.citations, citation_map, "（暂无直接引用）")}</div>'
                     if detail_parts or item.citations
                     else ""
                 )
@@ -1163,6 +1301,7 @@ class StrategyAgent(BaseAgent):
         product_analysis: ProductAnalysis,
         citation_map: dict[str, Citation],
         competitor_list: CompetitorList | None,
+        competitors_data: dict[str, CompetitorData],
     ) -> str:
         # 区块6：本产品差异化定位
         competitor_names = self._collect_competitor_names(
@@ -1230,12 +1369,15 @@ class StrategyAgent(BaseAgent):
         if product_analysis.competitive_advantages:
             cards = []
             for advantage in product_analysis.competitive_advantages:
+                competitor_data = self._find_competitor_data(competitors_data, advantage.competitor)
                 cards.append(
                     '<div class="card-soft" style="margin-bottom:12px;">'
                     f'<div style="font-size:13px;font-weight:700;margin-bottom:8px;">vs {escape(advantage.competitor)}</div>'
                     f'<div class="good" style="margin-bottom:6px;"><strong>我方胜出：</strong>{escape(advantage.our_advantage or "待补充")}</div>'
-                    f'<div class="bad" style="margin-bottom:6px;"><strong>对方优势：</strong>{escape((advantage.their_advantage or advantage.their_strength or "待补充"))}</div>'
-                    f'<div class="section-note"><strong>应对动作：</strong>{escape(advantage.recommended_countermove or "待补充")}{self.render_citation_links(advantage.citations, citation_map)}</div>'
+                    f'<div class="bad" style="margin-bottom:6px;"><strong>产品长处：</strong>{escape(self._competitor_product_strength(competitor_data, advantage) or "待补充")}</div>'
+                    f'<div class="section-note"><strong>渠道优势：</strong>{escape(self._competitor_channel_strength(competitor_data) or "待补充")}</div>'
+                    f'<div class="section-note"><strong>口碑信号：</strong>{escape(self._competitor_reputation_signal(competitor_data) or "待补充")}</div>'
+                    f'<div class="section-note"><strong>应对动作：</strong>{escape(advantage.recommended_countermove or "待补充")}{self.render_citation_links(advantage.citations, citation_map, "（暂无直接引用）")}</div>'
                     "</div>"
                 )
             per_competitor_positioning = (
@@ -1432,6 +1574,7 @@ class StrategyAgent(BaseAgent):
             "community": "社区",
             "complaint": "投诉",
             "aggregator": "聚合",
+            "low_quality": "低质量",
         }
         for citation in valid_citations:
             number = self._citation_number_map[citation.id]
@@ -1570,6 +1713,36 @@ class StrategyAgent(BaseAgent):
             return '<span class="bad" style="font-weight:600;">▼ 下滑</span>'
         return f'<span class="muted" style="font-weight:600;">● {escape(raw or "持平")}</span>'
 
+    @staticmethod
+    def _competitor_product_strength(
+        competitor_data: CompetitorData | None,
+        advantage: CompetitiveAdvantage | None,
+    ) -> str:
+        if competitor_data and competitor_data.product_strengths:
+            return competitor_data.product_strengths
+        return (advantage.their_strength if advantage else "") or ""
+
+    @staticmethod
+    def _competitor_product_weakness(
+        competitor_data: CompetitorData | None,
+        advantage: CompetitiveAdvantage | None,
+    ) -> str:
+        if competitor_data and competitor_data.product_weaknesses:
+            return competitor_data.product_weaknesses
+        return (advantage.their_weakness if advantage else "") or ""
+
+    @staticmethod
+    def _competitor_channel_strength(competitor_data: CompetitorData | None) -> str:
+        if not competitor_data:
+            return ""
+        return competitor_data.channel_strengths or ""
+
+    @staticmethod
+    def _competitor_reputation_signal(competitor_data: CompetitorData | None) -> str:
+        if not competitor_data:
+            return ""
+        return competitor_data.reputation_strengths or competitor_data.reputation_weaknesses or ""
+
     def _render_compare_card(
         self,
         title: str,
@@ -1583,7 +1756,7 @@ class StrategyAgent(BaseAgent):
             '<div class="card-soft">'
             f'<div class="{tone_class}" style="font-weight:600;margin-bottom:8px;">{escape(title)}</div>'
             f"<div>{escape(text or '暂无')}</div>"
-            f"{self.render_citation_links(citation_ids, citation_map)}"
+            f"{self.render_citation_links(citation_ids, citation_map, '（暂无直接引用）')}"
             "</div>"
         )
 
@@ -1620,6 +1793,13 @@ class StrategyAgent(BaseAgent):
         for group in groups:
             ids.extend(group)
         return list(dict.fromkeys(item for item in ids if item))
+
+    @staticmethod
+    def _feature_citation_ids_for(feature: FeatureComparison, competitor_name: str) -> list[str]:
+        competitor_citations = getattr(feature, "competitor_citations", {}) or {}
+        if competitor_name in competitor_citations:
+            return list(dict.fromkeys(item for item in competitor_citations.get(competitor_name, []) if item))
+        return feature.citations if len(feature.values) <= 2 else []
 
     @staticmethod
     def _sentence_to_bullets(text: str) -> list[str]:

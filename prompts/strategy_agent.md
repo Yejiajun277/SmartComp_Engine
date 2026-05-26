@@ -15,7 +15,7 @@
 4. 风险评估：竞品可能采取的应对措施
 
 ### 输出要求
-严格JSON格式，不要任何多余文字。
+严格 JSON 格式，不要任何多余文字。
 
 ## prompt_strategy
 
@@ -28,31 +28,34 @@
 {analysis_text}
 
 ### 分析要求
-1. 从产品优势+定价空间+市场机会的交叉点，提炼差异化定位
-2. 制定3~5项行动方案，按P0/P1/P2/P3排序
+1. 从产品优势 + 定价空间 + 市场机会的交叉点，提炼差异化定位
+2. 制定 3~5 项行动方案，按 P0/P1/P2/P3 排序
 3. 每项行动包含：具体行动、时间线、预期效果
 4. 预判竞品可能的应对措施和风险
+5. 价格、销量、续航、算力、市场份额、转化率等具体数值，只能复用输入证据中的原文数字；无法确认就不要输出数值
+6. 禁止使用“首个”“唯一”“第一”“全面领先”“全系标配”等排他性表达，除非输入证据里有明确官方支撑
+7. 差异化结论必须能被输入中的原始证据快照支撑；如果支撑不足，请改写成“待验证”或非排他表述
 
 ### 输出格式
 ```json
 {{
-    "overall_positioning": "整体战略定位（2-3句话）",
-    "differentiation_strategy": {{
-        "core_differentiator": "核心差异化点",
-        "supporting_points": ["支撑点1", "支撑点2", "支撑点3"]
-    }},
-    "action_plan": [
-        {{
-            "priority": "P0/P1/P2/P3",
-            "action": "具体行动描述",
-            "timeline": "时间线",
-            "expected_impact": "预期效果"
-        }}
-    ],
-    "risk_assessment": "风险评估（3-5句话）",
-    "product_analysis_summary": "产品维度的核心洞察（1-2句话）",
-    "pricing_analysis_summary": "定价维度的核心洞察（1-2句话）",
-    "market_analysis_summary": "市场维度的核心洞察（1-2句话）",
-    "summary": "综合策略建议摘要（3-5句话）"
+  "overall_positioning": "整体战略定位，2-3 句话",
+  "differentiation_strategy": {{
+    "core_differentiator": "核心差异化点",
+    "supporting_points": ["支撑点1", "支撑点2", "支撑点3"]
+  }},
+  "action_plan": [
+    {{
+      "priority": "P0/P1/P2/P3",
+      "action": "具体行动描述",
+      "timeline": "时间线",
+      "expected_impact": "预期效果"
+    }}
+  ],
+  "risk_assessment": "风险评估，3-5 句话",
+  "product_analysis_summary": "产品维度的核心洞察（1-2 句话）",
+  "pricing_analysis_summary": "定价维度的核心洞察（1-2 句话）",
+  "market_analysis_summary": "市场维度的核心洞察（1-2 句话）",
+  "summary": "综合策略建议摘要（3-5 句话）"
 }}
 ```

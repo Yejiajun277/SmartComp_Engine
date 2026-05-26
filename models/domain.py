@@ -113,6 +113,11 @@ class CompetitorData:
     pricing_info: str = ""
     market_share: str = ""
     user_reviews: str = ""
+    product_strengths: str = ""
+    channel_strengths: str = ""
+    reputation_strengths: str = ""
+    product_weaknesses: str = ""
+    reputation_weaknesses: str = ""
     strengths: str = ""
     weaknesses: str = ""
     channels: str = ""
@@ -133,6 +138,7 @@ class FeatureComparison:
     feature: str
     values: dict[str, str] = field(default_factory=dict)
     citations: list[str] = field(default_factory=list)
+    competitor_citations: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
