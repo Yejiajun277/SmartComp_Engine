@@ -15,8 +15,12 @@ from agents.strategy_agent import StrategyAgent
 from core.run_store import ensure_run_dirs, new_run_id, write_artifact, write_report_files, write_trace
 from models.domain import (
     CompetitorList,
+    CompetitorData,
+    EvidenceBundle,
     MessageEnvelope,
     QAIssue,
+    ResearchCoverage,
+    ResearchEvidence,
     StrategyReport,
     now_iso,
     to_dict,
@@ -163,6 +167,7 @@ class WorkflowNodes:
             qa_issues=state.get("qa_issues", []),
             retry_count=state.get("retry_count", 0),
         )
+        tasks = self._filter_retry_tasks(tasks, state.get("qa_issues", []), state.get("retry_count", 0))
         write_artifact(state["run_id"], "research_tasks", to_dict(tasks))
         self._persist_trace(
             run_id=state["run_id"],
@@ -190,6 +195,8 @@ class WorkflowNodes:
             tasks=tasks,
             retry_count=state.get("retry_count", 0),
         )
+        if state.get("retry_count", 0) > 0:
+            result = self._merge_collection_result(state, result)
         write_artifact(state["run_id"], "competitors_data", to_dict(result["competitors_data"]))
         write_artifact(state["run_id"], "evidence_bundles", to_dict(result["evidence_bundles"]))
         write_artifact(state["run_id"], "research_coverage", to_dict(result["research_coverage"]))
@@ -255,15 +262,18 @@ class WorkflowNodes:
             qa_round=state.get("qa_round", 0),
             product_name=self._resolve_product_name(state),
             competitor_count=len(state.get("competitor_list").competitors) if state.get("competitor_list") else 0,
+            competitor_names=self._competitor_names(state),
+            evidence_bundles=state.get("evidence_bundles", {}),
         )
         issues = result["issues"]
         decision = result["next_action"]
         qa_round = state.get("qa_round", 0)
         retry_count = state.get("retry_count", 0)
+        current_round = qa_round + 1
+        write_artifact(state["run_id"], f"qa_issues_round_{current_round}", to_dict(issues))
         if decision in {"redo_collection", "redo_analysis"}:
             qa_round += 1
             retry_count += 1
-        write_artifact(state["run_id"], f"qa_issues_round_{qa_round}", to_dict(issues))
         self._persist_trace(
             run_id=state["run_id"],
             node="quality_gate",
@@ -275,7 +285,7 @@ class WorkflowNodes:
             ),
             output_summary=f"issues={len(issues)}",
             decision=decision,
-            attempt=qa_round + 1,
+            attempt=current_round,
             llm_logs=self.agents.quality_agent.llm_logs,
         )
         return {
@@ -307,18 +317,21 @@ class WorkflowNodes:
                 state.get("evidence_bundles", {}),
                 state.get("competitors_data", {}),
             )
+            payload["product_analysis"] = self._sanitize_analysis("product", payload["product_analysis"], state)
         if "PricingAgent" in targets:
             payload["pricing_analysis"] = await self.agents.pricing_agent.run(
                 self._resolve_product_name(state),
                 state.get("evidence_bundles", {}),
                 state.get("competitors_data", {}),
             )
+            payload["pricing_analysis"] = self._sanitize_analysis("pricing", payload["pricing_analysis"], state)
         if "MarketAgent" in targets:
             payload["market_analysis"] = await self.agents.market_agent.run(
                 self._resolve_product_name(state),
                 state.get("evidence_bundles", {}),
                 state.get("competitors_data", {}),
             )
+            payload["market_analysis"] = self._sanitize_analysis("market", payload["market_analysis"], state)
         self._persist_trace(
             run_id=state["run_id"],
             node="redo_analysis",
@@ -358,7 +371,7 @@ class WorkflowNodes:
         report.run_id = state["run_id"]
         report.qa_issues = [
             *state.get("qa_issues", []),
-            *self._strategy_quality_issues(report),
+            *self._strategy_quality_issues(report, state.get("evidence_bundles", {})),
         ]
         if state.get("research_coverage") is not None:
             report.coverage_gaps = state["research_coverage"].coverage_gaps
@@ -383,7 +396,10 @@ class WorkflowNodes:
         }
 
     @staticmethod
-    def _strategy_quality_issues(report: StrategyReport) -> list[QAIssue]:
+    def _strategy_quality_issues(
+        report: StrategyReport,
+        evidence_bundles: dict[str, list[EvidenceBundle]] | None = None,
+    ) -> list[QAIssue]:
         issues: list[QAIssue] = []
         if len(report.action_plan) < 3:
             issues.append(
@@ -407,6 +423,65 @@ class WorkflowNodes:
                     reason="策略建议仍存在模板化表达。",
                     required_fix="用具体产品、竞品、功能、价格或市场机会替换泛化表达。",
                     related_ids=["strategy:summary"],
+                )
+            )
+        known_citations = {
+            citation.id
+            for bundles in (evidence_bundles or {}).values()
+            for bundle in bundles
+            for citation in bundle.citations
+            if citation.id
+        }
+        for index, item in enumerate(report.action_plan, start=1):
+            if not item.citations:
+                issues.append(
+                    QAIssue(
+                        issue_type="missing_citation",
+                        severity="high",
+                        target_agent="StrategyAgent",
+                        reason=f"第 {index} 条策略行动未挂 citation。",
+                        required_fix="每条策略行动必须挂至少 1 个可回溯 citation。",
+                        related_ids=[f"strategy:action_plan:{index}"],
+                    )
+                )
+            else:
+                if known_citations and any(citation_id not in known_citations for citation_id in item.citations):
+                    issues.append(
+                        QAIssue(
+                            issue_type="unknown_citation",
+                            severity="high",
+                            target_agent="StrategyAgent",
+                            reason=f"第 {index} 条策略行动包含无法回溯的 citation。",
+                            required_fix="删除无效 citation，或重新采集对应证据。",
+                            related_ids=[f"strategy:action_plan:{index}"],
+                        )
+                    )
+                citation_competitors = {
+                    citation_id.split(":", 1)[0]
+                    for citation_id in item.citations
+                    if ":" in citation_id
+                }
+                if len(citation_competitors) == 1 and report.competitor_count > 1:
+                    issues.append(
+                        QAIssue(
+                            issue_type="narrow_strategy_evidence",
+                            severity="medium",
+                            target_agent="StrategyAgent",
+                            reason=f"第 {index} 条策略行动只引用了单一竞品证据，代表性不足。",
+                            required_fix="跨竞品策略行动应尽量覆盖多个竞品或明确说明该建议只来自单一竞品对照。",
+                            related_ids=[f"strategy:action_plan:{index}"],
+                        )
+                    )
+        citation_sets = [tuple(item.citations) for item in report.action_plan if item.citations]
+        if len(citation_sets) >= 3 and len(set(citation_sets)) == 1:
+            issues.append(
+                QAIssue(
+                    issue_type="citation_mismatch",
+                    severity="medium",
+                    target_agent="StrategyAgent",
+                    reason="多条策略行动复用了完全相同的 citation，存在引用泛化风险。",
+                    required_fix="为每条策略行动挂载与其主题相关的直接证据。",
+                    related_ids=["strategy:action_plan"],
                 )
             )
         return issues
@@ -499,6 +574,7 @@ class WorkflowNodes:
             state.get("evidence_bundles", {}),
             state.get("competitors_data", {}),
         )
+        analysis = self._sanitize_analysis(dimension, analysis, state)
         write_artifact(state["run_id"], dimension + "_analysis", to_dict(analysis))
         self._persist_trace(
             run_id=state["run_id"],
@@ -522,6 +598,172 @@ class WorkflowNodes:
         if competitor_list is not None:
             return competitor_list.product_name
         return state["product_description"]
+
+    @staticmethod
+    def _competitor_names(state: AnalysisState) -> list[str]:
+        competitor_list = state.get("competitor_list")
+        if not competitor_list:
+            return []
+        return [item.name for item in competitor_list.competitors]
+
+    @staticmethod
+    def _filter_retry_tasks(
+        tasks: list[Any],
+        issues: list[QAIssue],
+        retry_count: int,
+    ) -> list[Any]:
+        if retry_count <= 0:
+            return tasks
+        wanted = {
+            related
+            for issue in issues
+            if issue.target_agent == "CollectionAgent"
+            for related in issue.related_ids
+            if ":" in related
+        }
+        if not wanted:
+            return tasks
+        filtered = [task for task in tasks if f"{task.competitor}:{task.topic}" in wanted]
+        return filtered or tasks
+
+    def _merge_collection_result(self, state: AnalysisState, result: dict[str, Any]) -> dict[str, Any]:
+        merged_bundles: dict[str, list[EvidenceBundle]] = {
+            competitor: list(bundles)
+            for competitor, bundles in state.get("evidence_bundles", {}).items()
+        }
+        merged_evidence: dict[str, list[ResearchEvidence]] = {
+            competitor: list(items)
+            for competitor, items in state.get("research_evidence", {}).items()
+        }
+
+        for competitor, bundles in result["evidence_bundles"].items():
+            topics = {bundle.topic for bundle in bundles}
+            kept = [bundle for bundle in merged_bundles.get(competitor, []) if bundle.topic not in topics]
+            merged_bundles[competitor] = kept + list(bundles)
+
+        for competitor, evidence_items in result["research_evidence"].items():
+            topics = {item.topic for item in evidence_items}
+            kept = [item for item in merged_evidence.get(competitor, []) if item.topic not in topics]
+            merged_evidence[competitor] = kept + list(evidence_items)
+
+        competitors_data: dict[str, CompetitorData] = {
+            competitor: self.agents.collection_agent._build_competitor_data(
+                competitor,
+                bundles,
+                merged_evidence.get(competitor, []),
+            )
+            for competitor, bundles in merged_bundles.items()
+        }
+
+        coverage = self._merge_coverage(
+            state.get("research_coverage"),
+            result["research_coverage"],
+        )
+        return {
+            "competitors_data": competitors_data,
+            "research_evidence": merged_evidence,
+            "research_coverage": coverage,
+            "evidence_bundles": merged_bundles,
+        }
+
+    @staticmethod
+    def _merge_coverage(
+        old_coverage: ResearchCoverage | None,
+        new_coverage: ResearchCoverage,
+    ) -> ResearchCoverage:
+        if old_coverage is None:
+            return new_coverage
+        touched = {
+            (item["competitor"], item["topic"])
+            for item in new_coverage.failed_tasks
+        }
+        for competitor, topics in new_coverage.completed_topics.items():
+            for topic in topics:
+                touched.add((competitor, topic))
+
+        old_coverage.failed_tasks = [
+            item
+            for item in old_coverage.failed_tasks
+            if (item["competitor"], item["topic"]) not in touched
+        ] + list(new_coverage.failed_tasks)
+        old_coverage.coverage_gaps = [
+            gap
+            for gap in old_coverage.coverage_gaps
+            if (gap.competitor, gap.topic) not in touched
+        ] + list(new_coverage.coverage_gaps)
+        for competitor, topics in new_coverage.completed_topics.items():
+            old_topics = old_coverage.completed_topics.setdefault(competitor, [])
+            for topic in topics:
+                if topic not in old_topics:
+                    old_topics.append(topic)
+        return old_coverage
+
+    def _sanitize_analysis(self, dimension: str, analysis: Any, state: AnalysisState) -> Any:
+        allowed = set(self._competitor_names(state))
+        product_name = self._resolve_product_name(state)
+        if not allowed:
+            return analysis
+
+        if dimension == "product":
+            allowed_matrix_keys = allowed | {product_name}
+            for feature in analysis.feature_matrix:
+                feature.values = {
+                    name: value
+                    for name, value in feature.values.items()
+                    if name in allowed_matrix_keys
+                }
+                feature.competitor_citations = {
+                    name: ids
+                    for name, ids in feature.competitor_citations.items()
+                    if name in allowed
+                }
+                feature.citations = self._dedupe_citation_ids(
+                    cid
+                    for ids in feature.competitor_citations.values()
+                    for cid in ids
+                )[:4]
+            analysis.competitive_advantages = [
+                item for item in analysis.competitive_advantages if item.competitor in allowed
+            ]
+            for node in analysis.feature_tree:
+                node.supported_competitors = [
+                    name for name in node.supported_competitors if name in allowed_matrix_keys
+                ]
+            return analysis
+
+        if dimension == "pricing":
+            analysis.pricing_comparison = [
+                item for item in analysis.pricing_comparison if item.competitor in allowed
+            ]
+            analysis.pricing_models = [
+                item for item in analysis.pricing_models if item.competitor in allowed
+            ]
+            analysis.value_ranking = [
+                name for name in analysis.value_ranking if name in allowed
+            ]
+            return analysis
+
+        if dimension == "market":
+            analysis.market_share_data = [
+                item for item in analysis.market_share_data if item.competitor in allowed
+            ]
+            analysis.user_reputation = {
+                name: value
+                for name, value in analysis.user_reputation.items()
+                if name in allowed
+            }
+            analysis.user_personas = [
+                item
+                for item in analysis.user_personas
+                if any(item.name.startswith(name) for name in allowed)
+            ]
+            return analysis
+
+        return analysis
+
+    @staticmethod
+    def _dedupe_citation_ids(ids: Any) -> list[str]:
+        return list(dict.fromkeys(item for item in ids if item))
 
     @staticmethod
     def _persist_trace(

@@ -6,7 +6,30 @@
 
 ## 安装
 
-推荐直接使用项目自带虚拟环境：
+### Conda 开发环境
+
+推荐使用仓库内的 `environment.yml` 创建开发环境：
+
+```powershell
+conda env create -f environment.yml
+conda activate smartcomp-engine-dev
+```
+
+后续依赖变更后同步环境：
+
+```powershell
+conda env update -f environment.yml --prune
+```
+
+验证环境：
+
+```powershell
+python -c "import agent; print('ok')"
+```
+
+### venv 环境
+
+如果使用本地 venv，请先自行创建 `.venv`，再安装依赖：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt

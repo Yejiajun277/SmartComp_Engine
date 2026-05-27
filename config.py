@@ -46,6 +46,7 @@ DOUBAO_MODEL = os.environ.get(
 SEARCH_RECENCY = os.environ.get("SEARCH_RECENCY", "month")
 SEARCH_DELAY_SECONDS = float(os.environ.get("SEARCH_DELAY_SECONDS", "2.0"))
 SEARCH_MAX_OUTPUT_TOKENS = int(os.environ.get("SEARCH_MAX_OUTPUT_TOKENS", "2048"))
+COLLECTION_MAX_CONCURRENCY = int(os.environ.get("COLLECTION_MAX_CONCURRENCY", "4"))
 
 
 # ========================

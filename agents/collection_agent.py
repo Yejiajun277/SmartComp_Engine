@@ -5,6 +5,7 @@ agents/collection_agent.py - 结构化证据采集 Agent
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections import defaultdict
@@ -85,9 +86,20 @@ class CollectionAgent(BaseAgent):
         grouped_bundles: dict[str, list[EvidenceBundle]] = defaultdict(list)
         grouped_evidence: dict[str, list[ResearchEvidence]] = defaultdict(list)
         coverage = ResearchCoverage(required_topics=sorted({task.topic for task in tasks}))
+        concurrency = max(1, config.COLLECTION_MAX_CONCURRENCY)
+        semaphore = asyncio.Semaphore(concurrency)
 
-        for task in tasks:
-            evidence, bundle = self._collect_task(product_description, task, retry_count)
+        async def collect(task: ResearchTask) -> tuple[ResearchTask, ResearchEvidence, EvidenceBundle]:
+            async with semaphore:
+                evidence, bundle = await asyncio.to_thread(
+                    self._collect_task,
+                    product_description,
+                    task,
+                    retry_count,
+                )
+                return task, evidence, bundle
+
+        for task, evidence, bundle in await asyncio.gather(*(collect(task) for task in tasks)):
             grouped_evidence[task.competitor].append(evidence)
             grouped_bundles[task.competitor].append(bundle)
             if bundle.coverage_status == "complete":

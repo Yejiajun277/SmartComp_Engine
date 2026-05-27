@@ -144,11 +144,11 @@ class ProductAgent(BaseAgent):
             str(item).strip() for item in result.get("differentiation_points", []) if str(item).strip()
         ][:5]
         summary = str(result.get("summary", "")).strip()
-        default_citations = [item.id for item in citations[:3]]
+        topic_citations = self._topic_citation_ids(evidence_bundles, "product_features", limit=6)
         conclusions = self._build_conclusions(
             summary=summary,
             points=differentiation_points,
-            citations=default_citations,
+            citations=topic_citations,
         )
         return ProductAnalysis(
             feature_matrix=feature_matrix,
@@ -243,14 +243,14 @@ class ProductAgent(BaseAgent):
             else "把自动化与集成能力做成一体化方案。",
             "围绕用户反馈中反复出现的复杂、上手慢、成本高等问题做减法。",
         ]
-        default_citations = [item.id for item in citations[:3]]
+        topic_citations = self._topic_citation_ids(evidence_bundles, "product_features", limit=6)
         summary = self._build_summary(feature_matrix, advantages, points)
         return ProductAnalysis(
             feature_matrix=feature_matrix,
             competitive_advantages=advantages,
             differentiation_points=points,
             feature_tree=feature_tree,
-            conclusions=self._build_conclusions(summary, points, default_citations),
+            conclusions=self._build_conclusions(summary, points, topic_citations),
             citations=citations,
             message=MessageEnvelope(
                 task_id=f"{product_name}:product",
@@ -378,7 +378,8 @@ class ProductAgent(BaseAgent):
         for bundles in evidence_bundles.values():
             for bundle in bundles:
                 for citation in bundle.citations:
-                    seen.setdefault(citation.id, citation)
+                    if citation.source_quality != "low_quality":
+                        seen.setdefault(citation.id, citation)
         return sorted(
             seen.values(),
             key=lambda item: (priority.get(item.source_quality, 0), item.confidence, item.title),
@@ -391,12 +392,21 @@ class ProductAgent(BaseAgent):
         topic: str,
         limit: int = 3,
     ) -> list[str]:
-        ids = [
-            citation.id
+        grouped = [
+            [
+                citation.id
+                for bundle in bundles
+                if bundle.topic == topic
+                for citation in bundle.citations
+                if citation.source_quality != "low_quality"
+            ]
             for bundles in evidence_bundles.values()
-            for bundle in bundles
-            if bundle.topic == topic
-            for citation in bundle.citations
+        ]
+        ids = [
+            citation_id
+            for index in range(max((len(items) for items in grouped), default=0))
+            for items in grouped
+            for citation_id in items[index:index + 1]
         ]
         return ProductAgent._dedupe(ids)[:limit]
 
@@ -412,6 +422,7 @@ class ProductAgent(BaseAgent):
             for bundle in evidence_bundles.get(competitor, [])
             if topic is None or bundle.topic == topic
             for citation in bundle.citations
+            if citation.source_quality != "low_quality"
         ]
         return ProductAgent._dedupe(ids)[:limit]
 

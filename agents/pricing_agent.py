@@ -64,7 +64,7 @@ class PricingAgent(BaseAgent):
     ) -> PricingAnalysis:
         pricing_items: list[PricingItem] = []
         pricing_models: list[PricingModel] = []
-        default_citations = [item.id for item in citations[:3]]
+        topic_citations = self._topic_citation_ids(evidence_bundles, "pricing_info", 6)
 
         for item in result.get("pricing_comparison", []):
             competitor = str(item.get("competitor", "")).strip()
@@ -90,7 +90,7 @@ class PricingAgent(BaseAgent):
                     billing_unit=billing_unit,
                     pricing_signal=pricing_signal,
                     pricing_risk=pricing_risk,
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
                 )
             )
             pricing_models.append(
@@ -104,14 +104,14 @@ class PricingAgent(BaseAgent):
                     upgrade_trigger=upgrade_trigger,
                     pricing_signal=pricing_signal,
                     pricing_risk=pricing_risk,
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
                 )
             )
 
         strategy = str(result.get("pricing_strategy_analysis", "")).strip()
         summary = str(result.get("summary", "")).strip()
         value_ranking = [str(item).strip() for item in result.get("value_ranking", []) if str(item).strip()]
-        conclusions = self._build_conclusions(strategy, summary, default_citations)
+        conclusions = self._build_conclusions(strategy, summary, topic_citations)
         return PricingAnalysis(
             pricing_comparison=pricing_items,
             pricing_strategy_analysis=strategy,
@@ -184,13 +184,13 @@ class PricingAgent(BaseAgent):
             "真正影响采购判断的是免费入口、升级触发点、计费单位和增购边界是否清楚。"
         )
         summary = self._build_summary(items, dominant)
-        default_citations = [item.id for item in citations[:3]]
+        topic_citations = self._topic_citation_ids(evidence_bundles, "pricing_info", 6)
         return PricingAnalysis(
             pricing_comparison=items,
             pricing_strategy_analysis=strategy,
             value_ranking=[item.competitor for item in items],
             pricing_models=models,
-            conclusions=self._build_conclusions(strategy, summary, default_citations),
+            conclusions=self._build_conclusions(strategy, summary, topic_citations),
             citations=citations,
             message=MessageEnvelope(
                 task_id=f"{product_name}:pricing",
@@ -355,12 +355,37 @@ class PricingAgent(BaseAgent):
         for bundles in evidence_bundles.values():
             for bundle in bundles:
                 for citation in bundle.citations:
-                    seen.setdefault(citation.id, citation)
+                    if citation.source_quality != "low_quality":
+                        seen.setdefault(citation.id, citation)
         return sorted(
             seen.values(),
             key=lambda item: (priority.get(item.source_quality, 0), item.confidence, item.title),
             reverse=True,
         )
+
+    @staticmethod
+    def _topic_citation_ids(
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        topic: str,
+        limit: int = 3,
+    ) -> list[str]:
+        grouped = [
+            [
+                citation.id
+                for bundle in bundles
+                if bundle.topic == topic
+                for citation in bundle.citations
+                if citation.source_quality != "low_quality"
+            ]
+            for bundles in evidence_bundles.values()
+        ]
+        ids = [
+            citation_id
+            for index in range(max((len(items) for items in grouped), default=0))
+            for items in grouped
+            for citation_id in items[index:index + 1]
+        ]
+        return list(dict.fromkeys(ids))[:limit]
 
     @staticmethod
     def _competitor_citation_ids(
@@ -374,5 +399,6 @@ class PricingAgent(BaseAgent):
             for bundle in evidence_bundles.get(competitor, [])
             if topic is None or bundle.topic == topic
             for citation in bundle.citations
+            if citation.source_quality != "low_quality"
         ]
         return list(dict.fromkeys(ids))[:limit]

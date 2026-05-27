@@ -66,7 +66,11 @@ class MarketAgent(BaseAgent):
         competitors_data: dict[str, CompetitorData],
         citations: list[Citation],
     ) -> MarketAnalysis:
-        default_citations = [item.id for item in citations[:3]]
+        topic_citations = self._topic_citation_ids(
+            evidence_bundles,
+            {"market_share", "channels", "user_reviews"},
+            8,
+        )
         share_items: list[MarketShareItem] = []
         for item in result.get("market_share_data", []):
             competitor = str(item.get("competitor", "")).strip()
@@ -83,7 +87,7 @@ class MarketAgent(BaseAgent):
                     market_position=self._market_position(share_estimate),
                     growth_signal=self._growth_signal(share_estimate, trend),
                     channel_motion=self._channel_motion(competitors_data.get(competitor)),
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
                 )
             )
 
@@ -100,14 +104,14 @@ class MarketAgent(BaseAgent):
                     keywords=keywords[:8],
                     highlights=[value for value in keywords if not self._is_risk_word(value)][:3],
                     risks=[value for value in keywords if self._is_risk_word(value)][:3],
-                    citations=citation_ids or default_citations,
+                    citations=citation_ids,
                 )
 
-        personas = self._build_personas(competitors_data, evidence_bundles, default_citations)
+        personas = self._build_personas(competitors_data, evidence_bundles, [])
         growth_trends = str(result.get("growth_trends", "")).strip()
         channel_analysis = str(result.get("channel_analysis", "")).strip()
         summary = str(result.get("summary", "")).strip()
-        conclusions = self._build_conclusions(growth_trends, channel_analysis, summary, default_citations)
+        conclusions = self._build_conclusions(growth_trends, channel_analysis, summary, topic_citations)
         return MarketAnalysis(
             market_share_data=share_items,
             growth_trends=growth_trends,
@@ -159,7 +163,7 @@ class MarketAgent(BaseAgent):
                 citations=review_citations,
             )
 
-        personas = self._build_personas(competitors_data, evidence_bundles, [item.id for item in citations[:3]])
+        personas = self._build_personas(competitors_data, evidence_bundles, [])
         growth = self._build_growth_trends(share_items)
         channel = self._build_channel_analysis(competitors_data)
         summary = (
@@ -175,7 +179,12 @@ class MarketAgent(BaseAgent):
             user_reputation=reputation,
             channel_analysis=channel,
             user_personas=personas,
-            conclusions=self._build_conclusions(growth, channel, summary, [item.id for item in citations[:3]]),
+            conclusions=self._build_conclusions(
+                growth,
+                channel,
+                summary,
+                self._topic_citation_ids(evidence_bundles, {"market_share", "channels", "user_reviews"}, 8),
+            ),
             citations=citations,
             message=MessageEnvelope(
                 task_id=f"{product_name}:market",
@@ -361,12 +370,37 @@ class MarketAgent(BaseAgent):
         for bundles in evidence_bundles.values():
             for bundle in bundles:
                 for citation in bundle.citations:
-                    seen.setdefault(citation.id, citation)
+                    if citation.source_quality != "low_quality":
+                        seen.setdefault(citation.id, citation)
         return sorted(
             seen.values(),
             key=lambda item: (priority.get(item.source_quality, 0), item.confidence, item.title),
             reverse=True,
         )
+
+    @staticmethod
+    def _topic_citation_ids(
+        evidence_bundles: dict[str, list[EvidenceBundle]],
+        topics: set[str],
+        limit: int = 3,
+    ) -> list[str]:
+        grouped = [
+            [
+                citation.id
+                for bundle in bundles
+                if bundle.topic in topics
+                for citation in bundle.citations
+                if citation.source_quality != "low_quality"
+            ]
+            for bundles in evidence_bundles.values()
+        ]
+        ids = [
+            citation_id
+            for index in range(max((len(items) for items in grouped), default=0))
+            for items in grouped
+            for citation_id in items[index:index + 1]
+        ]
+        return list(dict.fromkeys(ids))[:limit]
 
     @staticmethod
     def _competitor_citation_ids(
@@ -380,5 +414,6 @@ class MarketAgent(BaseAgent):
             for bundle in evidence_bundles.get(competitor, [])
             if topic is None or bundle.topic == topic
             for citation in bundle.citations
+            if citation.source_quality != "low_quality"
         ]
         return list(dict.fromkeys(ids))[:limit]

@@ -2,7 +2,16 @@
   "default": {
     "official": [
       "gov.cn",
-      "edu.cn"
+      "edu.cn",
+      "feishu.cn",
+      "larksuite.com",
+      "dingtalk.com",
+      "ding.cn",
+      "wecom.tencent.com",
+      "work.weixin.qq.com",
+      "worktile.com",
+      "wps.cn",
+      "kingsoft.com"
     ],
     "media": [
       "36kr.com",
@@ -34,7 +43,13 @@
       "zhidemai.com",
       "smzdm.com",
       "chinabgao.com",
-      "sina.cn"
+      "sina.cn",
+      "docin.com",
+      "book118.com",
+      "kaolawenku.com",
+      "gamws.com",
+      "xiayx.com",
+      "szhzxw.cn"
     ]
   }
 }
