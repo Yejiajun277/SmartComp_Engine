@@ -190,3 +190,26 @@ class StrategyReport:
     summary: str = ""
     raw_llm_logs: list[dict] = field(default_factory=list)
     citation_index: CitationIndex = field(default_factory=CitationIndex)  # 全局引用索引
+
+
+@dataclass
+class SubDimension:
+    """单个子维度"""
+    name: str                               # 维度名称（2-6字）
+    description: str = ""                   # 维度说明
+
+
+@dataclass
+class ProductCategory:
+    """产品品类"""
+    level1: str = ""                        # 一级品类（如：消费电子）
+    level2: str = ""                        # 二级品类（如：智能手机）
+
+
+@dataclass
+class DimensionConfig:
+    """动态维度配置 — DimensionAgent 输出"""
+    product_category: ProductCategory = field(default_factory=ProductCategory)
+    product_sub_dimensions: list[SubDimension] = field(default_factory=list)
+    pricing_sub_dimensions: list[SubDimension] = field(default_factory=list)
+    reasoning: str = ""                     # 品类推断理由

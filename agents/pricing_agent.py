@@ -20,14 +20,22 @@ class PricingAgent(BaseAgent):
 
     def __init__(self):
         prompts = load_prompts("pricing_agent")
+        self._system_prompt_template = prompts["system_prompt"]
+        self._prompt_analyze = prompts["prompt_analyze"]
         super().__init__(
             agent_id="PricingAgent",
-            system_prompt=prompts["system_prompt"],
+            system_prompt=self._system_prompt_template,
         )
-        self._prompt_analyze = prompts["prompt_analyze"]
+
+    def set_sub_dimensions(self, sub_dimensions_text: str):
+        """注入动态子维度（由 DimensionAgent 生成）"""
+        self.system_prompt = self._system_prompt_template.format(
+            sub_dimensions=sub_dimensions_text
+        )
 
     async def run(self, product_name: str,
-                  competitors_data: dict[str, CompetitorData]) -> PricingAnalysis:
+                  competitors_data: dict[str, CompetitorData],
+                  sub_dimensions: str = "") -> PricingAnalysis:
         """
         主运行逻辑：全量数据分析定价对比
 
@@ -39,6 +47,9 @@ class PricingAgent(BaseAgent):
             PricingAnalysis: 定价分析结果
         """
         self._log("💰 开始定价分析...")
+
+        if sub_dimensions:
+            self.set_sub_dimensions(sub_dimensions)
 
         competitors_text = self._build_competitors_text(product_name, competitors_data)
 

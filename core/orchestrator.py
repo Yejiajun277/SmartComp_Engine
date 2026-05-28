@@ -20,6 +20,7 @@ from models.domain import (
 )
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
+from agents.dimension_agent import DimensionAgent
 from agents.product_agent import ProductAgent
 from agents.pricing_agent import PricingAgent
 from agents.market_agent import MarketAgent
@@ -59,6 +60,7 @@ class Orchestrator:
 
     def __init__(self):
         self.discovery_agent = DiscoveryAgent()
+        self.dimension_agent = DimensionAgent()
         self.collection_agent = CollectionAgent()
         self.product_agent = ProductAgent()
         self.pricing_agent = PricingAgent()
@@ -119,6 +121,25 @@ class Orchestrator:
         print(f"\n  ⏱️ 采集耗时: {self.timings['collection']:.2f}s")
         print(f"  📊 采集完成: {len(competitors_data)}个竞品")
 
+        # ── Phase 2.5: 维度生成 ──
+        phase2_5_start = time.time()
+        dim_config = await self.dimension_agent.run(
+            product_description, competitor_list
+        )
+        self.timings["dimension"] = time.time() - phase2_5_start
+
+        product_sub_dims_text = self._format_sub_dimensions(
+            dim_config.product_sub_dimensions
+        )
+        pricing_sub_dims_text = self._format_sub_dimensions(
+            dim_config.pricing_sub_dimensions
+        )
+
+        print(f"\n  ⏱️ 维度生成耗时: {self.timings['dimension']:.2f}s")
+        print(f"  📐 品类: {dim_config.product_category.level1}/{dim_config.product_category.level2}")
+        print(f"  📋 产品子维度: {len(dim_config.product_sub_dimensions)}个")
+        print(f"  📋 定价子维度: {len(dim_config.pricing_sub_dimensions)}个")
+
         # ── Phase 3: 三维并行分析（Fan-out）──
         print(f"\n{'█' * 65}")
         print("  ⚡ Phase 3: 三维并行分析 (Fan-out)")
@@ -130,8 +151,10 @@ class Orchestrator:
 
         # 并行执行三个分析Agent
         product_analysis, pricing_analysis, market_analysis = await asyncio.gather(
-            self.product_agent.run(product_name, competitors_data),
-            self.pricing_agent.run(product_name, competitors_data),
+            self.product_agent.run(product_name, competitors_data,
+                                   sub_dimensions=product_sub_dims_text),
+            self.pricing_agent.run(product_name, competitors_data,
+                                   sub_dimensions=pricing_sub_dims_text),
             self.market_agent.run(product_name, competitors_data),
         )
 
@@ -163,6 +186,7 @@ class Orchestrator:
         # 附加LLM调用日志
         report.raw_llm_logs = (
             self.discovery_agent.llm_logs +
+            self.dimension_agent.llm_logs +
             self.collection_agent.llm_logs +
             self.product_agent.llm_logs +
             self.pricing_agent.llm_logs +
@@ -223,6 +247,14 @@ class Orchestrator:
                 val = self._find_feature_value(fm.values, name, product_name)
                 row += f" {val:<12}"
             print(row)
+
+    @staticmethod
+    def _format_sub_dimensions(dims: list) -> str:
+        """将子维度列表格式化为 prompt 注入文本"""
+        lines = []
+        for i, d in enumerate(dims, 1):
+            lines.append(f"{i}. **{d.name}**：{d.description}")
+        return "\n".join(lines)
 
     @staticmethod
     def _find_feature_value(values_dict: dict, target_name: str, product_name: str) -> str:
