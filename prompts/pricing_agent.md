@@ -32,6 +32,7 @@
 2. 分析各竞品的定价策略差异
 3. 评估各竞品性价比，给出排名
 4. 判断整体市场定价趋势
+5. **为每条结论标注数据来源编号**：使用"数据来源"部分提供的编号，在 pricing_comparison 每项中附上 "citations" 数组。
 
 ### 输出格式
 ```json
@@ -41,7 +42,8 @@
             "competitor": "竞品名",
             "free_tier": "免费版包含什么",
             "paid_tier": "付费版价格和内容",
-            "pricing_model": "定价模型描述"
+            "pricing_model": "定价模型描述",
+            "citations": ["竞品名:q0:r0"]
         }}
     ],
     "pricing_strategy_analysis": "整体定价策略分析（3-5句话）",

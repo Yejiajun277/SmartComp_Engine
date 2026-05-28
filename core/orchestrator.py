@@ -154,6 +154,7 @@ class Orchestrator:
             product_analysis,
             pricing_analysis,
             market_analysis,
+            competitors_data=competitors_data,
         )
         self.timings["strategy"] = time.time() - phase4_start
 
@@ -180,6 +181,8 @@ class Orchestrator:
         print(f"\n{'═' * 65}")
         print(f"  🏁 分析完成 | 总耗时: {self.timings['total']:.2f}s")
         print(f"  🎯 行动方案: {len(report.action_plan)}项")
+        cite_count = len(report.citation_index.citations) if report.citation_index else 0
+        print(f"  📚 引用来源: {cite_count}条")
         print(f"{'═' * 65}")
 
         # 打印格式化报告

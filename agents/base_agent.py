@@ -8,6 +8,8 @@ agents/base_agent.py — Agent基类
 from abc import ABC, abstractmethod
 from core.llm_client import llm_call, parse_llm_json
 import config
+import json
+import re
 
 
 class BaseAgent(ABC):
@@ -65,6 +67,32 @@ class BaseAgent(ABC):
             else:
                 self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
         return {}
+
+    @staticmethod
+    def build_citations_text(citations: list) -> str:
+        """将引用列表格式化为 LLM 可读的来源编号文本"""
+        if not citations:
+            return ""
+        lines = []
+        for c in citations:
+            line = f"  [{c.id}] {c.title}"
+            if c.site_name:
+                line += f" ({c.site_name})"
+            if c.url:
+                line += f" — {c.url}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    @staticmethod
+    def extract_citation_ids(data: dict) -> list[str]:
+        """从 LLM 输出的 dict 中提取所有引用 ID"""
+        ids = list(data.get("citations", []))
+        if isinstance(ids, str):
+            ids = [ids]
+        # 也从文本中用正则提取 [xxx:qN:rN] 格式
+        text = json.dumps(data, ensure_ascii=False)
+        ids.extend(re.findall(r'\[(\w+:q\d+:r\d+)\]', text))
+        return list(set(ids))
 
     @abstractmethod
     async def run(self, *args, **kwargs):

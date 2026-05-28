@@ -59,7 +59,7 @@ class PricingAgent(BaseAgent):
 
     def _build_competitors_text(self, product_name: str,
                                  competitors_data: dict[str, CompetitorData]) -> str:
-        """构建竞品定价数据文本"""
+        """构建竞品定价数据文本，附带引用来源编号"""
         lines = []
         for name, data in competitors_data.items():
             label = name if name != product_name else f"{name}(我方产品)"
@@ -67,17 +67,25 @@ class PricingAgent(BaseAgent):
             lines.append(f"- 定价信息: {data.pricing_info[:300]}")
             lines.append(f"- 优势: {data.strengths[:200]}")
             lines.append(f"- 劣势: {data.weaknesses[:200]}")
+            if data.citations:
+                lines.append(f"- 数据来源:")
+                lines.append(self.build_citations_text(data.citations))
         return "\n".join(lines)
 
     def _parse_pricing_analysis(self, result: dict) -> PricingAnalysis:
-        """解析LLM返回的定价分析结果"""
+        """解析LLM返回的定价分析结果，提取引用 ID"""
+        all_citation_ids = []
+
         pricing_comparison = []
         for pc in result.get("pricing_comparison", []):
+            pc_cites = self.extract_citation_ids(pc)
+            all_citation_ids.extend(pc_cites)
             pricing_comparison.append(PricingItem(
                 competitor=pc.get("competitor", ""),
                 free_tier=pc.get("free_tier", ""),
                 paid_tier=pc.get("paid_tier", ""),
                 pricing_model=pc.get("pricing_model", ""),
+                citations=pc_cites,
             ))
 
         return PricingAnalysis(
@@ -85,6 +93,7 @@ class PricingAgent(BaseAgent):
             pricing_strategy_analysis=result.get("pricing_strategy_analysis", ""),
             value_ranking=result.get("value_ranking", []),
             summary=result.get("summary", ""),
+            citations=list(set(all_citation_ids)),
         )
 
     def _rule_analyze(self, product_name: str,

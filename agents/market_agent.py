@@ -59,7 +59,7 @@ class MarketAgent(BaseAgent):
 
     def _build_competitors_text(self, product_name: str,
                                  competitors_data: dict[str, CompetitorData]) -> str:
-        """构建竞品市场数据文本"""
+        """构建竞品市场数据文本，附带引用来源编号"""
         lines = []
         for name, data in competitors_data.items():
             label = name if name != product_name else f"{name}(我方产品)"
@@ -67,23 +67,34 @@ class MarketAgent(BaseAgent):
             lines.append(f"- 市场份额: {data.market_share[:300]}")
             lines.append(f"- 用户评价: {data.user_reviews[:300]}")
             lines.append(f"- 渠道策略: {data.channels[:200]}")
+            if data.citations:
+                lines.append(f"- 数据来源:")
+                lines.append(self.build_citations_text(data.citations))
         return "\n".join(lines)
 
     def _parse_market_analysis(self, result: dict) -> MarketAnalysis:
-        """解析LLM返回的市场分析结果"""
+        """解析LLM返回的市场分析结果，提取引用 ID"""
+        all_citation_ids = []
+
         market_share_data = []
         for ms in result.get("market_share_data", []):
+            ms_cites = self.extract_citation_ids(ms)
+            all_citation_ids.extend(ms_cites)
             market_share_data.append(MarketShareItem(
                 competitor=ms.get("competitor", ""),
                 share_estimate=ms.get("share_estimate", ""),
                 trend=ms.get("trend", ""),
+                citations=ms_cites,
             ))
 
         user_reputation = {}
         for name, rep in result.get("user_reputation", {}).items():
+            rep_cites = self.extract_citation_ids(rep)
+            all_citation_ids.extend(rep_cites)
             user_reputation[name] = UserReputation(
                 score=rep.get("score", ""),
                 keywords=rep.get("keywords", []),
+                citations=rep_cites,
             )
 
         return MarketAnalysis(
@@ -92,6 +103,7 @@ class MarketAgent(BaseAgent):
             user_reputation=user_reputation,
             channel_analysis=result.get("channel_analysis", ""),
             summary=result.get("summary", ""),
+            citations=list(set(all_citation_ids)),
         )
 
     def _rule_analyze(self, product_name: str,

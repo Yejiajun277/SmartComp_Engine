@@ -32,6 +32,7 @@
 2. 分析各竞品的用户口碑（评分+关键词）
 3. 解读各竞品的渠道策略
 4. 分析整体市场增长趋势
+5. **为每条结论标注数据来源编号**：使用"数据来源"部分提供的编号，在 market_share_data 每项和 user_reputation 每项中附上 "citations" 数组。
 
 ### 输出格式
 ```json
@@ -40,7 +41,8 @@
         {{
             "competitor": "竞品名",
             "share_estimate": "份额估算",
-            "trend": "上升/稳定/下降"
+            "trend": "上升/稳定/下降",
+            "citations": ["竞品名:q0:r0"]
         }}
     ],
     "growth_trends": "整体市场增长趋势分析",

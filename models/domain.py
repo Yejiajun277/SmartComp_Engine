@@ -4,7 +4,43 @@ models/domain.py — 领域模型定义
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+@dataclass
+class Citation:
+    """单条引用来源 — 支持信息溯源"""
+    id: str                                          # 唯一标识: "{competitor}:q{idx}:r{idx}"
+    title: str = ""                                  # 来源标题
+    url: str = ""                                    # 来源 URL
+    snippet: str = ""                                # 原文摘要
+    site_name: str = ""                              # 来源站点名
+    query: str = ""                                  # 触发此引用的搜索查询
+    competitor: str = ""                             # 关联的竞品名
+    collected_at: str = field(default_factory=_now_iso)
+
+
+@dataclass
+class CitationIndex:
+    """全局引用索引 — 支持 ID → Citation 反查"""
+    citations: dict[str, 'Citation'] = field(default_factory=dict)
+
+    def get(self, citation_id: str) -> 'Citation | None':
+        return self.citations.get(citation_id)
+
+    def add(self, citation: 'Citation'):
+        self.citations[citation.id] = citation
+
+    def merge(self, other: 'CitationIndex'):
+        self.citations.update(other.citations)
+
+    def all_citations(self) -> list['Citation']:
+        return list(self.citations.values())
 
 
 class RelevanceLevel(Enum):
@@ -51,6 +87,7 @@ class CompetitorData:
     weaknesses: str = ""                    # 劣势
     channels: str = ""                      # 渠道策略
     search_sources: list[str] = field(default_factory=list)  # 搜索原文
+    citations: list[Citation] = field(default_factory=list)  # 结构化引用来源
 
 
 @dataclass
@@ -58,6 +95,7 @@ class FeatureComparison:
     """功能对比项"""
     feature: str                            # 功能名称
     values: dict[str, str] = field(default_factory=dict)  # 竞品→状态(✅/🔶/❌)
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -66,6 +104,7 @@ class CompetitiveAdvantage:
     competitor: str                         # 竞品名称
     our_advantage: str = ""                 # 我方优势
     their_advantage: str = ""               # 对方优势
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -75,6 +114,7 @@ class ProductAnalysis:
     competitive_advantages: list[CompetitiveAdvantage] = field(default_factory=list)
     differentiation_points: list[str] = field(default_factory=list)
     summary: str = ""
+    citations: list[str] = field(default_factory=list)     # 汇总引用 ID
 
 
 @dataclass
@@ -84,6 +124,7 @@ class PricingItem:
     free_tier: str = ""                     # 免费版内容
     paid_tier: str = ""                     # 付费版内容
     pricing_model: str = ""                 # 定价模型
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -93,6 +134,7 @@ class PricingAnalysis:
     pricing_strategy_analysis: str = ""
     value_ranking: list[str] = field(default_factory=list)
     summary: str = ""
+    citations: list[str] = field(default_factory=list)     # 汇总引用 ID
 
 
 @dataclass
@@ -101,6 +143,7 @@ class MarketShareItem:
     competitor: str                         # 竞品名称
     share_estimate: str = ""                # 份额估算
     trend: str = ""                         # 趋势
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -108,6 +151,7 @@ class UserReputation:
     """用户口碑"""
     score: str = ""                         # 评分
     keywords: list[str] = field(default_factory=list)  # 关键词
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -118,6 +162,7 @@ class MarketAnalysis:
     user_reputation: dict[str, UserReputation] = field(default_factory=dict)
     channel_analysis: str = ""
     summary: str = ""
+    citations: list[str] = field(default_factory=list)     # 汇总引用 ID
 
 
 @dataclass
@@ -127,6 +172,7 @@ class ActionItem:
     action: str                             # 行动描述
     timeline: str = ""                      # 时间线
     expected_impact: str = ""               # 预期效果
+    citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
 @dataclass
@@ -143,3 +189,4 @@ class StrategyReport:
     market_analysis_summary: str = ""       # 市场分析摘要
     summary: str = ""
     raw_llm_logs: list[dict] = field(default_factory=list)
+    citation_index: CitationIndex = field(default_factory=CitationIndex)  # 全局引用索引

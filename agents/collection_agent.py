@@ -9,7 +9,7 @@ LLM调用：1+N次（维度拆解 + 逐竞品汇总）
 """
 
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorList, CompetitorData
+from models.domain import CompetitorList, CompetitorData, Citation
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
 import config
@@ -56,7 +56,7 @@ class CollectionAgent(BaseAgent):
     def _collect_competitor(self, product_name: str,
                             product_description: str,
                             competitor_name: str) -> CompetitorData:
-        """采集单个竞品数据"""
+        """采集单个竞品数据，同时构建结构化引用"""
         # 生成搜索查询
         queries = [
             f"{competitor_name} 产品功能介绍",
@@ -68,16 +68,36 @@ class CollectionAgent(BaseAgent):
         # 执行搜索
         search_results = self.search_client.batch_search(queries)
 
-        # 提取搜索文本
+        # 提取搜索文本 + 构建结构化引用
         all_text = ""
         sources = []
-        for sr in search_results:
+        citations = []
+        citation_counter = 0
+
+        for i, sr in enumerate(search_results):
             query = sr.get("query", "")
             result = sr.get("result")
             text = SearchClient.extract_text(result) if result else ""
             if text:
                 all_text += f"\n--- 搜索: {query} ---\n{text[:1500]}\n"
                 sources.append(text[:500])
+
+            # 从结构化 references 构建 Citation 对象
+            for ref in sr.get("references", []):
+                ref_url = ref.get("url", "")
+                ref_title = ref.get("title", "")
+                if not ref_url and not ref_title:
+                    continue
+                citations.append(Citation(
+                    id=f"{competitor_name}:q{i}:r{citation_counter}",
+                    title=ref_title,
+                    url=ref_url,
+                    snippet=ref.get("content", "") or ref.get("summary", ""),
+                    site_name=ref.get("site_name", ""),
+                    query=query,
+                    competitor=competitor_name,
+                ))
+                citation_counter += 1
 
         # LLM汇总提取
         if config.ENABLE_LLM and all_text:
@@ -99,6 +119,7 @@ class CollectionAgent(BaseAgent):
                     weaknesses=result.get("weaknesses", ""),
                     channels=result.get("channels", ""),
                     search_sources=sources,
+                    citations=citations,
                 )
             else:
                 self._log(f"   ⚠️ {competitor_name} LLM汇总失败，降级到规则引擎")
@@ -108,4 +129,5 @@ class CollectionAgent(BaseAgent):
             name=competitor_name,
             product_features=all_text[:500] if all_text else "数据采集失败",
             search_sources=sources,
+            citations=citations,
         )

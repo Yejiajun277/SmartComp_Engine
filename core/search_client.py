@@ -66,6 +66,7 @@ class SearchClient:
     ) -> list[dict]:
         """
         批量联网搜索，逐条调用并附带间隔，避免限流。
+        每个结果项同时保留结构化 references 供引用溯源使用。
         """
         results = []
         total = len(queries)
@@ -73,10 +74,14 @@ class SearchClient:
             print(f"  [SearchClient] 搜索 {i + 1}/{total}: {q[:50]}...")
             try:
                 result = self.search(q)
-                results.append({"query": q, "result": result})
+                results.append({
+                    "query": q,
+                    "result": result,
+                    "references": result.get("references", []) if result else [],
+                })
             except Exception as e:
                 print(f"  [SearchClient] 搜索失败: {q[:50]}... | 错误: {e}")
-                results.append({"query": q, "result": None, "error": str(e)})
+                results.append({"query": q, "result": None, "references": [], "error": str(e)})
             if i < total - 1:
                 time.sleep(delay)
         return results

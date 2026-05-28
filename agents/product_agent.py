@@ -62,7 +62,7 @@ class ProductAgent(BaseAgent):
 
     def _build_competitors_text(self, product_name: str,
                                  competitors_data: dict[str, CompetitorData]) -> str:
-        """构建竞品数据文本"""
+        """构建竞品数据文本，附带引用来源编号"""
         lines = []
         for name, data in competitors_data.items():
             label = name if name != product_name else f"{name}(我方产品)"
@@ -70,23 +70,34 @@ class ProductAgent(BaseAgent):
             lines.append(f"- 产品功能: {data.product_features[:300]}")
             lines.append(f"- 优势: {data.strengths[:200]}")
             lines.append(f"- 劣势: {data.weaknesses[:200]}")
+            if data.citations:
+                lines.append(f"- 数据来源:")
+                lines.append(self.build_citations_text(data.citations))
         return "\n".join(lines)
 
     def _parse_product_analysis(self, result: dict) -> ProductAnalysis:
-        """解析LLM返回的产品分析结果"""
+        """解析LLM返回的产品分析结果，提取引用 ID"""
+        all_citation_ids = []
+
         feature_matrix = []
         for fm in result.get("feature_matrix", []):
+            fm_cites = self.extract_citation_ids(fm)
+            all_citation_ids.extend(fm_cites)
             feature_matrix.append(FeatureComparison(
                 feature=fm.get("feature", ""),
                 values=fm.get("values", {}),
+                citations=fm_cites,
             ))
 
         advantages = []
         for adv in result.get("competitive_advantages", []):
+            adv_cites = self.extract_citation_ids(adv)
+            all_citation_ids.extend(adv_cites)
             advantages.append(CompetitiveAdvantage(
                 competitor=adv.get("competitor", ""),
                 our_advantage=adv.get("our_advantage", ""),
                 their_advantage=adv.get("their_advantage", ""),
+                citations=adv_cites,
             ))
 
         return ProductAnalysis(
@@ -94,6 +105,7 @@ class ProductAgent(BaseAgent):
             competitive_advantages=advantages,
             differentiation_points=result.get("differentiation_points", []),
             summary=result.get("summary", ""),
+            citations=list(set(all_citation_ids)),
         )
 
     def _rule_analyze(self, product_name: str,

@@ -11,7 +11,7 @@ LLM调用：1次
 from agents.base_agent import BaseAgent
 from models.domain import (
     ProductAnalysis, PricingAnalysis, MarketAnalysis,
-    StrategyReport, ActionItem
+    StrategyReport, ActionItem, CitationIndex, CompetitorData
 )
 from core.prompt_loader import load as load_prompts
 import config
@@ -33,7 +33,8 @@ class StrategyAgent(BaseAgent):
                   competitor_count: int,
                   product_analysis: ProductAnalysis,
                   pricing_analysis: PricingAnalysis,
-                  market_analysis: MarketAnalysis) -> StrategyReport:
+                  market_analysis: MarketAnalysis,
+                  competitors_data: dict[str, CompetitorData] | None = None) -> StrategyReport:
         """
         主运行逻辑：综合三维分析输出策略
 
@@ -49,6 +50,13 @@ class StrategyAgent(BaseAgent):
         """
         self._log("🎯 开始策略建议...")
 
+        # 构建全局引用索引
+        citation_index = CitationIndex()
+        if competitors_data:
+            for data in competitors_data.values():
+                for cite in data.citations:
+                    citation_index.add(cite)
+
         # 构建三维分析汇总文本
         analysis_text = self._build_analysis_text(
             product_name, product_analysis, pricing_analysis, market_analysis
@@ -62,19 +70,21 @@ class StrategyAgent(BaseAgent):
             result = self.ask_llm_json(prompt, max_tokens=4096)
             if result:
                 report = self._parse_strategy_report(product_name, competitor_count, result)
+                report.citation_index = citation_index
                 self._log(f"✅ 策略建议完成: {len(report.action_plan)}项行动方案")
                 return report
             else:
                 self._log("⚠️ LLM策略建议失败，降级到规则引擎")
 
         return self._rule_strategy(product_name, competitor_count,
-                                    product_analysis, pricing_analysis, market_analysis)
+                                    product_analysis, pricing_analysis, market_analysis,
+                                    citation_index)
 
     def _build_analysis_text(self, product_name: str,
                               product_analysis: ProductAnalysis,
                               pricing_analysis: PricingAnalysis,
                               market_analysis: MarketAnalysis) -> str:
-        """构建三维分析汇总文本"""
+        """构建三维分析汇总文本，附带引用编号"""
         lines = []
 
         # 产品分析
@@ -84,7 +94,8 @@ class StrategyAgent(BaseAgent):
             lines.append(f"对比功能维度: {', '.join(features[:10])}")
         if product_analysis.competitive_advantages:
             for adv in product_analysis.competitive_advantages[:5]:
-                lines.append(f"- vs {adv.competitor}: 我方优势={adv.our_advantage}, 对方优势={adv.their_advantage}")
+                cite_tag = f" [{','.join(adv.citations)}]" if adv.citations else ""
+                lines.append(f"- vs {adv.competitor}: 我方优势={adv.our_advantage}, 对方优势={adv.their_advantage}{cite_tag}")
         if product_analysis.differentiation_points:
             lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points[:5])}")
         lines.append(f"摘要: {product_analysis.summary}")
@@ -93,7 +104,8 @@ class StrategyAgent(BaseAgent):
         lines.append("\n## 二、定价分析")
         if pricing_analysis.pricing_comparison:
             for pc in pricing_analysis.pricing_comparison[:5]:
-                lines.append(f"- {pc.competitor}: 免费={pc.free_tier}, 付费={pc.paid_tier}, 模式={pc.pricing_model}")
+                cite_tag = f" [{','.join(pc.citations)}]" if pc.citations else ""
+                lines.append(f"- {pc.competitor}: 免费={pc.free_tier}, 付费={pc.paid_tier}, 模式={pc.pricing_model}{cite_tag}")
         lines.append(f"策略分析: {pricing_analysis.pricing_strategy_analysis}")
         if pricing_analysis.value_ranking:
             lines.append(f"性价比排名: {' > '.join(pricing_analysis.value_ranking)}")
@@ -103,7 +115,8 @@ class StrategyAgent(BaseAgent):
         lines.append("\n## 三、市场分析")
         if market_analysis.market_share_data:
             for ms in market_analysis.market_share_data[:5]:
-                lines.append(f"- {ms.competitor}: 份额={ms.share_estimate}, 趋势={ms.trend}")
+                cite_tag = f" [{','.join(ms.citations)}]" if ms.citations else ""
+                lines.append(f"- {ms.competitor}: 份额={ms.share_estimate}, 趋势={ms.trend}{cite_tag}")
         lines.append(f"增长趋势: {market_analysis.growth_trends}")
         lines.append(f"渠道分析: {market_analysis.channel_analysis}")
         lines.append(f"摘要: {market_analysis.summary}")
@@ -112,14 +125,16 @@ class StrategyAgent(BaseAgent):
 
     def _parse_strategy_report(self, product_name: str, competitor_count: int,
                                 result: dict) -> StrategyReport:
-        """解析LLM返回的策略报告"""
+        """解析LLM返回的策略报告，提取引用 ID"""
         action_plan = []
         for ap in result.get("action_plan", []):
+            ap_cites = self.extract_citation_ids(ap)
             action_plan.append(ActionItem(
                 priority=ap.get("priority", "P2"),
                 action=ap.get("action", ""),
                 timeline=ap.get("timeline", ""),
                 expected_impact=ap.get("expected_impact", ""),
+                citations=ap_cites,
             ))
 
         return StrategyReport(
@@ -138,7 +153,8 @@ class StrategyAgent(BaseAgent):
     def _rule_strategy(self, product_name: str, competitor_count: int,
                         product_analysis: ProductAnalysis,
                         pricing_analysis: PricingAnalysis,
-                        market_analysis: MarketAnalysis) -> StrategyReport:
+                        market_analysis: MarketAnalysis,
+                        citation_index: CitationIndex | None = None) -> StrategyReport:
         """规则引擎策略建议（SWOT模板）"""
         # 从三维分析中提取关键词
         diff_points = product_analysis.differentiation_points[:3] if product_analysis.differentiation_points else []
@@ -165,6 +181,7 @@ class StrategyAgent(BaseAgent):
             pricing_analysis_summary=pricing_analysis.summary[:100],
             market_analysis_summary=market_analysis.summary[:100],
             summary="基于SWOT模板的简单策略建议（建议启用LLM获得深度分析）",
+            citation_index=citation_index or CitationIndex(),
         )
 
     def format_report(self, report: StrategyReport) -> str:
@@ -331,6 +348,30 @@ class StrategyAgent(BaseAgent):
                     return val
             return None
 
+        def cite_sup(citation_ids: list[str], competitor: str | None = None) -> str:
+            """渲染引用上标，如 [1][2]，可点击跳转到来源附录。
+            competitor 不为 None 时，只显示该竞品相关的引用（按 citation ID 前缀过滤）。
+            """
+            if not citation_ids or not global_cite_num:
+                return ""
+            parts = []
+            for cid in citation_ids:
+                if competitor and not cid.startswith(competitor + ":"):
+                    continue
+                num = global_cite_num.get(cid)
+                if num:
+                    cite = report.citation_index.get(cid)
+                    if cite:
+                        parts.append(
+                            f'<sup><a href="#cite-{cid}" title="{esc(cite.title)} - {esc(cite.url)}" '
+                            f'style="color:#3b82f6;text-decoration:none;font-size:11px;">[{num}]</a></sup>'
+                        )
+            return " ".join(parts)
+
+        def strip_source_text(text: str) -> str:
+            """移除 LLM 生成的 plain-text 信息来源（如 '信息来源：新浪科技2026-05-26'）"""
+            return re.sub(r'[。；;]?\s*信息来源[：:].*$', '', text).rstrip()
+
         def find_cdata(cdata_map_dict: dict, comp_name: str) -> 'CompetitorData | None':
             """模糊匹配竞品名查找采集数据"""
             if comp_name in cdata_map_dict:
@@ -348,6 +389,12 @@ class StrategyAgent(BaseAgent):
                 return f'<span style="color:#ef4444;">↘ {esc(t)}</span>'
             else:
                 return f'<span style="color:#64748b;">→ {esc(t)}</span>'
+
+        # 构建全局引用编号映射（cid → 1-based 序号）
+        global_cite_num: dict[str, int] = {}
+        if report.citation_index and report.citation_index.citations:
+            for idx, cid in enumerate(report.citation_index.citations.keys(), 1):
+                global_cite_num[cid] = idx
 
         # 收集所有竞品名（我方产品排首位）
         all_names = []
@@ -429,7 +476,7 @@ class StrategyAgent(BaseAgent):
                     tv = find_value(fm.values, comp_name, report.product_name)
                     comparison_rows += f'''
                     <tr style="border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">{esc(fm.feature)}</td>
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;width:100px;">{esc(fm.feature)}{cite_sup(fm.citations, competitor=comp_name)}</td>
                         <td style="padding:8px 14px;text-align:center;">{feature_icon(ov)}</td>
                         <td style="padding:8px 14px;text-align:center;">{feature_icon(tv)}</td>
                     </tr>'''
@@ -475,12 +522,12 @@ class StrategyAgent(BaseAgent):
 
             if cd:
                 if cd.strengths:
-                    strengths_text = cd.strengths
+                    strengths_text = strip_source_text(cd.strengths)
                 if cd.weaknesses:
-                    weaknesses_text = cd.weaknesses
+                    weaknesses_text = strip_source_text(cd.weaknesses)
             if adv:
-                our_adv_text = adv.our_advantage
-                their_adv_text = adv.their_advantage
+                our_adv_text = strip_source_text(adv.our_advantage)
+                their_adv_text = strip_source_text(adv.their_advantage)
 
             # 优劣势区块
             swot_section = ""
@@ -551,7 +598,7 @@ class StrategyAgent(BaseAgent):
             header_cells = "".join(f'<th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">{esc(n)}</th>' for n in all_names)
             rows = ""
             for fm in product_analysis.feature_matrix:
-                cells = f'<td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">{esc(fm.feature)}</td>'
+                cells = f'<td style="padding:10px 16px;font-weight:500;font-size:13px;border-right:1px solid #e2e8f0;">{esc(fm.feature)}{cite_sup(fm.citations)}</td>'
                 for name in all_names:
                     val = find_value(fm.values, name, report.product_name)
                     cells += f'<td style="padding:10px 16px;text-align:center;">{feature_icon(val)}</td>'
@@ -585,7 +632,7 @@ class StrategyAgent(BaseAgent):
             for pc in pricing_analysis.pricing_comparison:
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}</td>
+                    <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}{cite_sup(pc.citations)}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else '<span style="color:#94a3b8;">—</span>'}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else '<span style="color:#94a3b8;">—</span>'}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else '<span style="color:#94a3b8;">—</span>'}</td>
@@ -641,7 +688,7 @@ class StrategyAgent(BaseAgent):
                 bar_width = max(bar_width, 5)
                 share_bars += f'''
                 <div style="display:flex;align-items:center;margin-bottom:12px;">
-                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}</div>
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
                     <div style="flex:1;margin:0 12px;">
                         <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
                             <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
@@ -663,7 +710,7 @@ class StrategyAgent(BaseAgent):
                     rep_cards += f'''
                     <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
                         <div style="font-weight:600;font-size:14px;margin-bottom:6px;">{esc(name)}</div>
-                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}</div>
+                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
                         <div>{kw_tags}</div>
                     </div>'''
                 reputation_html = f'''
@@ -756,11 +803,11 @@ class StrategyAgent(BaseAgent):
                 <div style="display:flex;gap:12px;margin-bottom:10px;align-items:stretch;">
                     <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
                         <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:2px;">vs {esc(adv.competitor)} 我方胜出</div>
-                        <div style="font-size:13px;color:#15803d;line-height:1.5;">{esc(adv.our_advantage)}</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.5;">{esc(adv.our_advantage)}{cite_sup(adv.citations)}</div>
                     </div>
                     <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:0 8px 8px 0;flex:1;">
                         <div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:2px;">vs {esc(adv.competitor)} 需追赶</div>
-                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">{esc(adv.their_advantage)}</div>
+                        <div style="font-size:13px;color:#b91c1c;line-height:1.5;">{esc(adv.their_advantage)}{cite_sup(adv.citations)}</div>
                     </div>
                 </div>'''
 
@@ -810,7 +857,7 @@ class StrategyAgent(BaseAgent):
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:280px;">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
                     {priority_badge(ap.priority)}
-                    <strong style="font-size:15px;">{esc(ap.action)}</strong>
+                    <strong style="font-size:15px;">{esc(ap.action)}{cite_sup(ap.citations)}</strong>
                 </div>
                 {'<div style="font-size:13px;color:#64748b;margin-bottom:4px;">⏰ ' + esc(ap.timeline) + '</div>' if ap.timeline else ''}
                 {'<div style="font-size:13px;color:#475569;">🎯 ' + esc(ap.expected_impact) + '</div>' if ap.expected_impact else ''}
@@ -884,6 +931,31 @@ class StrategyAgent(BaseAgent):
                 {timing_items}
             </div>'''
 
+        # 数据来源附录
+        references_html = ""
+        if report.citation_index and report.citation_index.citations:
+            ref_items = ""
+            seen_urls = set()
+            for cid, cite in report.citation_index.citations.items():
+                if cite.url and cite.url in seen_urls:
+                    continue
+                if cite.url:
+                    seen_urls.add(cite.url)
+                num = global_cite_num.get(cid, "")
+                num_label = f'<span style="display:inline-block;min-width:28px;font-weight:700;color:#3b82f6;font-size:13px;">[{num}]</span>' if num else ""
+                site_label = f' <span style="color:#64748b;font-size:12px;">({esc(cite.site_name)})</span>' if cite.site_name else ""
+                query_label = f' <span style="color:#94a3b8;font-size:11px;">搜索词: {esc(cite.query)}</span>' if cite.query else ""
+                url_link = f'<a href="{esc(cite.url)}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;">{esc(cite.title or cite.url)}</a>' if cite.url else esc(cite.title)
+                ref_items += f'''
+                <div id="cite-{cid}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                    {num_label}{url_link}{site_label}{query_label}
+                </div>'''
+            references_html = f'''
+            <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="font-size:20px;color:#1e293b;margin-bottom:16px;">📚 数据来源（共 {len(report.citation_index.citations)} 条）</h2>
+                <div style="max-height:400px;overflow-y:auto;">{ref_items}</div>
+            </div>'''
+
         # ══════════════════════════════════════════════
         # 组装完整HTML
         # ══════════════════════════════════════════════
@@ -950,6 +1022,9 @@ class StrategyAgent(BaseAgent):
     {overall_summary_html}
 
     {timing_html}
+
+    <!-- 数据来源附录 -->
+    {references_html}
 
     <!-- 页脚 -->
     <div style="text-align:center;padding:24px 0;font-size:12px;color:#94a3b8;">

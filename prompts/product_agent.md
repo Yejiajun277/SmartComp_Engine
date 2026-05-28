@@ -37,6 +37,7 @@
 2. 为每个功能维度，逐竞品标注支持程度（✅/🔶/❌）
 3. 识别我方产品相对于每个竞品的优势和劣势
 4. 提炼差异化的功能点
+5. **为每条结论标注数据来源编号**：使用"数据来源"部分提供的编号（如 [竞品名:q0:r0]），在 feature_matrix 每项和 competitive_advantages 每项中附上 "citations" 数组。如果无法确定来源，citations 为空数组。
 
 ### 输出格式
 ```json
@@ -48,14 +49,16 @@
                 "{product_name}": "✅/🔶/❌",
                 "竞品名1": "✅/🔶/❌",
                 "竞品名2": "✅/🔶/❌"
-            }}
+            }},
+            "citations": ["竞品名:q0:r0", "竞品名:q1:r1"]
         }}
     ],
     "competitive_advantages": [
         {{
             "competitor": "竞品名",
             "our_advantage": "我方在该竞品面前的优势",
-            "their_advantage": "对方在我方面前的优势"
+            "their_advantage": "对方在我方面前的优势",
+            "citations": ["竞品名:q0:r0"]
         }}
     ],
     "differentiation_points": ["差异化点1", "差异化点2"],
