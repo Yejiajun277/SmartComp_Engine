@@ -25,6 +25,7 @@ from agents.product_agent import ProductAgent
 from agents.pricing_agent import PricingAgent
 from agents.market_agent import MarketAgent
 from agents.strategy_agent import StrategyAgent
+from agents.quality_agent import QualityAgent
 import config
 
 
@@ -66,6 +67,7 @@ class Orchestrator:
         self.pricing_agent = PricingAgent()
         self.market_agent = MarketAgent()
         self.strategy_agent = StrategyAgent()
+        self.quality_agent = QualityAgent()
 
         self.timings: dict[str, float] = {}
 
@@ -121,6 +123,34 @@ class Orchestrator:
         print(f"\n  ⏱️ 采集耗时: {self.timings['collection']:.2f}s")
         print(f"  📊 采集完成: {len(competitors_data)}个竞品")
 
+        # ── Phase 2 QA: 采集数据质检 ──
+        qa_start = time.time()
+        original_search_texts = self.collection_agent.get_search_texts()
+        qa_attempt = 1
+        while qa_attempt <= QualityAgent.MAX_RETRIES + 1:
+            qa_collection = await self.quality_agent.check_collection(
+                competitors_data, original_search_texts, attempt=qa_attempt
+            )
+            self.quality_agent.timeline.add_check(qa_collection)
+
+            if qa_collection.passed:
+                break
+
+            if qa_attempt <= QualityAgent.MAX_RETRIES:
+                print(f"  ⚠️ 采集数据质检未通过（第{qa_attempt}次），打回 CollectionAgent 重做")
+                feedback = self.quality_agent.build_feedback(qa_collection)
+                competitors_data = await self.collection_agent.run(
+                    product_description, competitor_list, feedback=feedback
+                )
+                original_search_texts = self.collection_agent.get_search_texts()
+            else:
+                print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
+                qa_collection.degraded = True
+
+            qa_attempt += 1
+
+        self.timings["qa_collection"] = time.time() - qa_start
+
         # ── Phase 2.5: 维度生成 ──
         phase2_5_start = time.time()
         dim_config = await self.dimension_agent.run(
@@ -165,6 +195,58 @@ class Orchestrator:
         print(f"  💰 定价分析: {len(pricing_analysis.pricing_comparison)}个竞品定价")
         print(f"  📈 市场分析: {len(market_analysis.market_share_data)}个竞品市场数据")
 
+        # ── Phase 3 QA: 三维分析质检 ──
+        qa3_start = time.time()
+        qa_product, qa_pricing, qa_market = await asyncio.gather(
+            self.quality_agent.check_analysis("product", product_analysis, competitors_data),
+            self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data),
+            self.quality_agent.check_analysis("market", market_analysis, competitors_data),
+        )
+
+        # 打回未通过的分析 Agent
+        for qa_result, agent_name, atype in [
+            (qa_product, "ProductAgent", "product"),
+            (qa_pricing, "PricingAgent", "pricing"),
+            (qa_market, "MarketAgent", "market"),
+        ]:
+            self.quality_agent.timeline.add_check(qa_result)
+            qa_attempt = 1
+            while not qa_result.passed and qa_attempt <= QualityAgent.MAX_RETRIES:
+                print(f"  ⚠️ {agent_name} 质检未通过（第{qa_attempt}次），打回重做")
+                feedback = self.quality_agent.build_feedback(qa_result)
+
+                if atype == "product":
+                    product_analysis = await self.product_agent.run(
+                        product_name, competitors_data,
+                        sub_dimensions=product_sub_dims_text, feedback=feedback
+                    )
+                elif atype == "pricing":
+                    pricing_analysis = await self.pricing_agent.run(
+                        product_name, competitors_data,
+                        sub_dimensions=pricing_sub_dims_text, feedback=feedback
+                    )
+                else:
+                    market_analysis = await self.market_agent.run(
+                        product_name, competitors_data, feedback=feedback
+                    )
+
+                # 重新质检
+                if atype == "product":
+                    qa_result = await self.quality_agent.check_analysis("product", product_analysis, competitors_data)
+                elif atype == "pricing":
+                    qa_result = await self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data)
+                else:
+                    qa_result = await self.quality_agent.check_analysis("market", market_analysis, competitors_data)
+
+                self.quality_agent.timeline.add_check(qa_result)
+                qa_attempt += 1
+
+            if not qa_result.passed:
+                qa_result.degraded = True
+                print(f"  ⚠️ {agent_name} 质检未通过，降级通过")
+
+        self.timings["qa_analysis"] = time.time() - qa3_start
+
         # ── Phase 4: 策略建议（Gather）──
         print(f"\n{'█' * 65}")
         print("  🎯 Phase 4: 策略建议 (Gather)")
@@ -181,6 +263,41 @@ class Orchestrator:
         )
         self.timings["strategy"] = time.time() - phase4_start
 
+        # ── Phase 4 QA: 策略报告质检 ──
+        qa4_start = time.time()
+        qa_attempt = 1
+        while qa_attempt <= QualityAgent.MAX_RETRIES + 1:
+            qa_strategy = await self.quality_agent.check_strategy(
+                report, product_analysis, pricing_analysis, market_analysis,
+                attempt=qa_attempt
+            )
+            self.quality_agent.timeline.add_check(qa_strategy)
+
+            if qa_strategy.passed:
+                break
+
+            if qa_attempt <= QualityAgent.MAX_RETRIES:
+                print(f"  ⚠️ 策略报告质检未通过（第{qa_attempt}次），打回 StrategyAgent 重做")
+                feedback = self.quality_agent.build_feedback(qa_strategy)
+                report = await self.strategy_agent.run(
+                    product_name,
+                    len(competitor_list.competitors),
+                    product_analysis,
+                    pricing_analysis,
+                    market_analysis,
+                    competitors_data=competitors_data,
+                    feedback=feedback,
+                )
+            else:
+                qa_strategy.degraded = True
+                print(f"  ⚠️ 策略报告质检未通过，降级通过")
+
+            qa_attempt += 1
+
+        # 附加 QA 时间线到报告
+        report.qa_timeline = self.quality_agent.timeline
+        self.timings["qa_strategy"] = time.time() - qa4_start
+
         self.timings["total"] = time.time() - total_start
 
         # 附加LLM调用日志
@@ -191,7 +308,8 @@ class Orchestrator:
             self.product_agent.llm_logs +
             self.pricing_agent.llm_logs +
             self.market_agent.llm_logs +
-            self.strategy_agent.llm_logs
+            self.strategy_agent.llm_logs +
+            self.quality_agent.llm_logs
         )
 
         # 缓存三维分析数据（供HTML报告使用）
@@ -207,6 +325,9 @@ class Orchestrator:
         print(f"  🎯 行动方案: {len(report.action_plan)}项")
         cite_count = len(report.citation_index.citations) if report.citation_index else 0
         print(f"  📚 引用来源: {cite_count}条")
+        qa_total = len(report.qa_timeline.checks)
+        qa_retries = report.qa_timeline.total_retries
+        print(f"  🔍 质检次数: {qa_total}次 | 重试: {qa_retries}次")
         print(f"{'═' * 65}")
 
         # 打印格式化报告

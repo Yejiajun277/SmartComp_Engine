@@ -222,6 +222,48 @@ class ActionItem:
 
 
 @dataclass
+class QualityIssue:
+    """单个质量问题"""
+    severity: str          # "critical" / "warning"
+    category: str          # "completeness" / "hallucination" / "schema" / "citation"
+    field: str             # 问题字段路径
+    description: str       # 问题描述
+    expected: str = ""     # 期望值
+    actual: str = ""       # 实际值
+    suggestion: str = ""   # 修复建议
+
+
+@dataclass
+class QualityCheckResult:
+    """单次质检结果"""
+    phase: str                          # "collection" / "product" / "pricing" / "market" / "strategy"
+    target_agent: str                   # 被检查的 Agent ID
+    passed: bool                        # 是否通过
+    score: float                        # 0-100 质量分数
+    issues: list[QualityIssue] = field(default_factory=list)
+    checked_at: str = ""                # 检查时间
+    attempt: int = 1                    # 第几次检查
+    degraded: bool = False              # 是否降级通过
+    feedback_to_agent: str = ""         # 给被打回 Agent 的反馈消息
+
+
+@dataclass
+class QATimeline:
+    """完整的 QA 时间线 — 嵌入最终报告"""
+    checks: list[QualityCheckResult] = field(default_factory=list)
+    max_retries: int = 2
+    total_retries: int = 0
+
+    def add_check(self, result: QualityCheckResult):
+        self.checks.append(result)
+        if not result.passed:
+            self.total_retries += 1
+
+    def all_passed(self) -> bool:
+        return all(c.passed or c.degraded for c in self.checks)
+
+
+@dataclass
 class StrategyReport:
     """策略建议报告（最终输出）"""
     product_name: str                       # 产品名称
@@ -236,6 +278,7 @@ class StrategyReport:
     summary: str = ""
     raw_llm_logs: list[dict] = field(default_factory=list)
     citation_index: CitationIndex = field(default_factory=CitationIndex)  # 全局引用索引
+    qa_timeline: QATimeline = field(default_factory=QATimeline)           # QA 质检时间线
 
 
 @dataclass

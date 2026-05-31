@@ -27,9 +27,15 @@ class CollectionAgent(BaseAgent):
         )
         self._prompt_collect = prompts["prompt_collect"]
         self.search_client = SearchClient()
+        self._last_search_texts: dict[str, str] = {}
+
+    def get_search_texts(self) -> dict[str, str]:
+        """返回每个竞品的原始搜索文本（供幻觉检测使用）"""
+        return self._last_search_texts
 
     async def run(self, product_description: str,
-                  competitor_list: CompetitorList) -> dict[str, CompetitorData]:
+                  competitor_list: CompetitorList,
+                  feedback: str = "") -> dict[str, CompetitorData]:
         """
         主运行逻辑：逐竞品搜索+汇总
 
@@ -42,12 +48,15 @@ class CollectionAgent(BaseAgent):
         """
         self._log(f"📊 开始采集数据，共{len(competitor_list.competitors)}个竞品")
 
+        if feedback:
+            self._log(f"   📝 收到质检反馈，将据此修正采集")
+
         result_data = {}
         product_name = competitor_list.product_name
 
         for i, comp in enumerate(competitor_list.competitors):
             self._log(f"   采集 {i+1}/{len(competitor_list.competitors)}: {comp.name}")
-            data = self._collect_competitor(product_name, product_description, comp.name)
+            data = self._collect_competitor(product_name, product_description, comp.name, feedback)
             result_data[comp.name] = data
 
         self._log(f"✅ 数据采集完成: {len(result_data)}个竞品")
@@ -55,7 +64,8 @@ class CollectionAgent(BaseAgent):
 
     def _collect_competitor(self, product_name: str,
                             product_description: str,
-                            competitor_name: str) -> CompetitorData:
+                            competitor_name: str,
+                            feedback: str = "") -> CompetitorData:
         """采集单个竞品数据，同时构建结构化引用"""
         # 生成搜索查询
         queries = [
@@ -98,6 +108,13 @@ class CollectionAgent(BaseAgent):
                     competitor=competitor_name,
                 ))
                 citation_counter += 1
+
+        # 缓存原始搜索文本（供幻觉检测使用）
+        self._last_search_texts[competitor_name] = all_text
+
+        # 注入质检反馈
+        if feedback:
+            all_text += f"\n--- 质检反馈（请据此修正）---\n{feedback}\n"
 
         # LLM汇总提取
         if config.ENABLE_LLM and all_text:

@@ -35,7 +35,8 @@ class ProductAgent(BaseAgent):
 
     async def run(self, product_name: str,
                   competitors_data: dict[str, CompetitorData],
-                  sub_dimensions: str = "") -> ProductAnalysis:
+                  sub_dimensions: str = "",
+                  feedback: str = "") -> ProductAnalysis:
         """
         主运行逻辑：全量数据分析产品对比
 
@@ -53,6 +54,10 @@ class ProductAgent(BaseAgent):
 
         # 构建竞品数据摘要
         competitors_text = self._build_competitors_text(product_name, competitors_data)
+
+        # 注入质检反馈
+        if feedback:
+            competitors_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
 
         if config.ENABLE_LLM:
             prompt = self._prompt_analyze.format(

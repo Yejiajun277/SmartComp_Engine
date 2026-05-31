@@ -27,7 +27,8 @@ class MarketAgent(BaseAgent):
         self._prompt_analyze = prompts["prompt_analyze"]
 
     async def run(self, product_name: str,
-                  competitors_data: dict[str, CompetitorData]) -> MarketAnalysis:
+                  competitors_data: dict[str, CompetitorData],
+                  feedback: str = "") -> MarketAnalysis:
         """
         主运行逻辑：全量数据分析市场格局
 
@@ -41,6 +42,10 @@ class MarketAgent(BaseAgent):
         self._log("📈 开始市场分析...")
 
         competitors_text = self._build_competitors_text(product_name, competitors_data)
+
+        # 注入质检反馈
+        if feedback:
+            competitors_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
 
         if config.ENABLE_LLM:
             prompt = self._prompt_analyze.format(

@@ -107,6 +107,32 @@ async def run_analysis(product_description: str,
         "pricing_analysis_summary": report.pricing_analysis_summary,
         "market_analysis_summary": report.market_analysis_summary,
         "summary": report.summary,
+        "qa_timeline": {
+            "checks": [
+                {
+                    "phase": c.phase,
+                    "target_agent": c.target_agent,
+                    "passed": c.passed,
+                    "score": c.score,
+                    "issues": [
+                        {
+                            "severity": i.severity,
+                            "category": i.category,
+                            "field": i.field,
+                            "description": i.description,
+                            "suggestion": i.suggestion,
+                        }
+                        for i in c.issues
+                    ],
+                    "checked_at": c.checked_at,
+                    "attempt": c.attempt,
+                    "degraded": c.degraded,
+                }
+                for c in report.qa_timeline.checks
+            ],
+            "max_retries": report.qa_timeline.max_retries,
+            "total_retries": report.qa_timeline.total_retries,
+        },
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(report_data, f, ensure_ascii=False, indent=2)

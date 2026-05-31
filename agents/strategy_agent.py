@@ -34,7 +34,8 @@ class StrategyAgent(BaseAgent):
                   product_analysis: ProductAnalysis,
                   pricing_analysis: PricingAnalysis,
                   market_analysis: MarketAnalysis,
-                  competitors_data: dict[str, CompetitorData] | None = None) -> StrategyReport:
+                  competitors_data: dict[str, CompetitorData] | None = None,
+                  feedback: str = "") -> StrategyReport:
         """
         主运行逻辑：综合三维分析输出策略
 
@@ -61,6 +62,9 @@ class StrategyAgent(BaseAgent):
         analysis_text = self._build_analysis_text(
             product_name, product_analysis, pricing_analysis, market_analysis
         )
+
+        if feedback:
+            analysis_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
 
         if config.ENABLE_LLM:
             prompt = self._prompt_strategy.format(
@@ -961,6 +965,69 @@ class StrategyAgent(BaseAgent):
                 {timing_items}
             </div>'''
 
+        # 质量检查板块
+        qa_html = ""
+        if report.qa_timeline and report.qa_timeline.checks:
+            qa_checks_html = ""
+            for check in report.qa_timeline.checks:
+                status_class = "passed" if check.passed else "failed"
+                status_text = "✅ 通过" if check.passed else "❌ 未通过"
+                degraded_badge = ' <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;">⚠️ 降级通过</span>' if check.degraded else ""
+
+                issues_html = ""
+                if check.issues:
+                    issue_items = ""
+                    for issue in check.issues[:5]:
+                        severity_color = "#dc2626" if issue.severity == "critical" else "#d97706"
+                        issue_items += f'''
+                        <div style="padding:6px 12px;border-left:3px solid {severity_color};background:#fafafa;margin:4px 0;border-radius:0 4px 4px 0;">
+                            <span style="color:{severity_color};font-weight:600;">[{issue.severity}]</span>
+                            <span style="color:#475569;font-size:12px;">{issue.field}: {issue.description}</span>
+                            {f'<span style="color:#6b7280;font-size:11px;"> — 建议: {issue.suggestion}</span>' if issue.suggestion else ''}
+                        </div>'''
+                    issues_html = f'<div style="margin-top:8px;">{issue_items}</div>'
+
+                border_color = "#22c55e" if check.passed else "#ef4444"
+                qa_checks_html += f'''
+                <div style="background:#fff;border-left:4px solid {border_color};border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <span style="font-weight:600;color:#1e293b;">{check.target_agent}</span>
+                            <span style="color:#94a3b8;font-size:12px;margin-left:8px;">第{check.attempt}次检查</span>
+                            {degraded_badge}
+                        </div>
+                        <div>
+                            <span style="font-size:13px;">{status_text}</span>
+                            <span style="color:#94a3b8;font-size:12px;margin-left:8px;">质量分数: {check.score:.0f}/100</span>
+                        </div>
+                    </div>
+                    {issues_html}
+                </div>'''
+
+            all_passed = report.qa_timeline.all_passed()
+            final_status = "全部通过" if all_passed else "部分降级通过"
+            final_color = "#16a34a" if all_passed else "#d97706"
+
+            qa_html = f'''
+            <div style="background:#f8fafc;border-radius:16px;padding:32px;margin-bottom:24px;">
+                <h2 style="font-size:20px;color:#1e293b;margin:0 0 16px 0;">🔍 质量检查</h2>
+                <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap;">
+                    <div style="background:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                        <div style="font-size:12px;color:#94a3b8;">总检查次数</div>
+                        <div style="font-size:20px;font-weight:600;color:#1e293b;">{len(report.qa_timeline.checks)}</div>
+                    </div>
+                    <div style="background:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                        <div style="font-size:12px;color:#94a3b8;">重试次数</div>
+                        <div style="font-size:20px;font-weight:600;color:#1e293b;">{report.qa_timeline.total_retries}</div>
+                    </div>
+                    <div style="background:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                        <div style="font-size:12px;color:#94a3b8;">最终状态</div>
+                        <div style="font-size:20px;font-weight:600;color:{final_color};">{final_status}</div>
+                    </div>
+                </div>
+                {qa_checks_html}
+            </div>'''
+
         # 数据来源附录
         references_html = ""
         if report.citation_index and report.citation_index.citations:
@@ -1052,6 +1119,9 @@ class StrategyAgent(BaseAgent):
     {overall_summary_html}
 
     {timing_html}
+
+    <!-- 质量检查 -->
+    {qa_html}
 
     <!-- 数据来源附录 -->
     {references_html}
