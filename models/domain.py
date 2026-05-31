@@ -65,6 +65,11 @@ class CompetitorInfo:
     brief: str = ""                         # 简要描述
     relevance: str = "HIGH"                 # 相关性等级
 
+    def __post_init__(self):
+        valid_levels = {"HIGH", "MEDIUM", "LOW"}
+        if self.relevance not in valid_levels:
+            raise ValueError(f"relevance must be one of {valid_levels}, got '{self.relevance}'")
+
 
 @dataclass
 class CompetitorList:
@@ -76,11 +81,28 @@ class CompetitorList:
 
 
 @dataclass
+class FeatureItem:
+    """产品功能项"""
+    name: str = ""                          # 功能名称
+    description: str = ""                   # 功能描述
+    citations: list[str] = field(default_factory=list)  # 引用 ID 列表
+
+
+@dataclass
+class PricingTier:
+    """定价层级"""
+    tier_name: str = ""                     # 层级名称（如：免费版、基础版、专业版）
+    price: str = ""                         # 价格
+    features: list[str] = field(default_factory=list)  # 包含功能
+    citations: list[str] = field(default_factory=list)  # 引用 ID 列表
+
+
+@dataclass
 class CompetitorData:
     """单个竞品的采集数据"""
     name: str                               # 竞品名称
-    product_features: str = ""              # 产品功能描述
-    pricing_info: str = ""                  # 定价信息
+    product_features: list[FeatureItem] = field(default_factory=list)  # 产品功能列表
+    pricing_tiers: list[PricingTier] = field(default_factory=list)     # 定价层级
     market_share: str = ""                  # 市场份额
     user_reviews: str = ""                  # 用户评价
     strengths: str = ""                     # 优势
@@ -96,6 +118,13 @@ class FeatureComparison:
     feature: str                            # 功能名称
     values: dict[str, str] = field(default_factory=dict)  # 竞品→状态(✅/🔶/❌)
     citations: list[str] = field(default_factory=list)     # 引用 ID 列表
+
+    def __post_init__(self):
+        valid_statuses = {"✅", "🔶", "❌", "✓", "✗", "—", "有", "无", "支持", "不支持", "部分支持"}
+        for name, status in self.values.items():
+            if status not in valid_statuses:
+                # 允许自由文本，但记录警告
+                pass
 
 
 @dataclass
@@ -185,6 +214,11 @@ class ActionItem:
     timeline: str = ""                      # 时间线
     expected_impact: str = ""               # 预期效果
     citations: list[str] = field(default_factory=list)     # 引用 ID 列表
+
+    def __post_init__(self):
+        valid_priorities = {"P0", "P1", "P2", "P3"}
+        if self.priority not in valid_priorities:
+            raise ValueError(f"priority must be one of {valid_priorities}, got '{self.priority}'")
 
 
 @dataclass

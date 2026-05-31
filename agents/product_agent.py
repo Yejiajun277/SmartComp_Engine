@@ -78,7 +78,12 @@ class ProductAgent(BaseAgent):
         for name, data in competitors_data.items():
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
-            lines.append(f"- 产品功能: {data.product_features[:300]}")
+            # 结构化产品功能
+            if data.product_features:
+                features_text = "; ".join([f"{fi.name}: {fi.description}" for fi in data.product_features[:10]])
+                lines.append(f"- 产品功能: {features_text[:300]}")
+            else:
+                lines.append("- 产品功能: 暂无数据")
             lines.append(f"- 优势: {data.strengths[:200]}")
             lines.append(f"- 劣势: {data.weaknesses[:200]}")
             if data.citations:
@@ -140,14 +145,16 @@ class ProductAgent(BaseAgent):
             # 先检查我方产品（使用产品描述+竞品数据中标注为"我方"的信息）
             product_text = product_name.lower()
             for name, data in competitors_data.items():
-                product_text += f" {data.product_features} {data.strengths}".lower()
+                features_str = " ".join([fi.name + " " + fi.description for fi in data.product_features])
+                product_text += f" {features_str} {data.strengths}".lower()
             if any(kw.lower() in product_text for kw in keywords):
                 values[product_name] = "✅"
             else:
                 values[product_name] = "❌"
             # 再检查每个竞品
             for name, data in competitors_data.items():
-                text = f"{data.product_features} {data.strengths}".lower()
+                features_str = " ".join([fi.name + " " + fi.description for fi in data.product_features])
+                text = f"{features_str} {data.strengths}".lower()
                 if any(kw.lower() in text for kw in keywords):
                     values[name] = "✅"
                 else:

@@ -9,7 +9,7 @@ LLM调用：1+N次（维度拆解 + 逐竞品汇总）
 """
 
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorList, CompetitorData, Citation
+from models.domain import CompetitorList, CompetitorData, Citation, FeatureItem, PricingTier
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
 import config
@@ -109,10 +109,31 @@ class CollectionAgent(BaseAgent):
             )
             result = self.ask_llm_json(prompt, max_tokens=4096)
             if result:
+                # 解析结构化产品功能
+                product_features = []
+                for fi in result.get("product_features", []):
+                    if isinstance(fi, dict):
+                        product_features.append(FeatureItem(
+                            name=fi.get("name", ""),
+                            description=fi.get("description", ""),
+                        ))
+                    elif isinstance(fi, str):
+                        product_features.append(FeatureItem(name=fi, description=fi))
+
+                # 解析结构化定价层级
+                pricing_tiers = []
+                for pt in result.get("pricing_tiers", []):
+                    if isinstance(pt, dict):
+                        pricing_tiers.append(PricingTier(
+                            tier_name=pt.get("tier_name", ""),
+                            price=pt.get("price", ""),
+                            features=pt.get("features", []),
+                        ))
+
                 return CompetitorData(
                     name=competitor_name,
-                    product_features=result.get("product_features", ""),
-                    pricing_info=result.get("pricing_info", ""),
+                    product_features=product_features,
+                    pricing_tiers=pricing_tiers,
                     market_share=result.get("market_share", ""),
                     user_reviews=result.get("user_reviews", ""),
                     strengths=result.get("strengths", ""),
@@ -127,7 +148,7 @@ class CollectionAgent(BaseAgent):
         # Fallback: 规则引擎提取
         return CompetitorData(
             name=competitor_name,
-            product_features=all_text[:500] if all_text else "数据采集失败",
+            product_features=[FeatureItem(name="数据采集失败", description=all_text[:500] if all_text else "")],
             search_sources=sources,
             citations=citations,
         )

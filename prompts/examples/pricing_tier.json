@@ -1,0 +1,11 @@
+{
+  "tier_name": "层级名称（如免费版、基础版）",
+  "price": "价格",
+  "features": [
+    "包含功能1",
+    "包含功能2"
+  ],
+  "citations": [
+    "citations示例1"
+  ]
+}

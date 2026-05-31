@@ -10,10 +10,13 @@ core/prompt_loader.py — 提示词模板加载器
 
   必须包含 system_prompt 节（系统提示词），
   其余节为用户提示词模板，名称自定义。
+
+  支持 {{example:xxx}} 模板变量，自动从 prompts/examples/xxx.json 注入示例。
 """
 
 import os
 import re
+import json
 
 
 # prompts 目录路径
@@ -22,8 +25,14 @@ _PROMPTS_DIR = os.path.join(
     "prompts"
 )
 
+# examples 目录路径
+_EXAMPLES_DIR = os.path.join(_PROMPTS_DIR, "examples")
+
 # 缓存
 _cache: dict[str, dict[str, str]] = {}
+
+# 示例缓存
+_examples_cache: dict[str, str] = {}
 
 
 def load(agent_name: str) -> dict[str, str]:
@@ -63,6 +72,33 @@ def _parse_sections(content: str) -> dict[str, str]:
     return sections
 
 
+def _load_example(example_name: str) -> str:
+    """加载示例 JSON 文件并格式化为字符串"""
+    if example_name in _examples_cache:
+        return _examples_cache[example_name]
+
+    example_path = os.path.join(_EXAMPLES_DIR, f"{example_name}.json")
+    if not os.path.isfile(example_path):
+        return f"{{{{示例文件不存在: {example_name}.json}}}}"
+
+    with open(example_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = json.dumps(data, ensure_ascii=False, indent=2)
+    _examples_cache[example_name] = result
+    return result
+
+
+def resolve_examples(text: str) -> str:
+    """替换文本中的 {{example:xxx}} 模板变量"""
+    def replace_match(match):
+        example_name = match.group(1).strip()
+        return _load_example(example_name)
+
+    return re.sub(r'\{\{example:(\w+)\}\}', replace_match, text)
+
+
 def clear_cache():
     """清除缓存"""
     _cache.clear()
+    _examples_cache.clear()

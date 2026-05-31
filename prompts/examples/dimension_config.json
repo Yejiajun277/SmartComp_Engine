@@ -1,0 +1,19 @@
+{
+  "product_category": {
+    "level1": "一级品类",
+    "level2": "二级品类"
+  },
+  "product_sub_dimensions": [
+    {
+      "name": "竞品名称",
+      "description": "描述"
+    }
+  ],
+  "pricing_sub_dimensions": [
+    {
+      "name": "竞品名称",
+      "description": "描述"
+    }
+  ],
+  "reasoning": "推断理由"
+}

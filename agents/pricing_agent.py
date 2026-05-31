@@ -75,7 +75,12 @@ class PricingAgent(BaseAgent):
         for name, data in competitors_data.items():
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
-            lines.append(f"- 定价信息: {data.pricing_info[:300]}")
+            # 结构化定价信息
+            if data.pricing_tiers:
+                pricing_text = "; ".join([f"{pt.tier_name}: {pt.price}" for pt in data.pricing_tiers])
+                lines.append(f"- 定价信息: {pricing_text[:300]}")
+            else:
+                lines.append("- 定价信息: 暂无数据")
             lines.append(f"- 优势: {data.strengths[:200]}")
             lines.append(f"- 劣势: {data.weaknesses[:200]}")
             if data.citations:
@@ -113,9 +118,18 @@ class PricingAgent(BaseAgent):
         import re
         pricing_comparison = []
         for name, data in competitors_data.items():
+            # 从结构化定价层级提取免费版信息
+            free_tier = "未知"
+            if data.pricing_tiers:
+                for pt in data.pricing_tiers:
+                    if "免费" in pt.tier_name or "free" in pt.tier_name.lower():
+                        free_tier = f"{pt.tier_name}: {pt.price}"
+                        break
+                if free_tier == "未知" and data.pricing_tiers:
+                    free_tier = f"{data.pricing_tiers[0].tier_name}: {data.pricing_tiers[0].price}"
             pricing_comparison.append(PricingItem(
                 competitor=name,
-                free_tier=data.pricing_info[:100] if data.pricing_info else "未知",
+                free_tier=free_tier,
                 paid_tier="",
                 pricing_model="",
             ))

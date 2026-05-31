@@ -1,0 +1,9 @@
+{
+  "competitor": "竞品名称",
+  "free_tier": "免费版内容",
+  "paid_tier": "付费版内容",
+  "pricing_model": "定价模型",
+  "citations": [
+    "citations示例1"
+  ]
+}

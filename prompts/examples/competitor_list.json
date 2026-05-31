@@ -1,0 +1,15 @@
+{
+  "product_name": "产品名称",
+  "product_category": "产品类别",
+  "competitors": [
+    {
+      "name": "竞品名称",
+      "brief": "简要描述",
+      "relevance": "HIGH"
+    }
+  ],
+  "search_keywords_used": [
+    "关键词1",
+    "关键词2"
+  ]
+}
