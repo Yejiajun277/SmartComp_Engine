@@ -155,11 +155,23 @@ class UserReputation:
 
 
 @dataclass
+class UserProfile:
+    """用户画像 — 目标用户群体特征"""
+    target_audience: str = ""               # 目标用户群体描述
+    age_range: str = ""                     # 年龄分布
+    occupation_distribution: list[str] = field(default_factory=list)  # 职业分布
+    use_cases: list[str] = field(default_factory=list)    # 使用场景
+    pain_points: list[str] = field(default_factory=list)  # 核心痛点
+    citations: list[str] = field(default_factory=list)    # 引用 ID 列表
+
+
+@dataclass
 class MarketAnalysis:
     """市场分析结果"""
     market_share_data: list[MarketShareItem] = field(default_factory=list)
     growth_trends: str = ""
     user_reputation: dict[str, UserReputation] = field(default_factory=dict)
+    user_profiles: dict[str, UserProfile] = field(default_factory=dict)  # 用户画像（新增）
     channel_analysis: str = ""
     summary: str = ""
     citations: list[str] = field(default_factory=list)     # 汇总引用 ID

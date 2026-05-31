@@ -719,11 +719,41 @@ class StrategyAgent(BaseAgent):
                     <div style="display:flex;gap:12px;flex-wrap:wrap;">{rep_cards}</div>
                 </div>'''
 
+            # 用户画像
+            profiles_html = ""
+            if market_analysis.user_profiles:
+                profile_cards = ""
+                for name, profile in market_analysis.user_profiles.items():
+                    occ_tags = ""
+                    for occ in (profile.occupation_distribution or [])[:4]:
+                        occ_tags += f'<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(occ)}</span>'
+                    use_tags = ""
+                    for uc in (profile.use_cases or [])[:4]:
+                        use_tags += f'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(uc)}</span>'
+                    pain_tags = ""
+                    for pp in (profile.pain_points or [])[:4]:
+                        pain_tags += f'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(pp)}</span>'
+                    profile_cards += f'''
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:250px;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;">{esc(name)}{cite_sup(profile.citations)}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>目标用户：</strong>{esc(profile.target_audience) if profile.target_audience else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>年龄分布：</strong>{esc(profile.age_range) if profile.age_range else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>职业分布：</strong>{occ_tags if occ_tags else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>使用场景：</strong>{use_tags if use_tags else '—'}</div>
+                        <div style="font-size:13px;"><strong>核心痛点：</strong>{pain_tags if pain_tags else '—'}</div>
+                    </div>'''
+                profiles_html = f'''
+                <div style="margin-top:20px;">
+                    <h3 style="font-size:16px;color:#475569;margin-bottom:12px;">🎯 用户画像</h3>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">{profile_cards}</div>
+                </div>'''
+
             market_html = f'''
             <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
                 <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📈 市场格局分析</h2>
                 {share_bars}
                 {reputation_html}
+                {profiles_html}
                 {'<div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;"><strong>增长趋势：</strong>' + esc(market_analysis.growth_trends) + '</div>' if market_analysis.growth_trends else ''}
                 {'<div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;"><strong>渠道分析：</strong>' + esc(market_analysis.channel_analysis) + '</div>' if market_analysis.channel_analysis else ''}
             </div>'''

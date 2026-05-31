@@ -9,7 +9,7 @@ LLM调用：1次
 """
 
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorData, MarketAnalysis, MarketShareItem, UserReputation
+from models.domain import CompetitorData, MarketAnalysis, MarketShareItem, UserReputation, UserProfile
 from core.prompt_loader import load as load_prompts
 import config
 import json
@@ -97,10 +97,24 @@ class MarketAgent(BaseAgent):
                 citations=rep_cites,
             )
 
+        user_profiles = {}
+        for name, profile in result.get("user_profiles", {}).items():
+            profile_cites = self.extract_citation_ids(profile)
+            all_citation_ids.extend(profile_cites)
+            user_profiles[name] = UserProfile(
+                target_audience=profile.get("target_audience", ""),
+                age_range=profile.get("age_range", ""),
+                occupation_distribution=profile.get("occupation_distribution", []),
+                use_cases=profile.get("use_cases", []),
+                pain_points=profile.get("pain_points", []),
+                citations=profile_cites,
+            )
+
         return MarketAnalysis(
             market_share_data=market_share_data,
             growth_trends=result.get("growth_trends", ""),
             user_reputation=user_reputation,
+            user_profiles=user_profiles,
             channel_analysis=result.get("channel_analysis", ""),
             summary=result.get("summary", ""),
             citations=list(set(all_citation_ids)),
