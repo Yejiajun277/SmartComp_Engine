@@ -205,6 +205,12 @@ class MarketAgent(BaseAgent):
         for name, data in competitors_data.items():
             lines.append(f"\n### {name}")
             lines.append(f"- 市场份额/规模: {data.market_share[:1000]}")
+            if data.evidence_digest:
+                lines.append(f"- 综合证据画像: {data.evidence_digest[:700]}")
+            if data.evidence_quality_notes:
+                lines.append(f"- 证据质量提示: {data.evidence_quality_notes[:500]}")
+            if data.unresolved_conflicts:
+                lines.append(f"- 未消解冲突: {data.unresolved_conflicts[:500]}")
             lines.append(f"- 用户口碑: {data.user_reviews[:900]}")
             lines.append(f"- 渠道/生态: {data.channels[:900]}")
             lines.append(f"- 产品与优势: {(data.product_features + ' ' + data.strengths)[:600]}")

@@ -43,6 +43,17 @@ PROFILE_FIELDS = (
     "reputation_weaknesses",
 )
 
+SYNTHESIS_FIELDS = (
+    "product_features",
+    "pricing_info",
+    "market_share",
+    "user_reviews",
+    "channels",
+    "evidence_digest",
+    "evidence_quality_notes",
+    "unresolved_conflicts",
+)
+
 SOURCE_QUALITY_CONFIDENCE = {
     "official": 0.9,
     "media": 0.76,
@@ -62,6 +73,14 @@ SOURCE_QUALITY_PRIORITY = {
 }
 
 QUALITY_LEVELS = ("official", "media", "community", "complaint", "aggregator", "low_quality")
+
+OFFICIAL_HOSTS_BY_COMPETITOR = {
+    "钉钉": ("dingtalk.com", "ding.cn"),
+    "企业微信": ("wecom.tencent.com", "work.weixin.qq.com"),
+    "WPS 365": ("wps.cn", "kingsoft.com"),
+    "WPS": ("wps.cn", "kingsoft.com"),
+    "飞书": ("feishu.cn", "larksuite.com"),
+}
 WEAKNESS_TOKENS = ("不足", "问题", "投诉", "限制", "复杂", "门槛", "偏贵", "缺少", "不支持", "续航焦虑")
 
 
@@ -74,6 +93,7 @@ class CollectionAgent(BaseAgent):
         )
         self._prompt_collect = prompts["prompt_collect"]
         self._prompt_profile = prompts["prompt_profile"]
+        self._prompt_synthesis = prompts["prompt_synthesis"]
         self.search_client = SearchClient()
         self._source_quality_profiles = self._load_source_quality_profiles()
 
@@ -140,6 +160,9 @@ class CollectionAgent(BaseAgent):
         task: ResearchTask,
         retry_count: int,
     ) -> tuple[ResearchEvidence, EvidenceBundle]:
+        if not config.ENABLE_LLM:
+            return self._offline_rule_task(product_description, task)
+
         last_error = ""
         result = None
         for _ in range(2):
@@ -152,7 +175,7 @@ class CollectionAgent(BaseAgent):
         text = SearchClient.extract_text(result) if result else ""
         refs = SearchClient.extract_references(result) if result else []
         citations = self._build_citations(task, refs)
-        summary = self._summarize_task(product_description, task, text)
+        summary = self._summarize_task(product_description, task, text, citations)
         key_facts = self._extract_key_facts(summary, text)
         evidence_quotes = self._extract_evidence_quotes(citations)
         source_quality = self._pick_source_quality(citations)
@@ -182,7 +205,43 @@ class CollectionAgent(BaseAgent):
         )
         return evidence, bundle
 
-    def _summarize_task(self, product_description: str, task: ResearchTask, text: str) -> str:
+    @staticmethod
+    def _offline_rule_task(
+        product_description: str,
+        task: ResearchTask,
+    ) -> tuple[ResearchEvidence, EvidenceBundle]:
+        summary = (
+            f"规则模式未联网采集。该任务用于验证流程结构："
+            f"{task.competitor} / {task.topic} / {product_description}。"
+        )
+        evidence = ResearchEvidence(
+            competitor=task.competitor,
+            topic=task.topic,
+            summary=summary,
+            raw_text=summary,
+            citations=[],
+            error="offline_rule_mode",
+        )
+        bundle = EvidenceBundle(
+            competitor=task.competitor,
+            topic=task.topic,
+            summary=summary,
+            raw_text=summary,
+            key_facts=[summary],
+            evidence_quotes=[],
+            source_quality="low_quality",
+            coverage_status="partial",
+            task_id=task.id,
+        )
+        return evidence, bundle
+
+    def _summarize_task(
+        self,
+        product_description: str,
+        task: ResearchTask,
+        text: str,
+        citations: list[Citation],
+    ) -> str:
         trimmed = text[:5000]
         if not trimmed:
             return ""
@@ -192,6 +251,7 @@ class CollectionAgent(BaseAgent):
                 product_description=product_description,
                 competitor_name=task.competitor,
                 search_results=trimmed,
+                source_quality_context=self._source_quality_context(citations),
             )
             parsed = self.ask_llm_json(prompt, max_tokens=2048)
             value = parsed.get(TOPIC_FIELD_MAP.get(task.topic, ""), "")
@@ -209,7 +269,7 @@ class CollectionAgent(BaseAgent):
             url = str(item.get("url", "")).strip()
             title = str(item.get("title", "")).strip() or f"{task.competitor}-{task.topic}-{index}"
             snippet = str(item.get("summary") or item.get("content") or item.get("snippet") or "").strip()
-            quality = self._infer_source_quality(url, title)
+            quality = self._infer_source_quality(url, title, task.competitor)
             citations.append(
                 Citation(
                     id=f"{task.id}:citation:{index}",
@@ -232,6 +292,7 @@ class CollectionAgent(BaseAgent):
         sources = [citation.url for bundle in bundles for citation in bundle.citations if citation.url]
         empty_bundle = EvidenceBundle(competitor=competitor, topic="")
         profile = self._summarize_competitor_profile(competitor, topic_map)
+        synthesis = self._synthesize_competitor_data(competitor, topic_map)
         product_strengths = profile.get("product_strengths", "")
         channel_strengths = profile.get("channel_strengths", "")
         reputation_strengths = profile.get("reputation_strengths", "")
@@ -240,10 +301,13 @@ class CollectionAgent(BaseAgent):
 
         return CompetitorData(
             name=competitor,
-            product_features=topic_map.get("product_features", empty_bundle).summary,
-            pricing_info=topic_map.get("pricing_info", empty_bundle).summary,
-            market_share=topic_map.get("market_share", empty_bundle).summary,
-            user_reviews=topic_map.get("user_reviews", empty_bundle).summary,
+            product_features=synthesis.get("product_features") or topic_map.get("product_features", empty_bundle).summary,
+            pricing_info=synthesis.get("pricing_info") or topic_map.get("pricing_info", empty_bundle).summary,
+            market_share=synthesis.get("market_share") or topic_map.get("market_share", empty_bundle).summary,
+            user_reviews=synthesis.get("user_reviews") or topic_map.get("user_reviews", empty_bundle).summary,
+            evidence_digest=synthesis.get("evidence_digest", ""),
+            evidence_quality_notes=synthesis.get("evidence_quality_notes", ""),
+            unresolved_conflicts=synthesis.get("unresolved_conflicts", ""),
             product_strengths=product_strengths,
             channel_strengths=channel_strengths,
             reputation_strengths=reputation_strengths,
@@ -251,10 +315,42 @@ class CollectionAgent(BaseAgent):
             reputation_weaknesses=reputation_weaknesses,
             strengths=product_strengths,
             weaknesses=product_weaknesses or reputation_weaknesses,
-            channels=topic_map.get("channels", empty_bundle).summary,
+            channels=synthesis.get("channels") or topic_map.get("channels", empty_bundle).summary,
             search_sources=sources,
             research_evidence=evidence_items,
         )
+
+    def _synthesize_competitor_data(
+        self,
+        competitor: str,
+        topic_map: dict[str, EvidenceBundle],
+    ) -> dict[str, str]:
+        fallback = {
+            "product_features": self._fallback_topic_summary(topic_map.get("product_features")),
+            "pricing_info": self._fallback_topic_summary(topic_map.get("pricing_info")),
+            "market_share": self._fallback_topic_summary(topic_map.get("market_share")),
+            "user_reviews": self._fallback_topic_summary(topic_map.get("user_reviews")),
+            "channels": self._fallback_topic_summary(topic_map.get("channels")),
+            "evidence_digest": self._fallback_evidence_digest(topic_map),
+            "evidence_quality_notes": self._fallback_quality_notes(topic_map),
+            "unresolved_conflicts": "",
+        }
+        if not config.ENABLE_LLM:
+            return fallback
+
+        prompt = self._prompt_synthesis.format(
+            competitor_name=competitor,
+            topic_evidence_text=self._topic_evidence_text(topic_map),
+        )
+        parsed = self.ask_llm_json(prompt, max_tokens=2200)
+        if not parsed:
+            return fallback
+
+        result: dict[str, str] = {}
+        for field in SYNTHESIS_FIELDS:
+            value = str(parsed.get(field, "")).strip()
+            result[field] = self._compact_synthesis_field(value, fallback[field])
+        return result
 
     def _summarize_competitor_profile(
         self,
@@ -305,6 +401,18 @@ class CollectionAgent(BaseAgent):
             if len(picked) >= 4:
                 break
         return " ".join(picked)
+
+    @staticmethod
+    def _compact_synthesis_field(text: str, fallback: str = "") -> str:
+        sentences = CollectionAgent._split_sentences(text)
+        picked: list[str] = []
+        for sentence in sentences:
+            cleaned = CollectionAgent._trim_sentence(sentence, 120)
+            if cleaned and cleaned not in picked:
+                picked.append(cleaned)
+            if len(picked) >= 5:
+                break
+        return " ".join(picked) or fallback
 
     @staticmethod
     def _fallback_summary(text: str) -> str:
@@ -361,18 +469,23 @@ class CollectionAgent(BaseAgent):
         )
         return ranked[0] if ranked else "aggregator"
 
-    def _infer_source_quality(self, url: str, title: str) -> str:
+    def _infer_source_quality(self, url: str, title: str, competitor: str = "") -> str:
         host = urlparse(url).netloc.lower()
         title_lower = (title or "").lower()
         default_profile = self._source_quality_profiles.get("default", {})
 
-        for quality in QUALITY_LEVELS:
+        if self._is_competitor_official_host(host, competitor):
+            if any(token in host for token in ("forum.", "bbs.", "community", "blog.")):
+                return "community"
+            return "official"
+
+        for quality in ("low_quality", "complaint", "community", "aggregator", "media"):
             tokens = default_profile.get(quality) or []
             if self._match_host_tokens(host, tokens):
                 return quality
 
         if any(token in host for token in ("gov.cn", "edu.cn")):
-            return "official"
+            return "media"
         if any(token in host for token in ("zhihu.com", "xiaohongshu.com", "weibo.com", "reddit.com")):
             return "community"
         if any(token in host for token in ("315", "tousu", "heimao", "blackcat")) or "投诉" in title_lower:
@@ -386,6 +499,13 @@ class CollectionAgent(BaseAgent):
     @staticmethod
     def _match_host_tokens(host: str, tokens: list[str]) -> bool:
         return any(token and token in host for token in tokens)
+
+    @staticmethod
+    def _is_competitor_official_host(host: str, competitor: str) -> bool:
+        for name, tokens in OFFICIAL_HOSTS_BY_COMPETITOR.items():
+            if name in competitor:
+                return any(token in host for token in tokens)
+        return False
 
     @staticmethod
     def _load_source_quality_profiles() -> dict[str, dict[str, list[str]]]:
@@ -433,3 +553,53 @@ class CollectionAgent(BaseAgent):
         if cleaned in {"暂无数据", "待验证"}:
             return cleaned
         return cleaned
+
+    @staticmethod
+    def _source_quality_context(citations: list[Citation]) -> str:
+        if not citations:
+            return "无可用来源。"
+        lines = []
+        for citation in citations[:6]:
+            lines.append(
+                f"- [{citation.id}] quality={citation.source_quality}, confidence={citation.confidence:.2f}, "
+                f"title={citation.title}, snippet={citation.snippet[:120]}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _topic_evidence_text(topic_map: dict[str, EvidenceBundle]) -> str:
+        lines: list[str] = []
+        for topic in TOPIC_FIELD_MAP:
+            bundle = topic_map.get(topic)
+            if not bundle:
+                lines.append(f"## {topic}\n暂无数据")
+                continue
+            lines.append(f"## {topic}")
+            lines.append(f"summary: {bundle.summary}")
+            if bundle.key_facts:
+                lines.append("key_facts: " + "；".join(bundle.key_facts[:5]))
+            if bundle.evidence_quotes:
+                lines.append("quotes: " + "；".join(bundle.evidence_quotes[:3]))
+            source_lines = [
+                f"[{citation.id}] {citation.source_quality}/{citation.confidence:.2f} {citation.title}: {citation.snippet[:160]}"
+                for citation in bundle.citations[:5]
+            ]
+            if source_lines:
+                lines.append("sources:\n" + "\n".join(source_lines))
+        return "\n".join(lines)[:9000]
+
+    def _fallback_evidence_digest(self, topic_map: dict[str, EvidenceBundle]) -> str:
+        parts = []
+        for topic in TOPIC_FIELD_MAP:
+            summary = self._fallback_topic_summary(topic_map.get(topic))
+            if summary:
+                parts.append(f"{topic}: {summary}")
+        return " ".join(parts)
+
+    @staticmethod
+    def _fallback_quality_notes(topic_map: dict[str, EvidenceBundle]) -> str:
+        qualities = []
+        for topic, bundle in topic_map.items():
+            if bundle:
+                qualities.append(f"{topic}={bundle.source_quality}")
+        return "；".join(qualities)

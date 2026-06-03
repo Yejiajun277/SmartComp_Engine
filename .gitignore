@@ -2,7 +2,7 @@
 output/
 .langgraph_api/
 pytest-cache-files-*/
-tests/
+tests/__pycache__/
 __pycache__/
 *.py[cod]
 .python-version

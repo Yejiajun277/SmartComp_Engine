@@ -271,6 +271,12 @@ class ProductAgent(BaseAgent):
         for name, data in competitors_data.items():
             lines.append(f"\n### {name}")
             lines.append(f"- 产品功能: {data.product_features[:900]}")
+            if data.evidence_digest:
+                lines.append(f"- 综合证据画像: {data.evidence_digest[:700]}")
+            if data.evidence_quality_notes:
+                lines.append(f"- 证据质量提示: {data.evidence_quality_notes[:500]}")
+            if data.unresolved_conflicts:
+                lines.append(f"- 未消解冲突: {data.unresolved_conflicts[:500]}")
             lines.append(f"- 优势: {data.strengths[:400]}")
             lines.append(f"- 劣势: {data.weaknesses[:400]}")
             lines.append(f"- 定价: {data.pricing_info[:500]}")

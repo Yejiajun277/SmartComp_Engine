@@ -30,11 +30,44 @@ class DiscoveryAgent(BaseAgent):
         product_description: str,
         max_competitors: int = config.DEFAULT_COMPETITOR_COUNT,
     ) -> CompetitorList:
+        if not config.ENABLE_LLM:
+            competitor_list = self._rule_discover(product_description, max_competitors)
+            self._log(f"发现竞品 {len(competitor_list.competitors)} 个")
+            return competitor_list
+
         keywords = self._generate_keywords(product_description)
         search_results = self.search_client.batch_search(keywords)
         competitor_list = self._filter_competitors(product_description, search_results, max_competitors)
         self._log(f"发现竞品 {len(competitor_list.competitors)} 个")
         return competitor_list
+
+    @staticmethod
+    def _rule_discover(product_description: str, max_competitors: int) -> CompetitorList:
+        text = product_description.lower()
+        if "飞书" in product_description or "lark" in text:
+            competitors = [
+                CompetitorInfo(name="钉钉", brief="企业协同办公与组织管理平台", relevance="HIGH"),
+                CompetitorInfo(name="企业微信", brief="企业通讯、客户连接与协同办公平台", relevance="HIGH"),
+                CompetitorInfo(name="Notion", brief="文档、知识库与轻量项目协作平台", relevance="MEDIUM"),
+                CompetitorInfo(name="Slack", brief="团队沟通与工作流协作平台", relevance="MEDIUM"),
+            ]
+            return CompetitorList(
+                product_name=product_description,
+                product_category="企业协同办公平台",
+                competitors=competitors[:max_competitors],
+                search_keywords_used=[],
+            )
+
+        competitors = [
+            CompetitorInfo(name=f"竞品{i + 1}", brief="规则模式占位竞品，需联网或人工补充验证。", relevance="LOW")
+            for i in range(min(max_competitors, 3))
+        ]
+        return CompetitorList(
+            product_name=product_description,
+            product_category="待识别",
+            competitors=competitors,
+            search_keywords_used=[],
+        )
 
     def _generate_keywords(self, product_description: str) -> list[str]:
         if config.ENABLE_LLM:

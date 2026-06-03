@@ -84,6 +84,7 @@ async def run_analysis_graph(
         "use_llm": use_llm,
         "competitors_data": {},
         "logs": [],
+        "agent_messages": [],
         "timing_records": [],
     }
     return await graph.ainvoke(state)

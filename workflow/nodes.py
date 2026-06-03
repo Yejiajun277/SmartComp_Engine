@@ -17,7 +17,6 @@ from models.domain import (
     CompetitorList,
     CompetitorData,
     EvidenceBundle,
-    MessageEnvelope,
     QAIssue,
     ResearchCoverage,
     ResearchEvidence,
@@ -25,6 +24,7 @@ from models.domain import (
     now_iso,
     to_dict,
 )
+from models.schema import AgentRole, PayloadType, build_agent_message_from_domain
 from workflow.state import AnalysisState
 
 
@@ -105,6 +105,7 @@ class WorkflowNodes:
                 "report_dir": str(dirs["report"]),
             },
             "timings": {},
+            "agent_messages": [],
             "llm_logs": [],
             "error": None,
             "logs": [{"node": "init_context", "status": "success", "run_id": run_id}],
@@ -127,6 +128,13 @@ class WorkflowNodes:
             state["max_competitors"],
         )
         write_artifact(state["run_id"], "competitor_list", to_dict(competitor_list))
+        message = self._schema_message(
+            state=state,
+            sender=AgentRole.DiscoveryAgent,
+            receiver=AgentRole.ResearchPlannerAgent,
+            payload_type=PayloadType.COMPETITOR_LIST,
+            payload=competitor_list,
+        )
         self._persist_trace(
             run_id=state["run_id"],
             node="discover_competitors",
@@ -139,6 +147,7 @@ class WorkflowNodes:
         )
         return {
             "competitor_list": competitor_list,
+            "agent_messages": [message],
             "timing_records": [{"name": "discovery", "duration": time.time() - start}],
             "logs": [
                 {
@@ -169,6 +178,13 @@ class WorkflowNodes:
         )
         tasks = self._filter_retry_tasks(tasks, state.get("qa_issues", []), state.get("retry_count", 0))
         write_artifact(state["run_id"], "research_tasks", to_dict(tasks))
+        message = self._schema_message(
+            state=state,
+            sender=AgentRole.ResearchPlannerAgent,
+            receiver=AgentRole.CollectionAgent,
+            payload_type=PayloadType.RESEARCH_TASKS,
+            payload=tasks,
+        )
         self._persist_trace(
             run_id=state["run_id"],
             node="plan_research",
@@ -181,6 +197,7 @@ class WorkflowNodes:
         )
         return {
             "research_tasks": tasks,
+            "agent_messages": [message],
             "timing_records": [{"name": "research_plan", "duration": time.time() - start}],
             "logs": [{"node": "plan_research", "status": "success", "task_count": len(tasks)}],
         }
@@ -200,6 +217,34 @@ class WorkflowNodes:
         write_artifact(state["run_id"], "competitors_data", to_dict(result["competitors_data"]))
         write_artifact(state["run_id"], "evidence_bundles", to_dict(result["evidence_bundles"]))
         write_artifact(state["run_id"], "research_coverage", to_dict(result["research_coverage"]))
+        messages = [
+            self._schema_message(
+                state=state,
+                sender=AgentRole.CollectionAgent,
+                receiver=receiver,
+                payload_type=PayloadType.EVIDENCE_BUNDLES,
+                payload=result["evidence_bundles"],
+            )
+            for receiver in (AgentRole.ProductAgent, AgentRole.PricingAgent, AgentRole.MarketAgent)
+        ]
+        messages.extend(
+            [
+                self._schema_message(
+                    state=state,
+                    sender=AgentRole.CollectionAgent,
+                    receiver=AgentRole.Orchestrator,
+                    payload_type=PayloadType.COMPETITORS_DATA,
+                    payload=result["competitors_data"],
+                ),
+                self._schema_message(
+                    state=state,
+                    sender=AgentRole.CollectionAgent,
+                    receiver=AgentRole.QualityAgent,
+                    payload_type=PayloadType.RESEARCH_COVERAGE,
+                    payload=result["research_coverage"],
+                ),
+            ]
+        )
         self._persist_trace(
             run_id=state["run_id"],
             node="collect_competitor_data",
@@ -215,6 +260,7 @@ class WorkflowNodes:
             "research_evidence": result["research_evidence"],
             "research_coverage": result["research_coverage"],
             "evidence_bundles": result["evidence_bundles"],
+            "agent_messages": messages,
             "timing_records": [{"name": "collection", "duration": time.time() - start}],
             "logs": [
                 {
@@ -264,6 +310,7 @@ class WorkflowNodes:
             competitor_count=len(state.get("competitor_list").competitors) if state.get("competitor_list") else 0,
             competitor_names=self._competitor_names(state),
             evidence_bundles=state.get("evidence_bundles", {}),
+            competitors_data=state.get("competitors_data", {}),
         )
         issues = result["issues"]
         decision = result["next_action"]
@@ -271,6 +318,22 @@ class WorkflowNodes:
         retry_count = state.get("retry_count", 0)
         current_round = qa_round + 1
         write_artifact(state["run_id"], f"qa_issues_round_{current_round}", to_dict(issues))
+        messages = [
+            self._schema_message(
+                state=state,
+                sender=AgentRole.QualityAgent,
+                receiver=AgentRole.Orchestrator,
+                payload_type=PayloadType.QA_RESULT,
+                payload=result,
+            ),
+            self._schema_message(
+                state=state,
+                sender=AgentRole.QualityAgent,
+                receiver=AgentRole.Orchestrator,
+                payload_type=PayloadType.QA_ISSUES,
+                payload=issues,
+            ),
+        ]
         if decision in {"redo_collection", "redo_analysis"}:
             qa_round += 1
             retry_count += 1
@@ -292,6 +355,7 @@ class WorkflowNodes:
             "qa_issues": issues,
             "qa_decision": decision,
             "qa_issue_count": len(issues),
+            "agent_messages": messages,
             "qa_round": qa_round,
             "retry_count": retry_count,
             "timing_records": [{"name": "quality_gate", "duration": time.time() - start}],
@@ -318,6 +382,15 @@ class WorkflowNodes:
                 state.get("competitors_data", {}),
             )
             payload["product_analysis"] = self._sanitize_analysis("product", payload["product_analysis"], state)
+            payload.setdefault("agent_messages", []).append(
+                self._schema_message(
+                    state=state,
+                    sender=AgentRole.ProductAgent,
+                    receiver=AgentRole.QualityAgent,
+                    payload_type=PayloadType.PRODUCT_ANALYSIS,
+                    payload=payload["product_analysis"],
+                )
+            )
         if "PricingAgent" in targets:
             payload["pricing_analysis"] = await self.agents.pricing_agent.run(
                 self._resolve_product_name(state),
@@ -325,6 +398,15 @@ class WorkflowNodes:
                 state.get("competitors_data", {}),
             )
             payload["pricing_analysis"] = self._sanitize_analysis("pricing", payload["pricing_analysis"], state)
+            payload.setdefault("agent_messages", []).append(
+                self._schema_message(
+                    state=state,
+                    sender=AgentRole.PricingAgent,
+                    receiver=AgentRole.QualityAgent,
+                    payload_type=PayloadType.PRICING_ANALYSIS,
+                    payload=payload["pricing_analysis"],
+                )
+            )
         if "MarketAgent" in targets:
             payload["market_analysis"] = await self.agents.market_agent.run(
                 self._resolve_product_name(state),
@@ -332,6 +414,15 @@ class WorkflowNodes:
                 state.get("competitors_data", {}),
             )
             payload["market_analysis"] = self._sanitize_analysis("market", payload["market_analysis"], state)
+            payload.setdefault("agent_messages", []).append(
+                self._schema_message(
+                    state=state,
+                    sender=AgentRole.MarketAgent,
+                    receiver=AgentRole.QualityAgent,
+                    payload_type=PayloadType.MARKET_ANALYSIS,
+                    payload=payload["market_analysis"],
+                )
+            )
         self._persist_trace(
             run_id=state["run_id"],
             node="redo_analysis",
@@ -367,6 +458,7 @@ class WorkflowNodes:
             pricing_analysis,
             market_analysis,
             state.get("evidence_bundles", {}),
+            state.get("competitors_data", {}),
         )
         report.run_id = state["run_id"]
         report.qa_issues = [
@@ -378,6 +470,13 @@ class WorkflowNodes:
         if report.qa_issues:
             report.status = "degraded"
         write_artifact(state["run_id"], "strategy_report", to_dict(report))
+        message = self._schema_message(
+            state=state,
+            sender=AgentRole.StrategyAgent,
+            receiver=AgentRole.Orchestrator,
+            payload_type=PayloadType.STRATEGY_REPORT,
+            payload=report,
+        )
         self._persist_trace(
             run_id=state["run_id"],
             node="build_strategy_report",
@@ -391,6 +490,7 @@ class WorkflowNodes:
         return {
             "report": report,
             "status": report.status,
+            "agent_messages": [message],
             "timing_records": [{"name": "strategy", "duration": time.time() - start}],
             "logs": [{"node": "build_strategy_report", "status": "success"}],
         }
@@ -497,9 +597,17 @@ class WorkflowNodes:
             status="empty",
             summary="未发现可用竞品，已生成空报告。",
         )
+        message = self._schema_message(
+            state=state,
+            sender=AgentRole.Orchestrator,
+            receiver=AgentRole.Orchestrator,
+            payload_type=PayloadType.STRATEGY_REPORT,
+            payload=report,
+        )
         return {
             "report": report,
             "status": "empty",
+            "agent_messages": [message],
             "logs": [{"node": "build_empty_report", "status": "success"}],
         }
 
@@ -547,6 +655,7 @@ class WorkflowNodes:
                 "final_status": state.get("status", report.status),
             }
             write_artifact(state["run_id"], "run_summary", trace_summary)
+            write_artifact(state["run_id"], "agent_messages", state.get("agent_messages", []))
         else:
             report_paths = {}
             trace_summary = state.get("trace_summary", {})
@@ -575,6 +684,23 @@ class WorkflowNodes:
             state.get("competitors_data", {}),
         )
         analysis = self._sanitize_analysis(dimension, analysis, state)
+        payload_type = {
+            "product": PayloadType.PRODUCT_ANALYSIS,
+            "pricing": PayloadType.PRICING_ANALYSIS,
+            "market": PayloadType.MARKET_ANALYSIS,
+        }[dimension]
+        sender = {
+            "product": AgentRole.ProductAgent,
+            "pricing": AgentRole.PricingAgent,
+            "market": AgentRole.MarketAgent,
+        }[dimension]
+        message = self._schema_message(
+            state=state,
+            sender=sender,
+            receiver=AgentRole.QualityAgent,
+            payload_type=payload_type,
+            payload=analysis,
+        )
         write_artifact(state["run_id"], dimension + "_analysis", to_dict(analysis))
         self._persist_trace(
             run_id=state["run_id"],
@@ -588,9 +714,28 @@ class WorkflowNodes:
         )
         return {
             f"{dimension}_analysis": analysis,
+            "agent_messages": [message],
             "timing_records": [{"name": timing_name, "duration": time.time() - start}],
             "logs": [{"node": node_name, "status": "success"}],
         }
+
+    @staticmethod
+    def _schema_message(
+        state: AnalysisState,
+        sender: AgentRole,
+        receiver: AgentRole,
+        payload_type: PayloadType,
+        payload: Any,
+    ) -> dict[str, Any]:
+        message = build_agent_message_from_domain(
+            run_id=state["run_id"],
+            sender=sender,
+            receiver=receiver,
+            payload_type=payload_type,
+            payload=payload,
+            retry_count=state.get("retry_count", 0),
+        )
+        return message.model_dump(mode="json")
 
     @staticmethod
     def _resolve_product_name(state: AnalysisState) -> str:

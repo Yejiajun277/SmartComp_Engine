@@ -51,8 +51,10 @@ class StrategyAgent(BaseAgent):
         pricing_analysis: PricingAnalysis,
         market_analysis: MarketAnalysis,
         evidence_bundles: dict[str, list[EvidenceBundle]] | None = None,
+        competitors_data: dict[str, CompetitorData] | None = None,
     ) -> StrategyReport:
         evidence_bundles = evidence_bundles or {}
+        competitors_data = competitors_data or {}
         merged_citations = self._merge_citations(
             product_analysis.citations,
             pricing_analysis.citations,
@@ -68,6 +70,7 @@ class StrategyAgent(BaseAgent):
                     pricing_analysis,
                     market_analysis,
                     evidence_bundles,
+                    competitors_data,
                 ),
             )
             result = self.ask_llm_json(prompt, max_tokens=4096)
@@ -188,8 +191,10 @@ class StrategyAgent(BaseAgent):
         pricing_analysis: PricingAnalysis,
         market_analysis: MarketAnalysis,
         evidence_bundles: dict[str, list[EvidenceBundle]],
+        competitors_data: dict[str, CompetitorData] | None = None,
     ) -> str:
         lines: list[str] = []
+        competitors_data = competitors_data or {}
 
         lines.append("## 一、产品分析")
         lines.append(f"摘要: {product_analysis.summary}")
@@ -236,9 +241,13 @@ class StrategyAgent(BaseAgent):
                     f"- {item.name}: {item.segment}; 需求={','.join(item.needs)}; "
                     f"抱怨={','.join(item.complaints)}; 渠道={','.join(item.preferred_channels)}"
                 )
+        competitor_synthesis = StrategyAgent._build_competitor_synthesis_snapshot(competitors_data)
+        if competitor_synthesis:
+            lines.append("\n## 四、竞品级证据综合画像")
+            lines.extend(competitor_synthesis)
         evidence_snapshot = StrategyAgent._build_evidence_snapshot(evidence_bundles)
         if evidence_snapshot:
-            lines.append("\n## 四、原始证据快照")
+            lines.append("\n## 五、原始证据快照")
             lines.extend(evidence_snapshot)
         return "\n".join(lines)
 
@@ -331,6 +340,20 @@ class StrategyAgent(BaseAgent):
                 if snapshot:
                     lines.append(f"- {snapshot}")
         return lines[:20]
+
+    @staticmethod
+    def _build_competitor_synthesis_snapshot(competitors_data: dict[str, CompetitorData]) -> list[str]:
+        lines: list[str] = []
+        for name, data in competitors_data.items():
+            parts = [
+                f"综合画像={data.evidence_digest}" if data.evidence_digest else "",
+                f"证据质量={data.evidence_quality_notes}" if data.evidence_quality_notes else "",
+                f"未消解冲突={data.unresolved_conflicts}" if data.unresolved_conflicts else "",
+            ]
+            text = " | ".join(part for part in parts if part)
+            if text:
+                lines.append(f"- {name}: {text[:1200]}")
+        return lines[:12]
 
     @staticmethod
     def _build_evidence_reference_text(evidence_bundles: dict[str, list[EvidenceBundle]]) -> str:
@@ -1025,6 +1048,7 @@ class StrategyAgent(BaseAgent):
                     citation_map,
                 ),
             ]
+            evidence_html = self._render_competitor_evidence_card(competitor_data)
 
             sections.append(
                 "<section>"
@@ -1040,7 +1064,8 @@ class StrategyAgent(BaseAgent):
                 "</tr></thead><tbody>"
                 + "".join(rows)
                 + "</tbody></table></div>"
-                '<div class="compare-grid">' + "".join(compare_cards) + "</div>"
+                + evidence_html
+                + '<div class="compare-grid">' + "".join(compare_cards) + "</div>"
                 "</section>"
             )
 
@@ -1757,6 +1782,31 @@ class StrategyAgent(BaseAgent):
             f'<div class="{tone_class}" style="font-weight:600;margin-bottom:8px;">{escape(title)}</div>'
             f"<div>{escape(text or '暂无')}</div>"
             f"{self.render_citation_links(citation_ids, citation_map, '（暂无直接引用）')}"
+            "</div>"
+        )
+
+    @staticmethod
+    def _render_competitor_evidence_card(competitor_data: CompetitorData | None) -> str:
+        if not competitor_data:
+            return ""
+        rows = [
+            ("综合证据画像", competitor_data.evidence_digest),
+            ("证据质量提示", competitor_data.evidence_quality_notes),
+            ("未消解冲突", competitor_data.unresolved_conflicts),
+        ]
+        body = "".join(
+            '<div class="section-note" style="margin-top:8px;">'
+            f"<strong>{escape(label)}：</strong>{escape(value)}"
+            "</div>"
+            for label, value in rows
+            if value
+        )
+        if not body:
+            return ""
+        return (
+            '<div class="card-soft" style="margin:14px 0;">'
+            '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">Agent 证据综合</div>'
+            f"{body}"
             "</div>"
         )
 

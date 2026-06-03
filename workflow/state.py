@@ -46,5 +46,6 @@ class AnalysisState(TypedDict, total=False):
     timings: dict[str, float]
     timing_records: Annotated[list[dict[str, float | str]], operator.add]
     logs: Annotated[list[dict[str, Any]], operator.add]
+    agent_messages: Annotated[list[dict[str, Any]], operator.add]
     llm_logs: list[dict[str, Any]]
     error: str | None

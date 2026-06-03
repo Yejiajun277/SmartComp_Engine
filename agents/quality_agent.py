@@ -11,6 +11,7 @@ from typing import Any
 from agents.base_agent import BaseAgent
 from core.prompt_loader import load as load_prompts
 from models.domain import (
+    CompetitorData,
     EvidenceBundle,
     MarketAnalysis,
     PricingAnalysis,
@@ -39,11 +40,13 @@ class QualityAgent(BaseAgent):
         competitor_count: int = 0,
         competitor_names: list[str] | None = None,
         evidence_bundles: dict[str, list[EvidenceBundle]] | None = None,
+        competitors_data: dict[str, CompetitorData] | None = None,
         max_rounds: int = 2,
     ) -> dict:
         issues: list[QAIssue] = []
         allowed_competitors = set(competitor_names or [])
         citation_ids = self._known_citation_ids(evidence_bundles or {})
+        competitors_data = competitors_data or {}
 
         if competitor_count < 3:
             issues.append(
@@ -202,6 +205,33 @@ class QualityAgent(BaseAgent):
                         related_ids=[f"{gap.competitor}:{gap.topic}"],
                     )
                 )
+
+        if allowed_competitors:
+            for name in sorted(allowed_competitors):
+                data = competitors_data.get(name)
+                if data is None:
+                    issues.append(
+                        QAIssue(
+                            issue_type="missing_competitor_synthesis",
+                            severity="high",
+                            target_agent="CollectionAgent",
+                            reason=f"{name} 缺少竞品级证据综合画像。",
+                            required_fix="采集后必须跨 topic 合并证据，输出 evidence_digest 和 evidence_quality_notes。",
+                            related_ids=[f"{name}:evidence_digest"],
+                        )
+                    )
+                    continue
+                if not data.evidence_digest or not data.evidence_quality_notes:
+                    issues.append(
+                        QAIssue(
+                            issue_type="missing_competitor_synthesis",
+                            severity="high",
+                            target_agent="CollectionAgent",
+                            reason=f"{name} 的证据综合不足，无法支撑后续 Agent 做自主整合。",
+                            required_fix="补齐 evidence_digest 和 evidence_quality_notes，不要只保留分 topic 摘要。",
+                            related_ids=[f"{name}:evidence_digest"],
+                        )
+                    )
 
         action = "pass"
         if issues:
