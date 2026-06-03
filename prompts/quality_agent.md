@@ -38,6 +38,13 @@
    - 标记为 supported / partially_supported / unsupported
    - 对 unsupported 的字段给出具体说明
 
+### 引用有效性检查
+检查以下引用 ID 是否在分析内容中被正确使用：
+对于每条采集数据中的 citation，判断：
+1. 该引用是否被用于支撑正确的论述
+2. 引用内容与论述是否匹配
+如果发现引用不匹配或错误使用，在 issues 中添加 category 为 "citation" 的条目。
+
 ### 输出格式
 ```json
 {{
@@ -81,6 +88,10 @@
    - 功能矩阵的标注是否有数据支撑
    - 优劣势描述是否有采集数据中的依据
    - 引用的 citation ID 是否与内容匹配
+
+3. **引用有效性**：
+   - 分析中引用的 citation ID 是否与采集数据中的引用匹配
+   - 引用内容是否支撑了对应的分析结论
 
 ### 输出格式
 同 prompt_check_collection 的输出格式。

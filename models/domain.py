@@ -43,6 +43,14 @@ class CitationIndex:
         return list(self.citations.values())
 
 
+class HallucinationCheckStatus(str, Enum):
+    """幻觉检测状态"""
+    PASSED = "passed"          # 检测完成，无幻觉
+    FOUND = "found"            # 检测完成，发现幻觉
+    FAILED = "failed"          # 检测失败（LLM 返回异常）
+    SKIPPED = "skipped"        # 未启用（规则引擎模式）
+
+
 class RelevanceLevel(Enum):
     """竞品相关性等级"""
     HIGH = "HIGH"       # 直接竞品
@@ -245,6 +253,8 @@ class QualityCheckResult:
     attempt: int = 1                    # 第几次检查
     degraded: bool = False              # 是否降级通过
     feedback_to_agent: str = ""         # 给被打回 Agent 的反馈消息
+    hallucination_status: str = "skipped"       # HallucinationCheckStatus 的值
+    hallucination_score: float = 100.0          # 幻觉检测独立分数
 
 
 @dataclass

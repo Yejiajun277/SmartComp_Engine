@@ -129,7 +129,8 @@ class Orchestrator:
         qa_attempt = 1
         while qa_attempt <= QualityAgent.MAX_RETRIES + 1:
             qa_collection = await self.quality_agent.check_collection(
-                competitors_data, original_search_texts, attempt=qa_attempt
+                competitors_data, original_search_texts,
+                competitor_list=competitor_list, attempt=qa_attempt
             )
             self.quality_agent.timeline.add_check(qa_collection)
 
@@ -179,13 +180,28 @@ class Orchestrator:
 
         product_name = competitor_list.product_name
 
+        # ── 构造降级警告（如有）──
+        degradation_warning = ""
+        if qa_collection.degraded:
+            critical_hallucinations = [
+                i for i in qa_collection.issues
+                if i.severity == "critical" and i.category == "hallucination"
+            ]
+            if critical_hallucinations:
+                degradation_warning = "⚠️ 上游采集数据存在以下幻觉嫌疑，请在分析时谨慎引用，优先使用有明确来源支撑的数据：\n"
+                for i in critical_hallucinations[:5]:
+                    degradation_warning += f"- {i.field}: {i.description}\n"
+
         # 并行执行三个分析Agent
         product_analysis, pricing_analysis, market_analysis = await asyncio.gather(
             self.product_agent.run(product_name, competitors_data,
-                                   sub_dimensions=product_sub_dims_text),
+                                   sub_dimensions=product_sub_dims_text,
+                                   feedback=degradation_warning),
             self.pricing_agent.run(product_name, competitors_data,
-                                   sub_dimensions=pricing_sub_dims_text),
-            self.market_agent.run(product_name, competitors_data),
+                                   sub_dimensions=pricing_sub_dims_text,
+                                   feedback=degradation_warning),
+            self.market_agent.run(product_name, competitors_data,
+                                  feedback=degradation_warning),
         )
 
         self.timings["parallel_analysis"] = time.time() - phase3_start

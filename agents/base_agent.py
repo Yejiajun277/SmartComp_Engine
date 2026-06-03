@@ -6,7 +6,7 @@ agents/base_agent.py — Agent基类
 """
 
 from abc import ABC, abstractmethod
-from core.llm_client import llm_call, parse_llm_json
+from core.llm_client import llm_call, parse_llm_json, get_last_call_error
 import config
 import json
 import re
@@ -67,6 +67,22 @@ class BaseAgent(ABC):
             else:
                 self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
         return {}
+
+    def ask_llm_json_with_reason(self, user_message: str,
+                                 temperature: float = None,
+                                 max_tokens: int = None) -> tuple[dict, str]:
+        """调用LLM并解析JSON返回，附带失败原因"""
+        text = self.ask_llm(user_message, temperature, max_tokens)
+        if text:
+            parsed = parse_llm_json(text)
+            if parsed:
+                return parsed, "success"
+            else:
+                reason = get_last_call_error() or "json_parse_error"
+                self._log(f"   ⚠️ LLM返回了文本但JSON解析失败: {reason}")
+                return {}, reason
+        reason = get_last_call_error() or "empty_response"
+        return {}, reason
 
     @staticmethod
     def build_citations_text(citations: list) -> str:
