@@ -1,0 +1,45 @@
+{
+  "name": "竞品名称",
+  "product_features": [
+    {
+      "name": "竞品名称",
+      "description": "描述",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "pricing_tiers": [
+    {
+      "tier_name": "层级名称（如免费版、基础版）",
+      "price": "价格",
+      "features": [
+        "包含功能1",
+        "包含功能2"
+      ],
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "market_share": "market_share示例值",
+  "user_reviews": "user_reviews示例值",
+  "strengths": "strengths示例值",
+  "weaknesses": "weaknesses示例值",
+  "channels": "channels示例值",
+  "search_sources": [
+    "search_sources示例1"
+  ],
+  "citations": [
+    {
+      "id": "id示例值",
+      "title": "title示例值",
+      "url": "url示例值",
+      "snippet": "snippet示例值",
+      "site_name": "site_name示例值",
+      "query": "query示例值",
+      "competitor": "竞品名称",
+      "collected_at": "collected_at示例值"
+    }
+  ]
+}
