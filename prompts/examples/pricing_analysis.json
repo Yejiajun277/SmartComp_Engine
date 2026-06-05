@@ -1,0 +1,22 @@
+{
+  "pricing_comparison": [
+    {
+      "competitor": "竞品名称",
+      "free_tier": "免费版内容",
+      "paid_tier": "付费版内容",
+      "pricing_model": "定价模型",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "pricing_strategy_analysis": "pricing_strategy_analysis示例值",
+  "value_ranking": [
+    "最高",
+    "第二"
+  ],
+  "summary": "分析摘要",
+  "citations": [
+    "citations示例1"
+  ]
+}

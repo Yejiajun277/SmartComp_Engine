@@ -1,0 +1,26 @@
+{
+  "product_name": "产品名称",
+  "competitor_count": 0,
+  "overall_positioning": "整体定位描述",
+  "differentiation_strategy": {},
+  "action_plan": [
+    {
+      "priority": "P0",
+      "action": "行动描述",
+      "timeline": "时间线",
+      "expected_impact": "预期效果",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "risk_assessment": "风险评估",
+  "product_analysis_summary": "product_analysis_summary示例值",
+  "pricing_analysis_summary": "pricing_analysis_summary示例值",
+  "market_analysis_summary": "market_analysis_summary示例值",
+  "summary": "分析摘要",
+  "raw_llm_logs": [],
+  "citation_index": {
+    "citations": {}
+  }
+}
