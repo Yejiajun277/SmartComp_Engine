@@ -5,8 +5,6 @@ core/search_client.py - 豆包联网搜索客户端
 
 import time
 
-import requests
-
 import config
 
 
@@ -31,6 +29,8 @@ class SearchClient:
         """
         if not self.api_key:
             raise RuntimeError("DOUBAO_API_KEY 未配置，无法执行联网搜索")
+
+        import requests
 
         api_url = f"{self.base_url}/responses"
         headers = {
@@ -68,6 +68,17 @@ class SearchClient:
         批量联网搜索，逐条调用并附带间隔，避免限流。
         每个结果项同时保留结构化 references 供引用溯源使用。
         """
+        if not config.ENABLE_LLM:
+            return [
+                {
+                    "query": q,
+                    "result": None,
+                    "references": [],
+                    "error": "规则引擎模式跳过联网搜索",
+                }
+                for q in queries
+            ]
+
         results = []
         total = len(queries)
         for i, q in enumerate(queries):

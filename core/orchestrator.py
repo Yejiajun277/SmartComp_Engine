@@ -11,13 +11,15 @@ core/orchestrator.py — 主控编排器（混合协作模式）
 
 import asyncio
 import time
-import json
+import os
+from datetime import datetime
 
 from models.domain import (
     CompetitorList, CompetitorData,
     ProductAnalysis, PricingAnalysis, MarketAnalysis,
     StrategyReport
 )
+from core.artifact_store import ArtifactStore
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
 from agents.dimension_agent import DimensionAgent
@@ -70,6 +72,9 @@ class Orchestrator:
         self.quality_agent = QualityAgent()
 
         self.timings: dict[str, float] = {}
+        self.artifact_store: ArtifactStore | None = None
+        self.run_dir: str = ""
+        self._run_meta: dict = {}
 
     async def analyze(self, product_description: str,
                       max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
@@ -84,6 +89,7 @@ class Orchestrator:
             StrategyReport: 完整策略建议报告
         """
         total_start = time.time()
+        self._start_artifacts(product_description, max_competitors)
 
         print("\n" + "═" * 65)
         print("  🔍 智能竞品分析多Agent系统")
@@ -104,10 +110,21 @@ class Orchestrator:
 
         print(f"\n  ⏱️ 发现耗时: {self.timings['discovery']:.2f}s")
         print(f"  📊 发现竞品: {len(competitor_list.competitors)}个")
+        self._save_artifact_json("01_competitor_list.json", competitor_list)
 
         if not competitor_list.competitors:
             print("  ⚠️ 未发现竞品，分析终止")
-            return StrategyReport(product_name=competitor_list.product_name)
+            report = StrategyReport(product_name=competitor_list.product_name)
+            self.timings["total"] = time.time() - total_start
+            report.raw_llm_logs = self._collect_llm_logs()
+            self._save_artifact_json("07_strategy_report.json", report)
+            self._save_artifact_json("llm_logs.json", report.raw_llm_logs)
+            self._finalize_artifacts(
+                status="stopped_no_competitors",
+                product_name=report.product_name,
+                competitor_count=0,
+            )
+            return report
 
         # ── Phase 2: 数据采集（串行，逐竞品）──
         print(f"\n{'█' * 65}")
@@ -151,6 +168,9 @@ class Orchestrator:
             qa_attempt += 1
 
         self.timings["qa_collection"] = time.time() - qa_start
+        self._save_artifact_json("02_competitors_data.json", competitors_data)
+        self._save_artifact_json("02_search_texts.json", original_search_texts)
+        self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)
 
         # ── Phase 2.5: 维度生成 ──
         phase2_5_start = time.time()
@@ -170,6 +190,7 @@ class Orchestrator:
         print(f"  📐 品类: {dim_config.product_category.level1}/{dim_config.product_category.level2}")
         print(f"  📋 产品子维度: {len(dim_config.product_sub_dimensions)}个")
         print(f"  📋 定价子维度: {len(dim_config.pricing_sub_dimensions)}个")
+        self._save_artifact_json("03_dimension_config.json", dim_config)
 
         # ── Phase 3: 三维并行分析（Fan-out）──
         print(f"\n{'█' * 65}")
@@ -262,6 +283,10 @@ class Orchestrator:
                 print(f"  ⚠️ {agent_name} 质检未通过，降级通过")
 
         self.timings["qa_analysis"] = time.time() - qa3_start
+        self._save_artifact_json("04_product_analysis.json", product_analysis)
+        self._save_artifact_json("05_pricing_analysis.json", pricing_analysis)
+        self._save_artifact_json("06_market_analysis.json", market_analysis)
+        self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)
 
         # ── Phase 4: 策略建议（Gather）──
         print(f"\n{'█' * 65}")
@@ -317,15 +342,14 @@ class Orchestrator:
         self.timings["total"] = time.time() - total_start
 
         # 附加LLM调用日志
-        report.raw_llm_logs = (
-            self.discovery_agent.llm_logs +
-            self.dimension_agent.llm_logs +
-            self.collection_agent.llm_logs +
-            self.product_agent.llm_logs +
-            self.pricing_agent.llm_logs +
-            self.market_agent.llm_logs +
-            self.strategy_agent.llm_logs +
-            self.quality_agent.llm_logs
+        report.raw_llm_logs = self._collect_llm_logs()
+        self._save_artifact_json("07_strategy_report.json", report)
+        self._save_artifact_json("qa_timeline.json", report.qa_timeline)
+        self._save_artifact_json("llm_logs.json", report.raw_llm_logs)
+        self._finalize_artifacts(
+            status="completed",
+            product_name=report.product_name,
+            competitor_count=report.competitor_count,
         )
 
         # 缓存三维分析数据（供HTML报告使用）
@@ -354,6 +378,74 @@ class Orchestrator:
         self._print_feature_matrix(product_name, product_analysis, competitor_list)
 
         return report
+
+    def _start_artifacts(self, product_description: str, max_competitors: int):
+        """初始化本次运行的归档目录和元信息。"""
+        output_root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "output",
+        )
+        self.artifact_store = ArtifactStore.create_for_product(
+            output_root, product_description
+        )
+        self.run_dir = str(self.artifact_store.run_dir)
+        self._run_meta = {
+            "status": "running",
+            "product_description": product_description,
+            "max_competitors": max_competitors,
+            "enable_llm": config.ENABLE_LLM,
+            "llm_provider": config.LLM_PROVIDER,
+            "doubao_model": config.DOUBAO_MODEL,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "ended_at": "",
+            "timings": {},
+            "output_files": [],
+        }
+        self._save_run_meta()
+
+    def _finalize_artifacts(self, status: str, product_name: str, competitor_count: int):
+        if not self.artifact_store:
+            return
+        self._run_meta.update({
+            "status": status,
+            "product_name": product_name,
+            "competitor_count": competitor_count,
+            "ended_at": datetime.now().isoformat(timespec="seconds"),
+            "timings": self.get_timings(),
+            "output_files": self.artifact_store.saved_files(),
+        })
+        self._save_run_meta()
+        print(f"  📦 运行归档: {self.run_dir}")
+
+    def update_artifact_meta(self):
+        """刷新 run_meta 中的文件清单，供入口保存最终报告后调用。"""
+        if not self.artifact_store:
+            return
+        self._run_meta.update({
+            "timings": self.get_timings(),
+            "output_files": self.artifact_store.saved_files(),
+        })
+        self._save_run_meta()
+
+    def _save_run_meta(self):
+        if self.artifact_store:
+            self.artifact_store.save_json("run_meta.json", self._run_meta)
+
+    def _save_artifact_json(self, name: str, data):
+        if self.artifact_store:
+            self.artifact_store.save_json(name, data)
+
+    def _collect_llm_logs(self) -> list[dict]:
+        return (
+            self.discovery_agent.llm_logs +
+            self.dimension_agent.llm_logs +
+            self.collection_agent.llm_logs +
+            self.product_agent.llm_logs +
+            self.pricing_agent.llm_logs +
+            self.market_agent.llm_logs +
+            self.strategy_agent.llm_logs +
+            self.quality_agent.llm_logs
+        )
 
     def _print_feature_matrix(self, product_name: str,
                                product_analysis: ProductAnalysis,

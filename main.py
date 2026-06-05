@@ -14,10 +14,12 @@ main.py — 智能竞品分析多Agent系统 主入口
 import asyncio
 import sys
 import os
+import json
 
 # 确保项目根目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from core.artifact_store import to_jsonable
 from core.orchestrator import Orchestrator
 import config
 
@@ -81,69 +83,30 @@ async def run_analysis(product_description: str,
         competitors_data=getattr(orchestrator, "_last_competitors_data", None),
         timings=orchestrator.get_timings(),
     )
+
+    if orchestrator.artifact_store:
+        run_html_path = orchestrator.artifact_store.save_text("report.html", html_content)
+        run_json_path = orchestrator.artifact_store.save_json("report.json", report)
+        orchestrator.update_artifact_meta()
+        print(f"\n💾 本次HTML报告: {run_html_path}")
+        print(f"💾 本次JSON报告: {run_json_path}")
+        print(f"📦 完整运行归档: {orchestrator.run_dir}")
+
+    # 兼容旧输出路径
     html_path = os.path.join(report_dir, report.product_name + "_analysis_report.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"\n💾 HTML报告已保存: {html_path}")
+    print(f"💾 兼容HTML报告: {html_path}")
 
-    # 保存JSON报告
     json_path = os.path.join(report_dir, report.product_name + "_analysis_report.json")
-    report_data = {
-        "product_name": report.product_name,
-        "competitor_count": report.competitor_count,
-        "overall_positioning": report.overall_positioning,
-        "differentiation_strategy": report.differentiation_strategy,
-        "action_plan": [
-            {
-                "priority": ap.priority,
-                "action": ap.action,
-                "timeline": ap.timeline,
-                "expected_impact": ap.expected_impact,
-            }
-            for ap in report.action_plan
-        ],
-        "risk_assessment": report.risk_assessment,
-        "product_analysis_summary": report.product_analysis_summary,
-        "pricing_analysis_summary": report.pricing_analysis_summary,
-        "market_analysis_summary": report.market_analysis_summary,
-        "summary": report.summary,
-        "qa_timeline": {
-            "checks": [
-                {
-                    "phase": c.phase,
-                    "target_agent": c.target_agent,
-                    "passed": c.passed,
-                    "score": c.score,
-                    "issues": [
-                        {
-                            "severity": i.severity,
-                            "category": i.category,
-                            "field": i.field,
-                            "description": i.description,
-                            "suggestion": i.suggestion,
-                        }
-                        for i in c.issues
-                    ],
-                    "checked_at": c.checked_at,
-                    "attempt": c.attempt,
-                    "degraded": c.degraded,
-                }
-                for c in report.qa_timeline.checks
-            ],
-            "max_retries": report.qa_timeline.max_retries,
-            "total_retries": report.qa_timeline.total_retries,
-        },
-    }
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, ensure_ascii=False, indent=2)
-    print(f"💾 JSON报告: {json_path}")
+        json.dump(to_jsonable(report), f, ensure_ascii=False, indent=2)
+    print(f"💾 兼容JSON报告: {json_path}")
 
     return report
 
 
 if __name__ == "__main__":
-    import json
-
     args = sys.argv[1:]
 
     # 解析 --rule 标志
