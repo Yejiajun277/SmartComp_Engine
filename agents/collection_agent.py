@@ -182,11 +182,22 @@ class CollectionAgent(BaseAgent):
                             features=pt.get("features", []),
                         ))
 
+                # 补充搜索：如果定价或市场份额数据缺失，执行专项搜索
+                pricing_tiers, extra_cites1 = self._supplement_pricing(
+                    entity_name, product_name, pricing_tiers, citations
+                )
+                market_share = result.get("market_share", "")
+                market_share, extra_cites2 = self._supplement_market_share(
+                    entity_name, market_share, citations
+                )
+                citations.extend(extra_cites1)
+                citations.extend(extra_cites2)
+
                 return CompetitorData(
                     name=entity_name,
                     product_features=product_features,
                     pricing_tiers=pricing_tiers,
-                    market_share=result.get("market_share", ""),
+                    market_share=market_share,
                     user_reviews=result.get("user_reviews", ""),
                     strengths=result.get("strengths", ""),
                     weaknesses=result.get("weaknesses", ""),
@@ -204,3 +215,113 @@ class CollectionAgent(BaseAgent):
             search_sources=sources,
             citations=citations,
         )
+
+    def _supplement_pricing(self, entity_name: str, product_name: str,
+                            pricing_tiers: list, existing_cites: list) -> tuple:
+        """如果定价数据缺失，执行补充搜索"""
+        if pricing_tiers and any(pt.price for pt in pricing_tiers):
+            return pricing_tiers, []
+
+        self._log(f"   📝 {entity_name} 定价数据缺失，执行补充搜索")
+        extra_queries = [
+            f"{entity_name} 会员价格 套餐 收费",
+            f"{entity_name} 免费版 付费版 premium",
+        ]
+        extra_results = self.search_client.batch_search(extra_queries)
+        extra_text = ""
+        extra_cites = []
+        cite_counter = len(existing_cites)
+
+        for i, sr in enumerate(extra_results):
+            result = sr.get("result")
+            text = SearchClient.extract_text(result) if result else ""
+            if text:
+                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1000]}\n"
+            for ref in sr.get("references", []):
+                ref_url = ref.get("url", "")
+                ref_title = ref.get("title", "")
+                if not ref_url and not ref_title:
+                    continue
+                extra_cites.append(Citation(
+                    id=f"{entity_name}:sup_price_{i}:r{cite_counter}",
+                    title=ref_title,
+                    url=ref_url,
+                    snippet=ref.get("content", "") or ref.get("summary", ""),
+                    site_name=ref.get("site_name", ""),
+                    query=sr.get("query", ""),
+                    competitor=entity_name,
+                ))
+                cite_counter += 1
+
+        if extra_text and config.ENABLE_LLM:
+            from prompts.collection_agent import __file__ as _
+            prompts = load_prompts("collection_agent")
+            prompt = prompts["prompt_collect"].format(
+                product_name=product_name,
+                product_description="",
+                competitor_name=entity_name,
+                search_results=extra_text[:4000],
+            )
+            result = self.ask_llm_json(prompt, max_tokens=2048)
+            if result and result.get("pricing_tiers"):
+                for pt in result["pricing_tiers"]:
+                    if isinstance(pt, dict) and pt.get("price"):
+                        pricing_tiers.append(PricingTier(
+                            tier_name=pt.get("tier_name", ""),
+                            price=pt.get("price", ""),
+                            features=pt.get("features", []),
+                        ))
+
+        return pricing_tiers, extra_cites
+
+    def _supplement_market_share(self, entity_name: str,
+                                  market_share: str,
+                                  existing_cites: list) -> tuple:
+        """如果市场份额数据缺失，执行补充搜索"""
+        if market_share and len(market_share.strip()) > 5:
+            return market_share, []
+
+        self._log(f"   📝 {entity_name} 市场份额数据缺失，执行补充搜索")
+        extra_queries = [
+            f"{entity_name} 市场份额 用户规模 DAU MAU",
+            f"{entity_name} 行业排名 市占率",
+        ]
+        extra_results = self.search_client.batch_search(extra_queries)
+        extra_text = ""
+        extra_cites = []
+        cite_counter = len(existing_cites)
+
+        for i, sr in enumerate(extra_results):
+            result = sr.get("result")
+            text = SearchClient.extract_text(result) if result else ""
+            if text:
+                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1000]}\n"
+            for ref in sr.get("references", []):
+                ref_url = ref.get("url", "")
+                ref_title = ref.get("title", "")
+                if not ref_url and not ref_title:
+                    continue
+                extra_cites.append(Citation(
+                    id=f"{entity_name}:sup_market_{i}:r{cite_counter}",
+                    title=ref_title,
+                    url=ref_url,
+                    snippet=ref.get("content", "") or ref.get("summary", ""),
+                    site_name=ref.get("site_name", ""),
+                    query=sr.get("query", ""),
+                    competitor=entity_name,
+                ))
+                cite_counter += 1
+
+        if extra_text and config.ENABLE_LLM:
+            prompts = load_prompts("collection_agent")
+            prompt = prompts["prompt_collect"].format(
+                product_name=entity_name,
+                product_description="",
+                competitor_name=entity_name,
+                search_results=extra_text[:4000],
+            )
+            result = self.ask_llm_json(prompt, max_tokens=2048)
+            if result and result.get("market_share"):
+                market_share = result["market_share"]
+
+        return market_share, extra_cites
