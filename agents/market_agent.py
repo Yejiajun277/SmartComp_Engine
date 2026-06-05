@@ -85,6 +85,37 @@ class MarketAgent(BaseAgent):
             append_entity(name, data)
         return "\n".join(lines)
 
+    # 商业/财务术语黑名单（pain_points 中不允许出现）
+    _COMMERCIAL_TERMS = {
+        "定价", "涨幅", "C端", "B端", "获客", "变现", "营收", "毛利",
+        "净利", "ARPU", "LTV", "CAC", "ROI", "GMV", "付费率",
+        "续费", "客单价", "转化率", "复购", "漏斗", "投放",
+    }
+
+    @classmethod
+    def _sanitize_pain_points(cls, pain_points: list[str]) -> list[str]:
+        """过滤掉商业/财务术语，只保留用户视角的痛点"""
+        cleaned = []
+        for pp in pain_points:
+            if not pp or not pp.strip():
+                continue
+            # 检查是否包含商业术语
+            if any(term in pp for term in cls._COMMERCIAL_TERMS):
+                continue
+            cleaned.append(pp.strip())
+        return cleaned if cleaned else ["暂无用户视角痛点数据"]
+
+    @staticmethod
+    def _normalize_trend(trend: str) -> str:
+        """标准化趋势描述为枚举值"""
+        t = trend.strip()
+        if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑", "高速", "快速增长"]):
+            return "上升"
+        elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓", "小幅下降"]):
+            return "下降"
+        else:
+            return "稳定"
+
     def _parse_market_analysis(self, result: dict) -> MarketAnalysis:
         """解析LLM返回的市场分析结果，提取引用 ID"""
         all_citation_ids = []
@@ -96,7 +127,7 @@ class MarketAgent(BaseAgent):
             market_share_data.append(MarketShareItem(
                 competitor=ms.get("competitor", ""),
                 share_estimate=ms.get("share_estimate", ""),
-                trend=ms.get("trend", ""),
+                trend=self._normalize_trend(ms.get("trend", "")),
                 citations=ms_cites,
             ))
 
@@ -119,7 +150,7 @@ class MarketAgent(BaseAgent):
                 age_range=profile.get("age_range", ""),
                 occupation_distribution=profile.get("occupation_distribution", []),
                 use_cases=profile.get("use_cases", []),
-                pain_points=profile.get("pain_points", []),
+                pain_points=self._sanitize_pain_points(profile.get("pain_points", [])),
                 citations=profile_cites,
             )
 
