@@ -278,6 +278,7 @@ class StrategyReport:
     """策略建议报告（最终输出）"""
     product_name: str                       # 产品名称
     competitor_count: int = 0               # 竞品数量
+    target_product_data: CompetitorData | None = None  # 目标产品自身采集数据
     overall_positioning: str = ""           # 整体定位
     differentiation_strategy: dict = field(default_factory=dict)
     action_plan: list[ActionItem] = field(default_factory=list)

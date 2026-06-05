@@ -34,6 +34,7 @@ class StrategyAgent(BaseAgent):
                   product_analysis: ProductAnalysis,
                   pricing_analysis: PricingAnalysis,
                   market_analysis: MarketAnalysis,
+                  target_product_data: CompetitorData | None = None,
                   competitors_data: dict[str, CompetitorData] | None = None,
                   feedback: str = "") -> StrategyReport:
         """
@@ -53,6 +54,9 @@ class StrategyAgent(BaseAgent):
 
         # 构建全局引用索引
         citation_index = CitationIndex()
+        if target_product_data:
+            for cite in target_product_data.citations:
+                citation_index.add(cite)
         if competitors_data:
             for data in competitors_data.values():
                 for cite in data.citations:
@@ -75,6 +79,7 @@ class StrategyAgent(BaseAgent):
             if result:
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
+                report.target_product_data = target_product_data
                 self._log(f"✅ 策略建议完成: {len(report.action_plan)}项行动方案")
                 return report
             else:
@@ -82,7 +87,7 @@ class StrategyAgent(BaseAgent):
 
         return self._rule_strategy(product_name, competitor_count,
                                     product_analysis, pricing_analysis, market_analysis,
-                                    citation_index)
+                                    citation_index, target_product_data)
 
     def _build_analysis_text(self, product_name: str,
                               product_analysis: ProductAnalysis,
@@ -158,7 +163,8 @@ class StrategyAgent(BaseAgent):
                         product_analysis: ProductAnalysis,
                         pricing_analysis: PricingAnalysis,
                         market_analysis: MarketAnalysis,
-                        citation_index: CitationIndex | None = None) -> StrategyReport:
+                        citation_index: CitationIndex | None = None,
+                        target_product_data: CompetitorData | None = None) -> StrategyReport:
         """规则引擎策略建议（SWOT模板）"""
         # 从三维分析中提取关键词
         diff_points = product_analysis.differentiation_points[:3] if product_analysis.differentiation_points else []
@@ -167,6 +173,7 @@ class StrategyAgent(BaseAgent):
         return StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
+            target_product_data=target_product_data,
             overall_positioning=f"{product_name}应基于{diff_text}等差异化优势进行市场定位",
             differentiation_strategy={
                 "core_differentiator": diff_text,
@@ -197,11 +204,44 @@ class StrategyAgent(BaseAgent):
             "",
             f"📋 分析竞品数量: {report.competitor_count}",
             "",
+        ]
+
+        if report.target_product_data:
+            target = report.target_product_data
+            lines.extend([
+                "─── 目标产品介绍 ───",
+                f"  名称: {target.name or report.product_name}",
+            ])
+            if target.product_features:
+                feature_text = "；".join(
+                    f"{fi.name}: {fi.description}" if fi.description else fi.name
+                    for fi in target.product_features[:3]
+                )
+                lines.append(f"  核心功能: {feature_text}")
+            if target.pricing_tiers:
+                pricing_text = "；".join(
+                    f"{pt.tier_name}: {pt.price}" if pt.price else pt.tier_name
+                    for pt in target.pricing_tiers[:3]
+                )
+                lines.append(f"  定价概览: {pricing_text}")
+            if target.market_share:
+                lines.append(f"  市场信息: {target.market_share}")
+            if target.user_reviews:
+                lines.append(f"  用户评价: {target.user_reviews}")
+            if target.strengths:
+                lines.append(f"  优势: {target.strengths}")
+            if target.weaknesses:
+                lines.append(f"  劣势: {target.weaknesses}")
+            if target.channels:
+                lines.append(f"  渠道: {target.channels}")
+            lines.append("")
+
+        lines.extend([
             "─── 整体定位 ───",
             report.overall_positioning or "暂无",
             "",
             "─── 差异化策略 ───",
-        ]
+        ])
 
         if report.differentiation_strategy:
             core = report.differentiation_strategy.get("core_differentiator", "")
@@ -393,6 +433,66 @@ class StrategyAgent(BaseAgent):
                 return f'<span style="color:#ef4444;">↘ {esc(t)}</span>'
             else:
                 return f'<span style="color:#64748b;">→ {esc(t)}</span>'
+
+        def render_target_product_intro(data: CompetitorData | None) -> str:
+            """渲染目标产品介绍板块"""
+            if not data:
+                return ""
+
+            feature_cards = ""
+            for fi in data.product_features[:4]:
+                feature_cards += f'''
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;flex:1;min-width:220px;">
+                    <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:6px;">{esc(fi.name) if fi.name else '核心能力'}{cite_sup(fi.citations, competitor=report.product_name)}</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.6;">{esc(fi.description) if fi.description else '暂无描述'}</div>
+                </div>'''
+
+            pricing_items = ""
+            for pt in data.pricing_tiers[:3]:
+                feature_text = "；".join(pt.features[:2]) if pt.features else ""
+                pricing_items += f'''
+                <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+                    <div style="font-size:13px;font-weight:600;color:#1e293b;">{esc(pt.tier_name) if pt.tier_name else '定价档位'}{cite_sup(pt.citations, competitor=report.product_name)}</div>
+                    <div style="font-size:12px;color:#475569;line-height:1.6;">{esc(pt.price) if pt.price else '暂无价格信息'}</div>
+                    {f'<div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:4px;">{esc(feature_text)}</div>' if feature_text else ''}
+                </div>'''
+
+            market_intro = data.market_share or "暂无公开市场信息"
+            market_intro += cite_sup([c.id for c in data.citations], competitor=report.product_name)
+            reviews_html = f'<div style="font-size:13px;color:#64748b;line-height:1.7;margin-top:8px;">{esc(data.user_reviews)}</div>' if data.user_reviews else ""
+
+            return f'''
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <h2 style="font-size:20px;color:#1e293b;margin:0 0 16px 0;">🚀 目标产品介绍</h2>
+                <div style="background:linear-gradient(135deg,#0f172a,#334155);border-radius:12px;padding:20px;color:#fff;margin-bottom:18px;">
+                    <div style="font-size:12px;opacity:0.75;margin-bottom:6px;">目标产品</div>
+                    <div style="font-size:22px;font-weight:700;margin-bottom:8px;">{esc(data.name or report.product_name)}</div>
+                    <div style="font-size:14px;line-height:1.7;opacity:0.92;">{esc(data.strengths) if data.strengths else '基于公开资料整理目标产品的核心能力、定价、市场和渠道信息。'}</div>
+                </div>
+                {f"<div style='display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;'>{feature_cards}</div>" if feature_cards else ''}
+                {f"<div style='background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:18px;'><div style='font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;'>💰 定价概览</div>{pricing_items}</div>" if pricing_items else ''}
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
+                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">📈 市场与用户反馈</div>
+                        <div style="font-size:13px;color:#475569;line-height:1.7;">{market_intro}</div>
+                        {reviews_html}
+                    </div>
+                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
+                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">🛣️ 渠道</div>
+                        <div style="font-size:13px;color:#475569;line-height:1.7;">{esc(data.channels) if data.channels else '暂无公开渠道信息'}</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:6px;">💪 优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">{esc(data.strengths) if data.strengths else '暂无'}</div>
+                    </div>
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:6px;">🎯 劣势</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">{esc(data.weaknesses) if data.weaknesses else '暂无'}</div>
+                    </div>
+                </div>
+            </div>'''
 
         # 构建全局引用编号映射（cid → 1-based 序号）
         global_cite_num: dict[str, int] = {}
@@ -1085,10 +1185,13 @@ class StrategyAgent(BaseAgent):
                 </div>
             </div>
         </div>
-    </div>
+	    </div>
 
-    <!-- 竞品发现 -->
-    {"<div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>" + competitor_cards + '</div></div>' if competitor_cards else ''}
+	    <!-- 目标产品介绍 -->
+	    {render_target_product_intro(report.target_product_data)}
+
+	    <!-- 竞品发现 -->
+	    {"<div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>" + competitor_cards + '</div></div>' if competitor_cards else ''}
 
     <!-- 逐竞品对比（核心板块） -->
     {competitor_comparison_cards}

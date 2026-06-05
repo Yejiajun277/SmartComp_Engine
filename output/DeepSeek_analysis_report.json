@@ -1,1557 +1,299 @@
 {
   "product_name": "DeepSeek",
-  "competitor_count": 5,
-  "overall_positioning": "聚焦高安全等级涉密场景需求，打造全系MIT协议开源、原生支持完全离线运行的高性价比私有化大模型标杆，避开C端流量红海竞争，抢占政企、科研、军工等B端高价值私有化部署赛道的头部份额。",
+  "competitor_count": 3,
+  "target_product_data": {
+    "name": "DeepSeek",
+    "product_features": [
+      {
+        "name": "数据采集失败",
+        "description": "",
+        "citations": []
+      }
+    ],
+    "pricing_tiers": [],
+    "market_share": "",
+    "user_reviews": "",
+    "strengths": "",
+    "weaknesses": "",
+    "channels": "",
+    "search_sources": [],
+    "citations": []
+  },
+  "overall_positioning": "DeepSeek应基于(规则引擎分析，详情请启用LLM)等差异化优势进行市场定位",
   "differentiation_strategy": {
-    "core_differentiator": "「全MIT协议开源无版权限制+原生完全离线运行+长文档核心信息高精度提炼」三位一体的高安全私有化专属大模型",
+    "core_differentiator": "(规则引擎分析，详情请启用LLM)",
     "supporting_points": [
-      "全系采用MIT协议完全开源，无商业使用限制，私有化部署灵活性远高于所有闭源竞品，不存在版权纠纷风险",
-      "原生支持完全离线运行，适配无外网环境的高等级涉密场景，填补当前主流大模型的场景空白",
-      "长文档核心信息提炼精度行业领先，中文原生适配零身份混淆异常输出问题，政务、科研长文档处理体验远超海外闭源模型",
-      "整体部署和使用成本仅为Claude Opus等海外头部模型的1/5不到，性价比优势极其显著"
+      "(规则引擎分析，详情请启用LLM)"
     ]
   },
   "action_plan": [
     {
       "priority": "P0",
-      "action": "联合具备涉密资质的生态合作伙伴，推出「离线私有化部署专属套件」，针对政务、军工、央国企等涉密场景做定向适配，开放百万级上下文长文档提炼的专属优化包",
-      "timeline": "未来1-2个月",
-      "expected_impact": "3个月内拿下国内涉密大模型部署赛道30%以上的新增订单，快速建立场景专属壁垒",
+      "action": "深入调研竞品最新动态",
+      "timeline": "1-2周",
+      "expected_impact": "建立竞品情报基线",
       "citations": []
     },
     {
       "priority": "P1",
-      "action": "推出全系列开源模型永久免费商用授权政策，API定价设置为同性能闭源模型的60%，叠加调用量阶梯折扣，针对年调用量超10亿Token的企业用户额外赠送离线部署技术支持服务",
-      "timeline": "未来2-3个月",
-      "expected_impact": "开发者注册量半年内突破200万，付费企业客户数同比增长300%，快速扩大用户基本盘",
+      "action": "强化差异化功能投入",
+      "timeline": "1-3月",
+      "expected_impact": "巩固竞争优势",
       "citations": []
     },
     {
       "priority": "P2",
-      "action": "联合国内主流科研平台、涉密办公系统厂商、开发工具生态做深度适配，上线离线版Agent低代码开发工具链，降低开发者基于DeepSeek做二次开发的门槛",
-      "timeline": "未来3-6个月",
-      "expected_impact": "开源下载量半年内突破5000万，跻身全球开源大模型下载量前二，构建高粘性开发者生态",
-      "citations": []
-    },
-    {
-      "priority": "P3",
-      "action": "依托MIT协议的宽松授权优势，面向欧美中小科研企业推出离线部署专属版本，定价仅为Claude Opus的1/10，通过海外第三方API分销渠道快速触达用户",
-      "timeline": "未来6-12个月",
-      "expected_impact": "海外付费用户占比提升至20%，顺利切入欧美高价值企业服务细分市场",
+      "action": "制定针对性市场策略",
+      "timeline": "3-6月",
+      "expected_impact": "提升市场份额",
       "citations": []
     }
   ],
-  "risk_assessment": "通义千问大概率会跟进推出部分版本的MIT开源授权，下调私有化部署定价，分流部分中小企业客户。Kimi、豆包可能会快速迭代离线运行支持能力，推出长文档提炼专项优化功能，挤压DeepSeek的差异化优势空间。Claude可能会针对中国市场推出本地化适配版本，下调定价抢占科研级推理场景的高端客户。部分云厂商可能会推出基于其他开源模型的低价私有化打包方案，发起价格战拉低整体行业利润水平。",
-  "product_analysis_summary": "DeepSeek在全系MIT开源、完全离线运行、长文档核心提炼精度、中文原生稳定性四个维度具备不可替代的差异化优势，是当前国内最适配高安全等级涉密场景的开源大模型产品。",
-  "pricing_analysis_summary": "当前大模型市场价格战进入深水区，国产模型普遍通过精细化梯度定价抢占市场，DeepSeek依托开源属性具备远高于竞品的定价灵活度，可通过免授权费模式快速降低用户准入门槛。",
-  "market_analysis_summary": "当前大模型市场竞争重心已经从C端流量转向B端私有化部署、智能体落地赛道，政企涉密场景的付费意愿和付费能力远超普通消费级场景，是当前增速最快的细分赛道。",
-  "summary": "DeepSeek应当避开C端和豆包、通义千问的流量正面竞争，聚焦自身独有的开源、离线、长文档优势，锚定高安全涉密级企业私有化赛道做差异化突破。通过免开源授权费的高性价比定价策略快速扩大开发者生态，建立专属场景壁垒。后续依托成熟的国内私有化落地经验，进一步拓展海外高价值科研企业市场，逐步跻身全球开源大模型第一梯队头部位置，把差异化优势最大化转化为长期市场份额。",
-  "raw_llm_logs": [
-    {
-      "agent_id": "DiscoveryAgent",
-      "system_prompt_len": 221,
-      "user_message_len": 261,
-      "result_len": 141,
-      "success": true
-    },
-    {
-      "agent_id": "DiscoveryAgent",
-      "system_prompt_len": 221,
-      "user_message_len": 5584,
-      "result_len": 755,
-      "success": true
-    },
-    {
-      "agent_id": "DimensionAgent",
-      "system_prompt_len": 191,
-      "user_message_len": 650,
-      "result_len": 1227,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7230,
-      "result_len": 2427,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7206,
-      "result_len": 2555,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7236,
-      "result_len": 1763,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7242,
-      "result_len": 2662,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7206,
-      "result_len": 2799,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7484,
-      "result_len": 2493,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7460,
-      "result_len": 1837,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7490,
-      "result_len": 2077,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7496,
-      "result_len": 1878,
-      "success": true
-    },
-    {
-      "agent_id": "CollectionAgent",
-      "system_prompt_len": 657,
-      "user_message_len": 7460,
-      "result_len": 2388,
-      "success": true
-    },
-    {
-      "agent_id": "ProductAgent",
-      "system_prompt_len": 486,
-      "user_message_len": 17008,
-      "result_len": 7510,
-      "success": true
-    },
-    {
-      "agent_id": "PricingAgent",
-      "system_prompt_len": 370,
-      "user_message_len": 16124,
-      "result_len": 3262,
-      "success": true
-    },
-    {
-      "agent_id": "PricingAgent",
-      "system_prompt_len": 370,
-      "user_message_len": 16353,
-      "result_len": 3200,
-      "success": true
-    },
-    {
-      "agent_id": "MarketAgent",
-      "system_prompt_len": 340,
-      "user_message_len": 16027,
-      "result_len": 5718,
-      "success": true
-    },
-    {
-      "agent_id": "StrategyAgent",
-      "system_prompt_len": 284,
-      "user_message_len": 6175,
-      "result_len": 2396,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 27489,
-      "result_len": 4205,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 2607,
-      "result_len": 233,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 26590,
-      "result_len": 5470,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 11445,
-      "result_len": 1673,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 9323,
-      "result_len": 1191,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 9029,
-      "result_len": 1649,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 1255,
-      "result_len": 211,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 9285,
-      "result_len": 850,
-      "success": true
-    },
-    {
-      "agent_id": "QualityAgent",
-      "system_prompt_len": 279,
-      "user_message_len": 3269,
-      "result_len": 1122,
-      "success": true
-    }
-  ],
+  "risk_assessment": "(规则引擎分析，详情请启用LLM)",
+  "product_analysis_summary": "基于关键词匹配的简单产品对比（建议启用LLM获得深度分析）",
+  "pricing_analysis_summary": "基于搜索结果的简单定价信息提取（建议启用LLM获得深度分析）",
+  "market_analysis_summary": "基于搜索结果的简单市场信息提取（建议启用LLM获得深度分析）",
+  "summary": "基于SWOT模板的简单策略建议（建议启用LLM获得深度分析）",
+  "raw_llm_logs": [],
   "citation_index": {
-    "citations": {
-      "通义千问Qwen3.7系列:q0:r0": {
-        "id": "通义千问Qwen3.7系列:q0:r0",
-        "title": "阿里Qwen3.7新模型发布：编程、工具调用能力全面领先，国内第一",
-        "url": "http://finance.sina.cn/tech/2026-05-20/detail-inhyphnm9426767.d.html",
-        "snippet": "阿里Qwen3.7新模型发布：编程、工具调用能力全面领先，国内第一\n新浪科技\n新浪科技频道官方账号 05.20 11:15\n新浪科技讯 5月20日上午消息，今日举办的2026阿里 云峰会上，阿里巴巴集团通义大模型事业部负责人周靖人宣布千问模型Qwen3.7发布，在知识、推理、工具调用、编程等方面全面提升。\n在知识和逻辑推理等能力上，Qwen3.7较kimi K2.6、智谱GLM5.1、DeepSeek v4 pro、opus4.6-Max等国内及国际最新模型，在多个主流测评基准中领先，国内第一。\n在工具调用和编程能力上，Qwen3.7同样在多项基准测试中全面领先国内模型，逼近甚至超越国际领先模型。\n",
-        "site_name": "新浪财经",
-        "query": "通义千问Qwen3.7系列 产品功能介绍",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q0:r1": {
-        "id": "通义千问Qwen3.7系列:q0:r1",
-        "title": "阿里发布千问Qwen3.7-Plus大模型 文本与视觉能力双突破并实现应用一键复刻。",
-        "url": "https://g.pconline.com.cn/x/2163/21638371.html",
-        "snippet": "阿里发布千问Qwen3.7-Plus大模型 文本与视觉能力双突破并实现应用一键复刻。\n新闻 科仔播报 2026-06-02 11:01\n科仔播报\n2026-06-02 11:01:46\n阿里巴巴发布了其千问3.7系列多模态大模型Qwen3.7-Plus。据悉，该模型在文本和视觉能力上均实现大幅提升，能够深度推理、自我编程、调用工具并自主迭代，将“看、想、写、做、验”整合进统一的智能体工作流，可一键复刻手机App或桌面端专业软件等复杂任务。目前，该模型已上线阿里云百炼并提供API服务。\n在性能表现上，Qwen3.7-Plus相比上代模型进步显著。其纯文本能力接近旗舰模型水平，在编程、科学问题编程等评测中得分大幅提升，并展现出强大的智能体能力。在数学推理评测中，其性能评分更是上代模型的近3倍。\n视觉能力方面，新模型同样实现了飞跃。在纯视觉推理评测中，其得分远超上代并超过了Gemini3.1-Pro。在搜索增强知识问答等多项权威评测中，性能提升最高达2倍多，表现优于多个知名模型，使其解决开放问题更可靠、更准确。\n文本与视觉能力的双重提升，催生了Qwen3.7-Plus崭新的多模态混合智能体能力",
-        "site_name": "太平洋科技",
-        "query": "通义千问Qwen3.7系列 产品功能介绍",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q0:r2": {
-        "id": "通义千问Qwen3.7系列:q0:r2",
-        "title": "阿里云百炼千问Qwen3.7-Max全面解析：核心能力、技术特性与订阅使用全指南",
-        "url": "https://developer.aliyun.com/article/1736593",
-        "snippet": "需。阿里云百炼正式推出**Qwen3.7-Max**旗舰大模型，作为通义千问系列综合实力最强的版本，直接对标国际主流高端闭源大模型，专为复杂逻辑推理、长周期自主任务、多模态分析、企业级业务场景打造。\n一、前言\n在智能应用与AI智能体飞速发展的2026年，大模型的推理能力、长文本处理、多模态理解以及工具调用能力，已经成为企业开发、科研创作、自动化办公的核心刚需。阿里云百炼正式推出Qwen3.7-Max旗舰大模型，作为通义千问系列综合实力最强的版本，直接对标国际主流高端闭源大模型，专\n仅拥有顶尖推理水准，还搭载百万级超长上下文窗口，在网页检索、视觉识别、流式输出、高并发稳定性上全面升级，同时兼容主流开发接口，能够无缝接入各类AI编程工具与智能体框架。本文基于官方最新资料，全面重述Qwen3.7-Max的定位、核心能力、技术参数、适用场景、使用限制以及官方订阅方案，全程无链接、无表格、无图片，帮助开发者与企业快速了解、选型并落地使用这款旗舰大模型。详情👉访问阿里云百炼大模型服务平台了解\n二、Qwen3.7-Max产品整体定位\nQwen3.7-Max是阿里云百炼倾\n力打造的商业级旗舰大模型，归属于通义千问Max产品序列，也是目前阿里云商用体系中综合能力最强的版本。它在智能体原生架构上深度优化，在复杂逻辑推理、长周期自主任务执行、多工具协同调度、多模态内容理解等维度实现跨越式提升。\n目前Qwen3.7-Max优先开放纯文本推理能力，后续将逐步迭代开放图像、视觉等多模态能力，持续更新数学推理、代码生成、逻辑拆解等核心性能。无论是企业搭建业务系统，还是开发者构建AI智能体、开展专业内容创作，这款模型都能达到国际顶级大模型的同等表现，是国产高端大模\n型的标杆之作。\n三、Qwen3.7-Max核心能力与优势亮点\n1. 顶级复杂逻辑推理能力\nQwen3.7-Max具备极强的多步骤推理功底，能够处理多层级逻辑推演、专业领域深度分析。面对科研论文解读、法律文书研判、商业逻辑梳理、算法难题拆解等高难度任务，模型可以给出严谨结构化的分析结论，推理精度比肩全球顶尖闭源大模型，适合专业研究与高端业务决策场景。\n2. 百万级超长上下文承载\n模型原生支持百万级Token超大上下文窗口，可以一次性载入整本专业书籍、大型完整代码仓库、超长项目文档与\n海量会议纪要。无需人工拆分文本、分段提问，能够全局理解项目架构与文档逻辑，在大型代码库重构、长篇报告撰写、知识库整体问答场景中优势突出。\n3. 增强型搜索与网页理解能力\n搭载高级智能检索策略，支持多引擎并行信息抓取与内容凝练整合。模型可以自主全网搜索、深度解析网页正文，自动过滤无效广告与冗余信息，对行业资讯、竞品动态、专业资料进行汇总梳理，非常适合行业监控、资料搜集、调研报告自动生成等智能体任务。\n4. 多模态视觉理解升级\n依托通义千问VL视觉技术积淀，Qwen3.7-Max强化",
-        "site_name": "阿里云开发者社区",
-        "query": "通义千问Qwen3.7系列 产品功能介绍",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q0:r3": {
-        "id": "通义千问Qwen3.7系列:q0:r3",
-        "title": "多模态模型详解：从拼接式到原生统一架构",
-        "url": "https://blog.csdn.net/FZ51111/article/details/161601461",
-        "snippet": "有统一指挥\n第三代 = 一个人天生就能看、听、说、写，所有能力融为一体\n三、主流多模态模型对比（2026年）\n3.1 GPT-4o\n核心特点：\n原生多模态架构，支持文本、图像、音频输入输出\n响应速度极快，实时对话体验流畅\n情感理解能力，能读取并理解人的情绪\n多语言处理能力强\n3.2 通义千问3.7\n2026年5月20日阿里云峰会，通义千问正式发布 Qwen3.7 系列旗舰模型：Qwen3.7-Max-Preview（万亿参数）与 Qwen3.7-Plus-Preview（密集模型）。\n核心突破：\n全域思考模式（All-field Thinking）：首次实现文本/图像/代码统一推理\nAgentic Coding 能力：达到国产第一、全球前三（SWE-bench Verified 72.3%）\n推理成本：降至 GPT-5.5 的 1/25\n技术参数对比：\n指标 Qwen3.7-Max-Preview Qwen3.7-Plus-Preview GPT-5.5\n参数量 约 1.2T（MoE，激活 45B） 约 35B（密集） 约 9T\n上下文窗口 128K Tokens 128K Tokens 400K Tokens\n思考模式 全域（文本+图像+代码） 全域（文本+图像+代码） 仅文本\n多模态 原生支持（文本+图像+代码+音频） 原生支持 文本+图像+音频\n编程能力（SWE-bench） 72.3% 68.7% 85.1%\n开源状态 预计 2026 年 Q3 开源 Apache 2.0（已开源） 闭源\n全域思考模式架构：\n用户输入（文本 + 图像 + 代码）\n │\n ▼\n┌─────────────────────────────┐\n│ 多模态编码器（Unified）        │\n│ • 文本：BPE Tokenizer        │\n│ • 图像：ViT-B/16             │\n│ • 代码：AST Parser           │\n└──────────┬──────────────────┘\n │\n ▼\n┌─────────────────────────────┐\n│ 统一嵌入空间（768 维）         │\n│ 文本-图像-代码 对齐训练         │\n└──────────┬──────────────────┘\n │\n ▼\n┌─────────────────────────────┐\n│ MoE 推理层（Think Mode）      │\n│ • 文本推理专家（32 个）        │\n│ • 图像推理专家（16 个）        │\n│ • 代码推理专家（24 个）        │\n│ • 跨模态融合专家（8 个）       │\n└──────────┬──────────────────┘\n3",
-        "site_name": "CSDN博客",
-        "query": "通义千问Qwen3.7系列 产品功能介绍",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q0:r4": {
-        "id": "通义千问Qwen3.7系列:q0:r4",
-        "title": "阿里云发布Qwen3.7-Plus，多模态智能体能力大幅升级",
-        "url": "https://m.sohu.com/a/1031041730_211762/",
-        "snippet": "阿里云发布Qwen3.7-Plus，多模态智能体能力大幅升级\n大力财经\n2026-06-02 14:14\n6月2日，阿里云宣布千问 3.7 系列最新多模态大模型Qwen3.7-Plus正式上线，已上架千问云和阿里云百炼，支持 API 调用。\n该模型文本、视觉能力全面提升，在权威榜单 Vision Arena 中跻身全球前五、中国第一；实现多模态混合智能体突破，可完成 “看、想、写、做、验” 全流程任务，能自主开发应用、复刻软件。\n此外，Qwen3.7-Plus 纯文本能力接近旗舰水平，编程、推理、长上下文理解等性能较上代显著提升，兼容 OpenAI 标准协议，可广泛用于智能体开发与场景落地。\n",
-        "site_name": "手机搜狐网",
-        "query": "通义千问Qwen3.7系列 产品功能介绍",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r5": {
-        "id": "通义千问Qwen3.7系列:q1:r5",
-        "title": "阿里通义千问发布Qwen3.7-Plus：多模态Agent新突破",
-        "url": "https://m.sohu.com/a/1031010030_121956424/",
-        "snippet": "阿里通义千问发布Qwen3.7-Plus：多模态Agent新突破\n洞见繁华\n2026-06-02 12:34\n阿里发布Qwen3.7-Plus，剑指多模态Agent\n阿里云通义千问发布Qwen3.7-Plus，定位多模态Agent，强调“看、想、写、做”一体化。\n该模型屏幕理解得分79，超过GPT-5.4和Gemini-3.1Pro。\n定价：输入$0.4/百万token，输出$1.6/百万token。\nQwen3.7-Plus核心能力：视觉理解与任务执行\n能感知真实世界场景、读取屏幕并操作GUI、基于视觉参考生成代码、端到端导航移动应用。\n可读取屏幕，理解App界面，自动点击、输入、跳转完成任务。\n能看懂设计图，生成SVG、网页或前端原型；在命令行里跑代码、改Bug。\n应用案例：11小时独立开发App，复刻炒股APP\nHybrid-Agent系统基于Qwen3.7-Plus，连续运行11小时，自动完成英语单词学习App研发闭环。\n自主复刻macOS原生Stocks股市应用，接入真实行情API，完成10项功能验证测试。\n可将图像、视频、UI截图转化为可执行代码，覆",
-        "site_name": "手机搜狐网",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r6": {
-        "id": "通义千问Qwen3.7系列:q1:r6",
-        "title": "千问系列模型降价通知",
-        "url": "https://help.aliyun.com/zh/model-studio/videos/qwen-model-billing-notice",
-        "snippet": "千问系列模型降价通知\n更新时间：2026-02-12 15:59:37\n千问大模型部分规格将于\n2024\n年\n9\n月\n19\n日\n0\n点起调整大模型的推理费用，使您在使用过程中享受更好的服务和更低的价格。\n调整明细\n模型名称\n输入成本（每千\nToken）\n输出成本（每千\nToken）\n免费额度\n实时调用\nBatch\n调用\n实时调用\nBatch\n调用\n模型名称\n输入成本（每千\nToken）\n输出成本（每千\nToken）\n免费额度\n实时调用\nBatch\n调用\n实时调用\nBatch\n调用\nqwen-max\n从\n0.04\n元降至\n0.02\n元\n从\n0.02\n元降至\n0.01\n元\n从\n0.12\n元降至\n0.06\n元\n从\n0.06\n元降至\n0.03\n元\n100\n万\nToken\n有效期：阿里云百炼开通后\n30\n天内。2024\n年\n9\n月\n19\n日\n0\n点后开通阿里云百炼的用户，免费额度有效期为阿里云百炼开通后\n180\n天内。\nqwen-plus\n从\n0.004\n元降至\n0.0008\n元\n从\n0.002\n元降至\n0.0004\n元\n从\n0.012\n元降至\n0.002\n元\n从\n0.006\n元降至\n0.001\n元\nqwen-turbo\n从\n0.002\n元降至\n0.0003\n元\n从\n0.001\n元降至\n0.00015\n元\n从\n0.006\n元降至\n0.0006\n元\n从\n0.003\n元降至\n0.0003\n元\n关于所有模型的价格，请参见模型列表。\n开始使用\n首次调用千问\nAPI\n查询免费额度\n在控制台的模型广场页面，找到目标模型系列并单击进入详情页。\n在模型\nCode选择模型的版本，在免费额度区域进行查看。若无免费额度，则可能免费额度已到期，具体有效期参见模型列表。\n如下图所示，362,917/1,000,000表示剩余\n362,917\n个\nToken，总共\n1,000,000\n个\nToken。\n控制台显示的免费额度每小时更新，非实时数据。\n",
-        "site_name": "阿里云帮助中心",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r7": {
-        "id": "通义千问Qwen3.7系列:q1:r7",
-        "title": "阿里云百炼产品月报【2026年5月】",
-        "url": "https://developer.aliyun.com:443/article/1738894",
-        "snippet": "据用户上传的宠物信息，识别这个宠物的品种。\n宠物健康问诊（宠物）\n根据用户提供的宠物状态信息，以及图片信息，进行健康问答回复，仅提供参考。\n宠物饮食计划（宠物）\n根据提供的宠物信息，提出饮食计划及建议。\n宠物行为分析（宠物）\n根据提供的宠物行为信息，提供科学的分析以及建议。\n万物识别\n拍照识别万物，解释说明图片中的物体。\n拍单词\n拍照英文单词，然后生成正确发音，然后对单词进行讲解，并生成对应的图像。\n拍汉字\n拍照中文汉字，然后生成正确发音，然后对单词进行讲解，并生成对应的图像。\n猜你想问\n将会议记录存入知识库，自动生成关键问题，并基于内容精准回答用户咨询。\n模型动态\n本月共上线5个模型，重磅发布Qwen3.7系列模型，Qwen3.7-Max享推理后付费限时5折。详情可参考下表。\n模型类型\n上架时间\n模型规格\n功能说明\n推理模型\n2026-05-21\nQwen3.7-Max 、Qwen3.7-Max-2026-05-20、 Qwen3.7-Max-Preview\nQwen3.7-Max是面向智能体时代的全能模型，具备前沿编程智能体、办公生产自动化、长周期自主执行与灵活适配多种框架四大核心能力，推理后付费享限时5折，全面提升智能体开发效率。\n实时语音翻译模型\n2026-05-19\nQwen3.5-Livetranslate-Flash-Realtime、Qwen3.5-Livetransl\nate-Flash-Realtime-2026-05-19\n一款多语言音视频实时翻译模型，可识别 60 种语言，并实时翻译为 29 种语言的音频。实时语音/音视频翻译-千问\n文章标签：\n人工智能 自然语言处理 安全 数据可视化 JSON\n",
-        "site_name": "阿里云开发者社区",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r8": {
-        "id": "通义千问Qwen3.7系列:q1:r8",
-        "title": "模型训练与部署计费",
-        "url": "https://help.aliyun.com/zh/model-studio/model-training-and-deployment-billing",
-        "snippet": "模型训练与部署计费\n更新时间：2026-06-04 15:29:26\n本文介绍阿里云百炼平台的模型训练、模型部署的计费规则及价格。\n模型训练计费\n文本生成模型-千问\n说明\n模型训练流程请参见模型调优。训练完成后的新模型需先完成模型部署，才能评测和调用。\n计费方式\n按训练\nToken\n计费\n计费公式\n模型训练费用 = （训练数据 Token 总数 + 混合训练数据 Token 总数）× 循环次数 × 训练单价（最小计费单位：1 token）\n您可以查看模型训练控制台底部的预估训练费用，并单击计算详情，查看训练 Token 总数、循环次数和训练单价。\n千问 千问VL\n模型服务\n模型代码\n价格\nQwen\n3.6-Flash-2026-04-16\nqwen3.6-flash-2026-04-16\n¥0.05/千 Token\nQwen3.5-27B\nqwen3.5-27b\n¥0.05/千 Token\nQwen3.5-9B\nqwen3.5-9b\n¥0.02/千 Token\nQwen3.5-Flash-2026-02-23\nqwen3.5-flash-2026-02-23\n¥0.05/千 Token\nQwen3-32B\nqwen3-32b\n¥0.04/千 Token\nQwen3-30B-A3B-Instruct-2507\nqwen3-30b-a3b-instruct-2507\n¥0.03/千 Token\n\n配）的具体降费退费规则请参考： 降配退款规则说明。\n千问 DeepSeek 千问VL 更多模型\n模型名称\n模型代码\n最长输入 Token\n后付费输入\nPer 10K TPM/小时\n后付费输出\nPer 1K TPM/小时\n预付费输入\nPer 10K TPM/天\n预付费输出\nPer 1K TPM/天\n千问3.7-Max-2026-05-20\nqwen3.7-max-2026-05-20\n128,000\n¥28.8\n¥8.64\n¥345.6\n¥103.68\n千问3.6-Flash-2026-04-16\nqwen3.6-flash-2026-04-16\n128,000\n¥2.88\n¥1.73\n¥34.56\n\n¥20.74\n千问3.6-Plus-2026-04-02\nqwen3.6-plus-2026-04-02\n128,000\n¥4.8\n¥2.88\n¥57.6\n¥34.56\n千问3.5-Plus-2026-04-20\nqwen3.5-plus-2026-04-20\n128,000\n¥1.92\n¥1.15\n¥23.04\n¥13.82\n千问3-Max-2025-09-23\nqwen3-max-2025-09-23\n128,000\n¥7.68\n¥3.08\n¥92.16\n¥36.96\n千问-Flash-2025-07-28\nqwen-flash-2025-07-28\n128,000\n¥0.36\n¥0.36\n",
-        "site_name": "阿里云帮助中心",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r9": {
-        "id": "通义千问Qwen3.7系列:q1:r9",
-        "title": "阿里Qwen3.7-Plus发布：多模态Agent，GUI操作亮眼",
-        "url": "https://m.sohu.com/a/1031007989_122066678/",
-        "snippet": "阿里Qwen3.7-Plus发布：多模态Agent，GUI操作亮眼财法观天下2026-06-02 12:31阿里发布Qwen3.7-Plus，主打多模态Agent阿里云发布Qwen3.7-Plus，多模态Agent模型，统一视觉与语言。定位：能看、能想、能写代码、能行动。定价：输入$0.4/百万token，输出$1.6/百万token。核心功能：视觉理解与任务执行可感知真实世界场景，读取屏幕并操作GUI，基于视觉参考生成代码。能看懂手机/电脑界面，并进行点击、输入、跳转等操作。应用示例连续运行11小时，自主完成英语单词学习App开发，代码超10000行。复刻macOS原生Stocks股市应用，接入真实行情API。图像/视频转SVG，生成网页原型。性能表现ScreenSpotPro屏幕理解得分79.0，高于GPT-5.4和Gemini3.1Pro。AndroidWorld移动端操控得分81.0，高于Gemini3.1Pro和Opus-4.6Max。",
-        "site_name": "手机搜狐网",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r10": {
-        "id": "通义千问Qwen3.7系列:q1:r10",
-        "title": "阿里云百炼上线Qwen3.7-Max 支持API与Token Plan调用",
-        "url": "http://news.qq.com/rain/a/20260522A0673M00",
-        "snippet": "阿里云百炼上线Qwen3.7-Max 支持API与Token Plan调用\n观点新媒体\n2026-05-22 11:59 发布于广东 观点地产新媒体官方账号\n观点网讯：5月22日，阿里云宣布其旗舰大模型Qwen3.7-Max正式登陆百炼平台，用户可通过API直接调用该模型。\n据介绍，Qwen3.7-Max是阿里面向智能体时代设计的最新旗舰模型，在多个权威基准测试中表现优异。据第三方机构ArtificialAnalysis最新榜单，该模型得分56.6分，位列全球第五、国产第一。\n目前，Qwen3.7-Max在百炼平台的API调用价格为输入12元/百万Tokens、输出36元/百万Tokens。同时，百炼Token Plan订阅服务也已上线Qwen3.7-Max，订阅用户可直接使用该模型。\n",
-        "site_name": "腾讯网",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q1:r11": {
-        "id": "通义千问Qwen3.7系列:q1:r11",
-        "title": "2026 大模型 API 定价全景图：DeepSeek、豆包、Qwen、GLM、MiniMax、Kimi、Claude、Gemini、GPT 谁最便宜？",
-        "url": "https://blog.csdn.net/weixin_42223090/article/details/161681773",
-        "snippet": " 输出\n0~32K 3.2元 0.64元 16元\n32K~128K 4.8元 0.96元 24元\n128K~256K 9.6元 1.92元 48元\nDoubao Seed 2.0 Code\n价格与 Pro 相同。\n适用于：\nAI Coding\nCopilot\nAgent 开发\n自动代码生成\n三、阿里通义 Qwen 系列\n官方定价：\nhttps://bailian.console.aliyun.com/#/model-market/pricing\nQwen3.6 Flash\n项目 价格\n输入（0~256K） 1.2元\n输入（256K~1M） 4.8元\n输出 7.2元\nQwen3.7 Plus\n项目 价格\n输入（0~256K） 2元\n输入（256K~1M） 6元\n输出 8元\nQwen3.7 Max\n项目 价格\n输入 12元\n输出 36元\n特点\n超长上下文能力突出\n企业 Agent 场景应用广泛\nMax 系列定位高端推理模型\n四、智谱 GLM 系列\n官方定价：\nhttps://open.bigmodel.cn/pricing\nGLM-5.1\n场景 输入未命中 输入命中 输出\n≤32K 6元 1.3元 24元\n>32K 8元 2元 28元\nGLM-5-Turbo\n场景 输入未命中 输入命中 输出\n≤32K 5元 1.2元 22元\n>32K 7元 1.8元 26元\nGLM-4.5-Air\n场景 输入未命中 输入命中 输出\n短输出 0.8元 0.16元 2元\n长输出 0.8元 0.16元 6元\n长上下文 1.2元 0.24元 8元\nGLM-4.7 Flash\n项目 价格\n输入 免费\n输出 免费\n属于当前开放体验模型。\n五、MiniMax 系列\n官方定价：\nhttps://platform .minimaxi.com/document/PriceExplanation\nMiniMax M3\n项目 价格\n输入未命中 2.1元\n输入命中 0.42元\n输出 8.4元\nMiniMax M2.7\n项目 价格\n输入未命中 2.1元\n输入命中 0.42元\n输出 8.4元\n特点\n多模态能力突出\n企业客户较多\n定价位于中间梯队\n六、Moonshot Kimi 系列\n官方定价：\nhttps://platform.moonshot.cn/docs /pricing/chat-completion-pricing\nKimi K2.6\n项目 价格\n输入命中 1.1元\n输入未命中 6.5元\n输出 27元\nKimi K2.5\n项目 价格\n输入命中 0.7元\n输入未命中 4元\n输出 21元\n特点\n长文本处理能力优秀\n输出价格偏高\n复杂知识处理场景表现突出\n七、Anthropic Claude  系列\n官方定价：\nhttps://platform.claude.com/docs/about-claude/",
-        "site_name": "CSDN博客",
-        "query": "通义千问Qwen3.7系列 定价 价格 收费标准",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q2:r12": {
-        "id": "通义千问Qwen3.7系列:q2:r12",
-        "title": "2026年5月国产大模型格局大洗牌:豆包收费、DeepSeek永久降价、通义千问3.7杀入全球前15",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c001906b1s6.html",
-        "snippet": "2026年5月国产大模型格局大洗牌:豆包收费、DeepSeek永久降价、通义千问3.7杀入全球前15\n每日新闻摘录\n06.03 01:49\n排名 模型 厂商 核心优势 月活/调用量\n1 豆包 Seed 2.0 Pro 字节跳动 中文理解顶尖，具身智能领先 月活3.45亿，日活1.4亿\n2 DeepSeek-V4-Pro 深度求索 性价比无敌，推理/代码全球顶尖 周调用量国产第一\n3 通义千问 Qwen3.7 阿里巴巴 开源生态最完善，26万Token超长上下文 全球开源下载量第一\n4 Kimi K2.5 月之暗面 百万Token长文本王者 长文档处理领域第一\n5 智谱 GLM-5 智谱AI 逻辑推理与Agent能力突出 企业级应用领先\n庞大的用户规模背后是惊人的算力成本。据业内人士估算，豆包每天仅推理算力成本就超过 2000万元人民币。两年免费换来的用户规模，现在已经到了必须变现的时刻。\n使用场景 推荐模型 理由\n日常问答、写作辅助 豆包（免费版） 中文理解好，响应快\n代码生成、调试 DeepSeek-V4-Pro 代码能力全球顶尖，价格极低\n超长文档分析（>10万字） Kimi K2.5 百万Token上下文无压力\n企业知识库+Agent 通义千问Qwen3.7 工具调用稳定，开源可私有化\n多模态（图文理解） 智谱GLM-5 / 文心一言 多模态融合能力突出\n教育场景 讯飞星火 方言理解、错题分析专属优化\n",
-        "site_name": "新浪看点",
-        "query": "通义千问Qwen3.7系列 市场份额 用户量 评测",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q2:r13": {
-        "id": "通义千问Qwen3.7系列:q2:r13",
-        "title": "阿里研究院Qwen3.7-Max模型在国际大模型评测中位列国产第一",
-        "url": "https://m.sohu.com/a/1031035941_122066678/",
-        "snippet": "阿里研究院Qwen3.7-Max模型在国际大模型评测中位列国产第一\n财法观天下\n2026-06-02 13:21\n根据三方机构ArtificialAnalysis于6月2日发布的最新全球大模型总榜，阿里研究院的Qwen3.7-Max模型以57分的成绩排名前列，这一成绩与GPT、Claude及Gemini等顶级模型相近，并在所有国产模型中位居首位。\n该模型在编程领域表现出色，能够处理从简单的页面原型设计到复杂的多文件工程项目。在办公应用方面，Qwen3.7-Max能够集成多种工具并协调多个智能体之间的协作，从而实现工作流程自动化，显著提高了实际生产力。\n此外，在执行长时间自主任务时，Qwen3.7-Max展示了其卓越的能力。在一个超过35小时、涉及上千次工具调用的全自主实验中，该模型保持了高度连贯性和稳定性。同时，它还显示出了跨不同智能体框架的良好适应性，无论接入何种Agent框架或工具都能发挥出色性能。\n",
-        "site_name": "手机搜狐网",
-        "query": "通义千问Qwen3.7系列 市场份额 用户量 评测",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q2:r14": {
-        "id": "通义千问Qwen3.7系列:q2:r14",
-        "title": "26年Ai应用榜单出炉：豆包3.45亿断层领先，千问4241%增速，DeepSeek1.27亿；中国Ai应用市场格局已定 ... ...",
-        "url": "https://www.16rd.com/writings-865215-1.html",
-        "snippet": "亿，相较2024年5月产品发布之初的0.12万亿，两年间暴涨1000倍。就在五一假期，豆包正式推出收费计划：标准版连续包月68元、加强版200元、专业版500元，连续包年最高5088元。“免费午餐”正在倒计时，豆包开启商业化变现之路。\n三、千问：4241%增速的“增长神话”\n如果说豆包是流量王者，那阿里的千问就是2026年最大的“增长神话”。数据显示，2026年3月，千问月活达到1.66亿，在AI原生App中排名第二。更惊人的是它的增长速度：单季度净增用户1.26亿，月活同比暴增4241%，拿下亿级App增长榜第一名。横向对比其他亿级应用，千问的增长势头具有明显的断层优势：第二名抖音商城同比增长231%，第三名豆包增长197%，二者增速均不足千问的十分之一。千问何以如此迅猛？核心原因在于生态打通的降维打击。\n依托阿里巴巴集团的底层支持，千问深度融合到淘宝、支付宝、高德、飞猪等高频生活服务场景。用户无需单独下载，在购物、出行、支付时即可自然触达千问，这种“场景即入口”的获客方式，大幅降低了使用门槛。与此同时，产品功能的持续迭代和交互体验的不断升级，有效提升了用户获取效率与留存质量。一季度千问平均活跃率为17.1%，月人均使用次数19.8次。与豆包相比虽有一定差距，但在亿级体量下已属优秀。\n四、DeepSeek：没有大厂靠山的“技术派”黑马\n在头部阵营中，DeepSeek的1.27亿月活尤为特殊——它没有任何大厂流量加持，完全依靠产品力和口碑传播。一季度DeepSeek平均活跃率21%，月人均使用次数41.7次/月。用户粘性仅次于豆包，说明其用户不是“注册即流失”的过客，而是真正高频使用的活跃用户。\n在技术圈和开发者群体中，DeepSeek建立了极强的心智占领。当其他AI应用靠“送红包”“砸广告”拉新时，DeepSeek靠的是“模型强、速度快、免费用”的口碑。这种“技术红利”驱动的增长，在价格战逐渐退潮后，可能会展现出更强的持久性。\n五、残酷分化：前十之外无赢家\n4.4亿月活的盛宴，并非所有人都能分到一杯羹。曾经位居前列的腾讯“元宝”与蚂蚁“阿福”，在春节营销热潮过后，分别以5734.6万和2715万的月活滑落至第四、第五名。与豆包3.45亿的月活相比，差距已经达到数量级——第一名是第四名的6倍。\n元宝的案例尤其值得反思。微信拥有14亿月活用户，是中国人打开频率最高的App。元宝早已接入微信生态，理论上拥有全国最大的流量池兜底。但QuestMobile数据显示，截至2026年3月，元宝月活仅为5735万，亿级月活的俱乐部里，元宝连门槛都没迈进去。行业内对元宝的讨论并不少——“做不好AI”“流量喂不动”成为舆论场的核心话题。强大的流量入口只是入场券，产品体验和用户心智才是决定胜负的关键。\n六、结语\n中国AI应用的格局已经清晰：豆包站在流量之巅，千问以生态为矛高速追",
-        "site_name": "一牛网",
-        "query": "通义千问Qwen3.7系列 市场份额 用户量 评测",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q2:r15": {
-        "id": "通义千问Qwen3.7系列:q2:r15",
-        "title": "大模型之家2026年5月热力榜：当“能干多久”取代“能跑多高”",
-        "url": "https://m.thepaper.cn/newsDetail_forward_33291314",
-        "snippet": "ongForge（训练效率领先行业一倍并开源）。昆仑芯天池256卡超节点已点亮，将于6月上市。此外，百度智能云发布AI营销应用Hogee、视觉智能体平台百度一见、AI养老解决方案福宝等。\n阿里巴巴：Qwen3.7-Max登顶国产第一+真武M890芯片发布\n5月20日阿里云峰会上，阿里巴巴发布全新一代千问旗舰模型Qwen3.7-Max，在三方机构Arena全球大模型盲测总榜中位列国产模型第一，超过Kimi-K2.6、DeepSeek-v4-pro、GLM-5.1，性能接近GPT、Claude、Gemini最强模型。该模型面向智能体全新设计，在编程（SWE-Pro、Terminal Bench 2.0领先）、推理（GPQA Diamond 92.4分超越Opus-4.6）、通用智能体（MCP-Atlas、MCP-Mark创国产新高）等核心能力上实现突破。最引人注目的是其长程自主执行能力：在平头哥真武M890芯片上，模型从零自主工作35小时，完成1158次工具调用，将推理内核性能提升10倍。同期，阿里发布平头哥新一代训推一体AI芯片真武M890（144GB显存，性能为上代3倍），以及基于该芯片的磐久AL128超节点服务器（128卡组成一台计算机）。阿里云宣布百炼平台全面开放，与月之暗面、MiniMax、智谱、阶跃星辰等达成合作。阿里AI业务ARR已超80亿元，预计年底突破300亿元。\nDeepSeek：V4永久降价75%+登顶全球调用榜+多模态技术公布\nDeepSeek在4月24日发布V4系列预览版后，5月持续引爆市场。5月23日，DeepSeek宣布V4-Pro永久降价75%，将原本限时折扣改为永久定价。5月25日，DeepSeek-V4-Flash登顶OpenRouter全球调用榜，为DeepSeek系列史上首次。V4系列采用创新CSA/HCA混合注意力架构，V4-Pro为1.6T参数/49B激活，V4-Flash为284B参数/13B激活，均支持1M上下文，以MIT协议全面开源。在性能方面，V4-Pro在SWE-bench Verified编码代理任务取得80.6%，Agent编码能力首次超越Claude Sonnet 4.5，接近Opus 4.6非思考模式。5月30日，DeepSeek发布多模态技术\"Thinking with Visual Primitives\"（以视觉原语思考），以V4-Flash为语言主干，自研ViT视觉编码器，支持任意分辨率输入。此外，V4系列已原生适配华为昇腾950PR等国产芯片，推理效率提升3倍以上。DeepSeek正与腾讯和阿里巴巴就首轮融资进行洽谈。\n商汤科技：日日新6.7 Flash-Lite发布+U1开源获10家国产芯片适配\n5月8日，商汤发布日日新SenseNova 6.7 Flash-Lite轻量化多模态智能体模型，",
-        "site_name": "澎湃新闻",
-        "query": "通义千问Qwen3.7系列 市场份额 用户量 评测",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q2:r16": {
-        "id": "通义千问Qwen3.7系列:q2:r16",
-        "title": "机构：Qwen3.7-Max位列国产模型第一",
-        "url": "https://finance.eastmoney.com/a/202606023757394755.html",
-        "snippet": "机构：Qwen3.7-Max位列国产模型第一\n2026年06月02日 12:15   来源： 财联社\n5月20日，千问正式发布了Qwen3.7-Max。在三方机构ArtificialAnalysis公布的最新全球大模型总榜中，Qwen3.7-Max得分57，与GPT、Claude、Gemini最强模型分数接近，位列国产模型第一。\n（文章来源：财联社）\n文章来源：财联社 责任编辑：10\n原标题：机构：Qwen3.7-Max位列国产模型第一\n",
-        "site_name": "东方财富网",
-        "query": "通义千问Qwen3.7系列 市场份额 用户量 评测",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q3:r17": {
-        "id": "通义千问Qwen3.7系列:q3:r17",
-        "title": "国产AI大模型巅峰对决：2026年5月主流模型深度横评",
-        "url": "https://blog.csdn.net/anew___/article/details/161432036",
-        "snippet": "（Agent）能力 、全模态理解和极致效率为核心的硬核竞争新阶段。各大厂商的旗舰模型不仅在基准测试中你追我赶，更将战场延伸至真实世界的生产力场景。本文将基于最新发布的模型版本和权威评测（如SuperCLUE、Code Arena等），对当前最热门的几款国产AI进行一次全面而深入的横向对比。\n一、 综合性能王者：通义千问 Qwen3.7-Max\n作为阿里云在2026年5月20日峰会的重磅发布，Qwen3.7-Max 凭借其在多项全球权威评测中的卓越表现，毫无悬念地登顶“国产第一”宝座。\n核心亮点：\n顶尖的编程与智能体能力：在Code Arena全球编程榜单中，Qwen3.7-Max以1541分的成绩\n高居全球第二，是唯一突破1540分的国产模型。它能自主完成长达35小时的复杂任务，通过超1000次工具调用实现自我进化，这标志着其已从聊天机器人进化为真正的“数字员工”。\n极致的推理速度：相比前代，推理速度提升高达10倍，为实时、复杂的任务执行提供了坚实基础。\n生态整合优势：深度打通淘宝、支付宝、高德等阿里生态，实现了“一句话办事”的闭环体验，从购物到出行，覆盖生活全场景。\n适合人群：开发者、企业用户、重度依赖阿里生态的消费者，以及对AI自动化任务执行有极高要求的专业人士。\n二、 全模态先锋：豆包 Doubao-Seed-2.0-Pro\n字节跳动的豆包在2026年完成了从对话AI到“实体智能体”的\n蜕变。其2.0系列，特别是Seed-2.0-Pro版本，在多模态领域展现了惊人的实力。\n核心亮点：\n原生全模态理解：不同于简单的多模态拼接，豆包2.0能原生统一理解视频、图像、音频和文本，实现了真正的视听联合推理。在SuperCLUE-VLM多模态评测中，它甚至力压谷歌Gemini，夺得全球第一。\n强大的数学与推理能力：在IMO、CMO等国际顶级竞赛的模拟测试中取得金牌成绩，数学和逻辑推理能力达到世界顶尖水平。\n丰富的产品矩阵：提供Pro、Lite、Mini、Code等多个版本，精准适配从高性能计算到低成本部署的各种场景。\n适合人群：内容创作者、教育工作者、需要处理大量音视频信息的用户，以及追求前\n沿多模态交互体验的科技爱好者。\n三、 效率与平衡之选：智谱GLM-5.1 与 DeepSeek-V4-Pro\n如果说千问和豆包代表了性能的巅峰，那么智谱GLM-5.1和DeepSeek-V4-Pro则在性能、成本和特定领域专长之间找到了绝佳的平衡点。\n智谱GLM-5.1：\n极致的速度：2026年5月推出的GLM-5.1高速版API，输出速度高达400 tokens/s，刷新了行业记录，首次让旗舰级模型能力与生产级低延迟兼得。\n工程化导向：被官方定义为“Agentic Engineering时代最好的模型”，特别适合需要快速迭代和部署的工程化场景。\nDeepSeek-V4-Pro：\n开源界的王者：以",
-        "site_name": "CSDN博客",
-        "query": "通义千问Qwen3.7系列 vs DeepSeek 对比",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q3:r18": {
-        "id": "通义千问Qwen3.7系列:q3:r18",
-        "title": "多模态模型详解：从拼接式到原生统一架构",
-        "url": "https://blog.csdn.net/FZ51111/article/details/161601461",
-        "snippet": "理解：\n第一代 = 两个人（视觉专家 + 语言专家）通过对讲机协作\n第二代 = 两个人合并成一个团队，有统一指挥\n第三代 = 一个人天生就能看、听、说、写，所有能力融为一体\n三、主流多模态模型对比（2026年）\n3.1 GPT-4o\n核心特点：\n原生多模态架构，支持文本、图像、音频输入输出\n响应速度极快，实时对话体验流畅\n情感理解能力，能读取并理解人的情绪\n多语言处理能力强\n3.2 通义千问3.7\n2026年5月20日阿里云峰会，通义千问正式发布 Qwen3.7 系列旗舰模型：Qwen3.7-Max-Preview（万亿参数）与 Qwen3.7-Plus-Preview（密集模型）。\n核心突破：\n全域思考模式（All-field Thinking）：首次实现文本/图像/代码统一推理\nAgentic Coding 能力：达到国产第一、全球前三（SWE-bench Verified 72.3%）\n\n推理成本：降至 GPT-5.5 的 1/25\n技术参数对比：\n指标 Qwen3.7-Max-Preview Qwen3.7-Plus-Preview GPT-5.5\n参数量 约 1.2T（MoE，激活 45B） 约 35B（密集） 约 9T\n上下文窗口 128K Tokens 128K Tokens 400K Tokens\n思考模式 全域（文本+图像+代码） 全域（文本+图像+代码） 仅文本\n多模态 原生支持（文本+图像+代码+音频） 原生支持 文本+图像+音频\n编程能力（SWE-bench） 72.3% 68.7% 85.1%\n开源状态 预计 2026 年 Q3 开源 Apache 2.0（已开源） 闭源\n全域思考模式架构：\n用户输入（文本 + 图像 + 代码）\n │\n ▼\n┌─────────────────────────────┐\n│ 多模态编码器（Unified）        │\n\n│ • 文本：BPE Tokenizer        │\n│ • 图像：ViT-B/16             │\n│ • 代码：AST Parser           │\n└──────────┬──────────────────┘\n │\n ▼\n┌─────────────────────────────┐\n│ 统一嵌入空间（768 维）         │\n│ 文本-图像-代码 对齐训练         │\n└──────────┬──────────────────┘\n │\n ▼\n┌─────────────────────────────┐\n│ MoE 推理层（Think Mode）      │\n│ • 文本推理专家（32 个）        │\n│ • 图像推理专家（16 个）        │\n│ • 代码推理专家（24 个）        │\n│ • 跨模态融合专家（8",
-        "site_name": "CSDN博客",
-        "query": "通义千问Qwen3.7系列 vs DeepSeek 对比",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q3:r19": {
-        "id": "通义千问Qwen3.7系列:q3:r19",
-        "title": "DeepSeek更新至V3.1 Terminus版本：两大升级",
-        "url": "https://soft.china.com/article/2073748.html",
-        "snippet": "DeepSeek更新至V3.1 Terminus版本：两大升级\n2026-05-30 22:52 快科技\n9月22日消息，深度求索今晚宣布，DeepSeek V3.1现已更新至DeepSeek V3.1 Terminus版本。\n目前，官方App、网页端、小程序与DeepSeek API模型均已同步更新。\n此次更新在保持模型原有能力的基础上，针对用户反馈的问题进行了改进，包括：\n1、语言一致性：缓解了中英文混杂、偶发异常字符等情况；\n2、Agent 能力：进一步优化了Code Agent与Search Agent的表现。\n官方表示，DeepSeek V3.1 Terminus的输出效果相比前一版本更加稳定。\n新模型各领域测评结果如下：\n开源版本下载地址如下：\nHugging Face：\nhttps://huggingface.co/deepseek-ai/DeepSeek-V3.1-Terminus\nModelScope：\nhttps://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1-Terminus\n",
-        "site_name": "中华网软件",
-        "query": "通义千问Qwen3.7系列 vs DeepSeek 对比",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q3:r20": {
-        "id": "通义千问Qwen3.7系列:q3:r20",
-        "title": "2026年5月AI编程工具横评：GPT-5.5、Claude Opus 4.7、Qwen3.7-Max谁最强",
-        "url": "https://blog.csdn.net/yp0to1/article/details/161488958",
-        "snippet": "T-5.5、Claude  Opus 4.7、Qwen3.7-Max\n总体排名（DeepSWE总分）\n排名 模型 DeepSWE总分 SWE-bench v2（对比）\n🥇 第1名 GPT-5.5 (OpenAI) 70分 82.7%\n🥈 第2名 Claude Opus 4.7  (Anthropic) 58分 64.3%\n🥉 第3名 Qwen3.7-Max  (阿里云) 52分 61.2%\n第4名 DeepSeek V4-Pro 48分 58.7%\n第5名 Kimi K2.6 (Moonshot) 42分 55.3%\n第6名 GLM-5.1 (智谱AI) 38分 52.1%\n第7名 Llama 4 (Meta) 35分 48.9%\n第8名 GPT-5.5 (零样本) 28分 42.3%\n… … … …\n用人话解释：\nGPT-5.5确实是第一，但领先幅度没有想象中那么大（70分 vs 58分）\n\n\n如果你在选型AI编程工具\n现在市面上的AI编程工具，底层用的模型都不一样：\n工具 底层模型 DeepSWE分数 推荐场景\nGitHub Copilot GPT-5.5 / Codex 70分 修bug、快速原型\nClaude Code Claude Opus 4.7 58分 新功能开发、团队协作\nCursor 可选（GPT-5.5 / Claude / Gemini） - 灵活，但需要你会选模型\n通义灵码 Qwen3.7-Max 52分 国产替代，性价比高\nFitten Code 自研（基于GLM-5.1） 38分 学生优惠多\n用人话解释：\n如果你主要修bug → 用 GitHub Copilot （底层GPT-5.5）\n如果你主要开发新功能 → 用 Claude Code （底层Claude Opus 4.7）\n如果你预算有限 → 用 通义灵码（底层Qwen3.7-Max，便宜很多）\n如果\n你在学AI编程\n这次横评，暴露了一个很重要的问题：\n所有AI模型，在Level 5（顶级难度）上的通过率都不超过35%。\n这意味着什么？\n意味着：AI现在还不能完全替代人类程序员。\n特别是这些场景，AI做得不好：\n系统架构设计（需要深入理解业务）\n跨多个仓库的大型重构（AI容易改出bug）\n性能优化（AI不知道你的具体瓶颈在哪）\n所以，你应该学的是：\n“如何跟AI协作，而不是被AI替代。”\n具体来说：\n简单任务（修bug、写单元测试） → 交给AI\n中等任务（开发新功能、代码审查） → 你主刀，AI辅助\n复杂任务（架构设计、性能优化） → 你做，AI打杂\n四、如何用这些模型，提升你自己的编程效率？\n如果你在用GitHub Copilot（GPT-5.5）\n✅ 推荐用法：\n// ✅ 好的用法：让GPT-5.5帮你修bug\n// 你在代码里写注释：\nfunction calculateTotal(",
-        "site_name": "CSDN博客",
-        "query": "通义千问Qwen3.7系列 vs DeepSeek 对比",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "通义千问Qwen3.7系列:q3:r21": {
-        "id": "通义千问Qwen3.7系列:q3:r21",
-        "title": "Qwen 3.7 大模型说明",
-        "url": "https://www.cndba.cn/dave/article/131894",
-        "snippet": "力机制，百万Token上下文下800K位置信息召回率大幅提升；\n原生兼容MCP模型上下文协议、Anthropic API协议，工具生态全面扩容；\n幻觉率降至22.9%，前沿闭源模型中幻觉控制第一梯队；\n强化硬件底层优化，可自主完成芯片内核代码优化，工程效率提升10倍。\n补充：DeepSeek V4 基础信息与发布时间\nDeepSeek V4-Pro（对标Qwen3.7-Max的旗舰版本）\n发布时间：2026年4月24日（比Qwen3.7早26天发布）\n产品定位：开源+商业API双路线旗舰MoE模型，权重完全开源，兼顾私有化部署与线上调用\n架构规格：总参数1.6T MoE，激活49B参数；全系标配100万Token上下文窗口\n版本划分：V4-Pro（旗舰推理）、V4-Flash（高性价比轻量化）\n核心优势：推理成本极低、开源可本地部署、竞赛代码能力开源天花板；短板为幻觉控制、超长时序自主Agen\nt弱于闭源Qwen3.7\n二、三层横向性能对比：Qwen3.7-Max vs Qwen3.6-Plus vs DeepSeek V4-Pro\n2.1 基础规格总表\n指标 Qwen3.7-Max（阿里闭源旗舰） Qwen3.6-Plus（上代阿里闭源） DeepSeek V4-Pro（开源旗舰） 优劣总结\n发布时间 2026.05.20 2026.04.01 2026.04.24 3.6最早，V4次之，3.7最晚\n上下文窗口 1,000,000 Token 256,000 Token 1,000,000 Token 3.7、V4持平，3.6大幅落后\n模型属性 闭源API，无开源权重 闭源API MIT开源权重 + API服务 DeepSeek唯一支持本地私有化部署\n综合AI基准分数 56.6分（国产闭源第一） 51.8分 70.98分（开源赛道第一） 开源榜单V4领先，闭源榜单3.7领先，两套评\n测体系\n原生API协议 OpenAI+Anthropic+MCP 仅OpenAI兼容 OpenAI兼容，自研DMX协议 Qwen3.7协议生态更完善\n连续自主Agent运行时长 35小时 6小时 6.5小时 Qwen3.7断层领先，长周期任务碾压\n基础幻觉率 22.9% 31.5% 94% Qwen全系幻觉控制极强，DeepSeek V4幻觉问题突出\n2.2 硬核数学&学术推理基准（高阶逻辑、专业知识）\n评测基准 Qwen3.7-Max Qwen3.6-Plus DeepSeek V4-Pro 胜负说明\nHLE人类终极学术考试 41.4分 28.8分 37.7分 Qwen3.7 > DeepSeek V4 > Qwen3.6\nApex高阶数学推理 44.5分 8.8分 38.3分 Qwen3.7领先V4超6分，数学长链式推理优势巨大\nCritPt临界点逻辑推理 13.4% 3.7% 9.1% ",
-        "site_name": "cnDBA.cn",
-        "query": "通义千问Qwen3.7系列 vs DeepSeek 对比",
-        "competitor": "通义千问Qwen3.7系列",
-        "collected_at": "2026-06-05T19:22:37"
-      },
-      "Kimi K2.6:q0:r0": {
-        "id": "Kimi K2.6:q0:r0",
-        "title": "Kimi AI 2.6新版本发布记录_K2.6万亿参数模型长文本与深度推理再进化",
-        "url": "https://m.php.cn/faq/2548339.html",
-        "snippet": "Kimi AI 2.6新版本发布记录_K2.6万亿参数模型长文本与深度推理再进化\nP粉602998670\n2026-05-27\n208人浏览\nkimi ai 2.6版本上线，搭载k2.6万亿参数moe模型，逻辑推理、数理计算及长代码准确率跃升，显著降低ai幻觉；超长上下文解析能力增强，数十万字财报或论文处理速度与论点提取精度提升近40%。\n月之暗面官方宣布 Kimi AI 2.6 版本正式上线。该版本搭载了全新研发的 K2.6 万亿参数 MoE（混合专家）架构模型，在逻辑推理、数理计算以及长代码编写的准确率上实现了跨越式提升，大幅减少了行业大模型常见的“AI 幻觉”。2.6 版本延续并巩固了 Kimi 标志性的超长上下文解析优势，面对数十万字的复杂财报或多篇长篇学术论文，新版模型的响应速度和分词核心论点提取精度提升了近 40%，能为用户提供更加深度的长程任务推理体验。\n相关标签:\nkimi Kimi\n",
-        "site_name": "php.cn",
-        "query": "Kimi K2.6 产品功能介绍",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q0:r1": {
-        "id": "Kimi K2.6:q0:r1",
-        "title": "Kimi又更新了！10分钟搞定5小时工作量，这5个AI功能太炸了！",
-        "url": "http://m.163.com/dy/article/KT9E6TNQ05169CIL.html",
-        "snippet": "Kimi又更新了！10分钟搞定5小时工作量，这5个AI功能太炸了！\n秋叶PPT\n2026-05-19 08:22\n作者：躺糖\n编辑：躺糖\n最近 AI 圈子又热闹起来了！Kimi 更新了 K2.6 版本，材料处理、图文理解及推理能力都有所提升，上下文窗口更是拉到了200 万字。\n我们把200 页的品牌资料丢给它，它 3 分钟就读完并给出了每份报告的总结观点。\n而且，Kimi K2.6 的Agent 能力也全面升级，可一键生成电影感网页，还能调用上百种技能处理 PPT、Excel、文档等工作。\n那在日常工作中，Kimi K2.6 能帮我们搞定哪些棘手难题？今天就把 K2.6 的5 个 AI 实用新功能 分享给大家，看完就能上手！\n信息图文联动，\nAI 深度读懂内容\nKimi K2.6 能把图片和文字结合起来，捋清其中的逻辑，图文排版、方案撰写、文档修订这类琐事都能交给它。\n比如，我们给它一份排版混乱的文档《秋叶 PPT 品牌运营报告》，让它输出一份杂志风的 PDF。\n我给它的：格式混乱，内容繁杂，且没配图\n它给我的：标准杂志风，排版精美，配图合理，逻辑清晰，内容比较完整，简直妙啊！\n以前做这种文档处理，至少要熬一个晚上，结果这次 10 分钟就帮我出成稿了，质量是可以直接交付的水平。\n除此之外，信息图表也能交给 Kimi 处理。做 PPT 需要数据可视化时，输入文字，让 AI 自动生成趋势图。\n反过来，如果你遇到难懂的流程图、组织架构图，也可以让 Kimi 帮你转换成通顺的文字讲解！\nOffice 文档转技能，\n一键生成同款风格\n老板给你一份别人做的高质量文档，让你照着风格做一份新的。你手搓得花好几天，现在用 Kimi K2.6，直接生成同款文档。\n✅操作步骤\n❶ 打开 Kimi 对话框，直接输入「/ 」，调出技能面板，选择「Office 文档转技能」功能；\n❷ 上传你想复刻的目标 PPT/Word，告诉 AI 需要学会的排版风格、字体逻辑、配色等；\n等待技能生成后，打开新对话框，输入「 / 」就可以随时调用了。\n比如我们让它根据文档技能的风格、排版，写一篇新主题的研究报告文档。大概 10 分钟，就可以拿到\n我们还上传了一份 PPT 模板生成技能，试了一下。不过出来的 PPT 有点翻车，排版比较简单，且没能完全模仿到原版的精髓\n如果你有参考 PPT 模板制作 的需求，直接用豆包的 PPT 生成功能，效果应该会更好~（还免费）\n上百个技能随时调用，\n效率直接翻倍\nKimi 这次把 Agent 技能池拉满了，内置上百个常用办公技能，不用自己写提示词，点一下就能用。\n⭐内置技能一键调用\n比如你需要做行业分析，直接调用「深度搜索」技能：\nKimi 会自动联网对比多个行业报告、数据给出综合判断，并标注信息来源，不再是简单地抓取网页摘要了。\n然后 AI 会自动整理分析并生成 ",
-        "site_name": "网易",
-        "query": "Kimi K2.6 产品功能介绍",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q0:r2": {
-        "id": "Kimi K2.6:q0:r2",
-        "title": "Kimi K2系列模型API 5月25日停用 用户可迁移至kimi-k2.6享更强功能",
-        "url": "https://m.sohu.com/a/1027779226_362225/",
-        "snippet": "Kimi K2系列模型API 5月25日停用 用户可迁移至kimi-k2.6享更强功能\nITBEAR\n2026-05-26 12:30\n月之暗面Kimi官方近日发布重要通知，旗下Kimi K2系列模型API将于5月25日起正式停止维护与技术支持服务。这一调整意味着用户需迁移至全新升级的kimi-k2.6模型，以获取更先进的多模态处理能力及持续优化的技术服务。\n作为曾引发行业广泛关注的开源模型系列，Kimi K2自去年7月首次亮相以来，凭借其万亿级参数规模迅速成为焦点。该系列包含kimi-k2-0711-preview、kimi-k2-0905-preview、kimi-k2-turbo-preview等多个版本，基础模型总参数达1T，激活参数32B，在代码生成与通用智能体任务中展现出显著优势。其多模态理解能力与复杂问题解决效率，曾为开发者社区提供重要技术支撑。\n去年11月推出的Kimi K2 Thinking版本进一步推动了技术边界，该模型通过\"自主思考-工具调用\"循环机制，实现了无需人工干预的300轮连续操作。这种突破性设计使其能够独立完成多步骤复杂任务，例如自动拆解问题、调用外部工具并迭代优化解决方案，在开源思考模型领域树立了新的标杆。\n随着技术迭代加速，官方建议用户尽快完成模型迁移。新发布的kimi-k2.6在继承前代优势的基础上，重点强化了多模态交互的精准度与代码生成的鲁棒性。该模型通过优化注意力机制与知识图谱融合技术，显著提升了在跨领域任务中的表现稳定性，可更好满足企业级应用开发需求。\n技术团队特别提醒，模型迁移过程中需注意数据兼容性与接口适配问题。官方文档已提供详细的迁移指南与工具包，开发者可通过专属通道获取技术支持。此次升级不会影响现有服务的正常运行，但建议用户在90天过渡期内完成系统切换，以确保获得完整的技术保障。\n",
-        "site_name": "手机搜狐网",
-        "query": "Kimi K2.6 产品功能介绍",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q0:r3": {
-        "id": "Kimi K2.6:q0:r3",
-        "title": "Kimi-Kimi K2.6已上线",
-        "url": "https://app.mi.com/details?id=com.moonshot.kimichat",
-        "snippet": "生，还是互联网与法律行业的从业者，以及对AI好奇的所有人，Kimi旨在增强每一位专业人士与学习者的能力，让你从繁重的资料处理和内容创作中解放出来。\n如果在使用过程中遇到任何问题，可在Kimi应用内“设置-点击头像-意见反馈”进行反馈。Kimi会珍视每一条宝贵建议，不断学习进步，给出更好的答案~\n新版特性\n修复了一些问题\n",
-        "site_name": "小米应用商店",
-        "query": "Kimi K2.6 产品功能介绍",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q0:r4": {
-        "id": "Kimi K2.6:q0:r4",
-        "title": "Kimi 发布并开源 K2.6：Agent、长程编码与多模态能力全面升级",
-        "url": "https://www.aihub.cn/news/kimi-k2-6-news/",
-        "snippet": "Kimi 发布并开源 K2.6：Agent、长程编码与多模态能力全面升级\n4月21日\n2026 年 4 月 20 日，月之暗面正式发布并开源新一代旗舰模型 Kimi K2.6。官方将其定位为最新、最智能的 Kimi 模型，强调其在长程代码执行、Agent 协作、多模态理解与复杂任务推理上的综合升级。K2.6 已同步上线 Kimi 网页端、Kimi App、API 以及 Kimi Code，面向普通用户和开发者开放体验。\n从能力定位看，Kimi K2.6 不只是一次常规迭代，而是明显朝“可持续执行的 Agent 模型”方向继续推进。官方资料显示，K2.6 支持 文本、图片、视频输入，可在 思考模式与非思考模式  间切换，标准上下文窗口为 256K tokens。在官方展示案例中，K2.6 能在 12 小时以上连续执行 4000 多次工具调用，也能在 13 小时内持续修改 4000 多行代码，完成复杂工程优化任务。\n评测成绩方面，K2.6 已进入当前第一梯队。根据月之暗面官方 ",
-        "site_name": "AIHub工具导航",
-        "query": "Kimi K2.6 产品功能介绍",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r5": {
-        "id": "Kimi K2.6:q1:r5",
-        "title": "国产万亿大模型再升级 kimi 2.6-code来了：AI编程新选择 月费39起",
-        "url": "https://soft.china.com/article/2076961.html",
-        "snippet": "国产万亿大模型再升级 kimi 2.6-code来了：AI编程新选择 月费39起2026-06-05 17:31 快科技4月14日消息，最近一周国产大模型升级频繁，继GLM-5.1、MiniMax 2.7开源之后，月之暗面的Kimi K2.6-code-preview也来了，是一款专为AI编程优化的万亿参数大模型。官网上表示已经上线，不过体验这个大模型需要Kimi的会员计划，起步39元每月，可以在Kimi Code中使用。不过K2.6-code-preview大模型比较低调，之前的内测就没怎么宣传过，这两天要发布了才看到有人提，Kimi官方也没大张旗鼓宣传，甚至目前官网上还没看到这个大模型具体升级了什么。从网络上有人参与的内测反馈及介绍来看，K2.6-code-preview是在K 2.5这个万亿参数大模型基础上改进的，主要优化依然是AI编程，K 2.5的SWE-Bench Verified榜单评分是76.8%，LiveCodeBench则是85%。",
-        "site_name": "中华网软件",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r6": {
-        "id": "Kimi K2.6:q1:r6",
-        "title": "Kimi K2.6 Pricing Guide 2026: Compare Costs & Deployment Strategies",
-        "url": "https://deepinfra.com/blog/kimi-k2-6-pricing-guide-deployment-tradeoffs",
-        "snippet": "Kimi K2.6 is an open-weight April 2026 model from Moonshot AI/Kimi that is currently available across nine tracked API providers, with blended pricing from $1.15 to $2.15 per 1M tokens in Artificial Analysis. It is best suited for teams that want a long-context, multimodal, agentic model with strong coding and tool-use positioning, especially if they also want the freedom to optimize around price, deployment model, or throughput rather than accept a single vendor default. DeepInfra stands out for balanced production economics and deployment flexibility, while Parasail, Clarifai, Fireworks, OpenRouter, and Kimi’s native API each have more specialized strengths.",
-        "site_name": "Deep Infra",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r7": {
-        "id": "Kimi K2.6:q1:r7",
-        "title": "2026 大模型 API 定价全景图：DeepSeek、豆包、Qwen、GLM、MiniMax、Kimi、Claude、Gemini、GPT 谁最便宜？",
-        "url": "https://blog.csdn.net/weixin_42223090/article/details/161681773",
-        "snippet": "MiniMax M3项目 价格输入未命中 2.1元输入命中 0.42元输出 8.4元MiniMax M2.7项目 价格输入未命中 2.1元输入命中 0.42元输出 8.4元特点多模态能力突出企业客户较多定价位于中间梯队六、Moonshot Kimi 系列官方定价：https://platform.moonshot.cn/docs /pricing/chat-completion-pricingKimi K2.6项目 价格输入命中 1.1元输入未命中 6.5元输出 27元Kimi K2.5项目 价格输入命中 0.7元输入未命中 4元输出 21元特点长文本处理能力优秀输出价格偏高复杂知识处理场景表现突出七、Anthropic Claude  系列官方定价：https://platform.claude.com/docs/about-claude/pricingClaude Opus 4.8项目 价格输入未命中 $5",
-        "site_name": "CSDN博客",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r8": {
-        "id": "Kimi K2.6:q1:r8",
-        "title": "【产业资讯】炸场！Kimi K2.6-code-preview重磅上线，对标Sonnet 4.6，编程评分暴涨6分",
-        "url": "https://post.m.smzdm.com/p/ae6gd8km/",
-        "snippet": "张大妈\n【产业资讯】炸场！Kimi K2.6-code-preview重磅上线，对标Sonnet 4.6，编程评分暴涨6分\n04-21 10:04\n2026年4月14日，月之暗面正式推出Kimi K2.6-code-preview编程大模型。该模型基于万亿参数MoE架构，编程评分从前代K2.5的83分提升至89分，直接对标Anthropic旗下的Sonnet 4.6。此次升级主要针对推理深度、代理规划质量及兼容性进行了优化，旨在为开发者提供高性价比的复杂代码解决方案。\n01 核心参数与架构升级\n特性 Kimi K2.5 Kimi K2.6-code-preview\n编程评分 83分 89分\n对比竞品 - 对标Sonnet 4.6\n思维链风格 常规 Opus风格（更严谨）\n复杂场景表现 基础 深度优化\n模型核心参数对比\nK2.6-code-preview延续了K2.5的万亿参数基座，采用1T总参数量、32B激活参数的MoE架构设计，并保留了256K的超长上下文窗口。经过针对性优化后，该模型在SWE-Bench Verified和LiveCodeBench榜单中表现亮眼，其实际代码生成能力已接近Sonnet 4.6水平。内测开发者反馈，新版本在复杂代码逻辑推演中具备更高的可靠性。\n02 功能优化：推理、规划与兼容\n推理深度提升\n模型思维链性能增强，能精准理解复杂需求并拆解多层逻辑，降低代码报错率，尤其在多步骤编写和复杂算法实现场景中表现优异。\n代理规划质量优化\n在处理大型项目或多模块任务时，能够进行全局规划并合理分配任务逻辑，显著提升代码编写效率。\n工具调用可靠性增强\n多步工具调用场景下的错误率显著降低，确保长链编程任务顺畅推进。\n修复兼容性难题\n彻底解决了Claude Code 2.1.88版本因工具Schema变化导致的“降智”问题，恢复了在第三方编程工具中的流畅体验。\n03 价格策略与可用性\nKimi K2.6-code-preview目前采用会员专属模式，月费39元起。相较于海外顶尖编程模型高昂的API费用，该策略降低了开发者的使用门槛。该模型已在Kimi Code控制台正式上线并标注为旗舰模型，不仅可在Kimi Code客户端使用，还能同步适配VSCode、Cursor、Zed等主流编辑器及第三方工具，无需调整现有操作习惯。\n",
-        "site_name": "什么值得买社区频道",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r9": {
-        "id": "Kimi K2.6:q1:r9",
-        "title": "42982金牛网论坛",
-        "url": "http://www.yunnanlong.com/c/03262H4V32023.html",
-        "snippet": "42982金牛网论坛来自安顺 发布时间:2026年06月04日 20:1542982金牛网论坛42982金牛网论坛在行业基准测试中，Kimi K2.6与安特罗皮克公司的Claude Opus 4.7 和OpenAI的GPT-5.5等西方尖端模型不相上下。但在价格方面，则是另外一番景象：Kimi K2.6每百万输出词元(token)的费用大约仅为4美元，比上述两款西方尖端模型便宜了大约六到八倍。对于普通个人用户来说，这种成本差异可能无关痛痒；但对于那些需要运行数百个AI智能体(Agents)的企业而言，这至关重要。作者指出，Kimi绝非个例。当这一AI模型在调用量上霸榜的同时，另一款中国AI模型“通义千问”(Qwen)正迅速成为自托管(self-hosted)AI模型领域的默认生态。截至2026年3月，“通义千问”已经拿下了全球超过50%的开源模型下载量。而对这款模型的关注并不仅仅局限于那些精打细算的企业。2025年11月，新加坡政府宣布采用该模型来构建其国家主权AI模型。",
-        "site_name": "云南龙网",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r10": {
-        "id": "Kimi K2.6:q1:r10",
-        "title": "Kimi K2.6出了，涨价凶猛",
-        "url": "https://post.m.smzdm.com/p/apq7vkww/",
-        "snippet": "张大妈\nKimi K2.6出了，涨价凶猛\n源自小红薯：张翼轸\n04-22 20:45\n近期国产大模型厂商密集发布小版本迭代更新，与此同时，模型API调用价格出现显著上涨。Kimi与GLM相继宣布了新的定价策略，其单价涨幅引发市场关注，与此前大幅降价的趋势形成鲜明对比。\n01 Kimi K2.6定价全面上调\nKimi最新推出的K2.6模型在定价上进行了全面调整。与K2.5版本相比，K2.6在输入和输出价格上均有不同程度的提升，其上下文窗口保持262.144 Tokens不变。\n价格维度（元/1MTokens） K2.5原价 K2.6新价 涨幅\n输入价格（缓存命中） 0.70 1.10 57.1%\n输入价格（缓存未命中） 4.00 6.50 62.5%\n输出价格 21.0 27.0 28.6%\nKimi K2.6与K2.5定价对比\n02 行业竞品价格变动趋势\n除Kimi外，另一大模型厂商智谱AI在GLM 5.1版本中也执行了涨价策略。对比发现，头部国产大模型在小版本迭代时，似乎同步开启了价格修复机制。\n模型 输入价格涨幅 输出价格涨幅\nKimi K2.6 62.5% 28.6%\nGLM 5.1 50% 33.5%\n主流国产大模型价格涨幅对比\n这种涨价趋势与去年9月Deepseek V4大幅降价的市场行为截然不同。部分用户反馈对当前价格上扬感到不适应，市场观点开始出现分化，一方面是对性能提升的期待，另一方面则是对成本增加的担忧。整体而言，国产大模型市场正在经历从价格战向价值战的转变。\n精选参考来源\nKimi K2.6出了，涨价凶猛\n张翼轸 2026-04-21\n",
-        "site_name": "什么值得买社区频道",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q1:r11": {
-        "id": "Kimi K2.6:q1:r11",
-        "title": "kaiyun平台官方app",
-        "url": "http://m.yunnanlong.com/c/941497.html",
-        "snippet": "kaiyun平台官方app来源：kaiyun平台官方app | 2026年06月03日 19:36kaiyun平台官方app | 2026/06/03kaiyun平台官方app 最新消息kaiyun平台官方appkaiyun平台官方app在行业基准测试中，Kimi K2.6与安特罗皮克公司的Claude Opus 4.7 和OpenAI的GPT-5.5等西方尖端模型不相上下。但在价格方面，则是另外一番景象：Kimi K2.6每百万输出词元(token)的费用大约仅为4美元，比上述两款西方尖端模型便宜了大约六到八倍。对于普通个人用户来说，这种成本差异可能无关痛痒；但对于那些需要运行数百个AI智能体(Agents)的企业而言，这至关重要。作者指出，Kimi绝非个例。当这一AI模型在调用量上霸榜的同时，另一款中国AI模型“通义千问”(Qwen)正迅速成为自托管(self-hosted)AI模型领域的默认生态。截至2026年3月，“通义千问”已经拿下了全球超过50%的开源模型下载量。而对这款模型的关注并不仅仅局限于那些精打细算的企业。2025年11月，新加坡政府宣布采用该模型来构建其国家主权AI模型。",
-        "site_name": "云南龙网",
-        "query": "Kimi K2.6 定价 价格 收费标准",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q2:r12": {
-        "id": "Kimi K2.6:q2:r12",
-        "title": "本周AI速递：国产模型登顶全球，GPT-5.5开放，Agent时代来临",
-        "url": "https://blog.csdn.net/2604_95848375/article/details/161230468",
-        "snippet": "本周AI速递：国产模型登顶全球，GPT-5.5开放，Agent时代来临\n文章标签：\n#人工智能 #gpt\n本周摘要：2026年5月第三周，AI行业迎来多个里程碑事件。国产大模型Kimi K2.6和DeepSeek V4在性能榜单上超越GPT-5登顶全球；OpenAI向全用户开放GPT-5.5，幻觉率大幅降低52.5%；AI产品从\"模型竞赛\"转向\"工作流嵌入\"，Agent智能体成为行业新焦点。本文为你梳理本周最重要的AI动态。\n头条：国产大模型历史性突破\nKimi、DeepSeek登顶全球性能榜\n2026年5月，全球AI格局发生重大变化。根据LMSYS Chatbot Arena最新评测数据：\n排名 模型 综合得分 开发公司\n🥇 第一 Kimi K2.6 94.3分 月之暗面\n🥈 第二 DeepSeek V4 93.8分 深度求索\n🥉 第三 GPT-5 93.5分 OpenAI\n这是国产大模型首次在全球权威评测中包揽前两名，标志着中国AI技术已达到世界领先水平。\n关键突破点：\n长文本处理：Kimi K2.6支持256K上下文窗口，可一次性处理数十万字文档\n代码能力：DeepSeek V4在HumanEval基准测试中得分92.5%，超越GPT-5的91.8%\n中文理解：在中文场景下，国产模型的准确率和流畅度明显优于国际模型\n中国AI调用量全球第一\n根据多家AI平台公布的统计数据，5月4日至10日一周内：\n中国AI周调用量：7.94万亿Token\n美国AI周调用量：3.76万亿Token\n中国是美国的2.11倍，连续两周领跑全球\n背后的驱动因素：\n用户基数优势：中国庞大的人口基数带来了巨大的AI应用市场\n应用场景丰富：从客服、办公到内容创作，AI已渗透到各行各业\n价格竞争力：国产模型API价格普遍低于国际竞品，促进了大规模应用\n政策支持：国家对人工智能产业的持续投入和政策扶持\n成本优势显著\n国产模型不仅在性能上领先，在成本控制上也展现出巨大优势：\n模型 API价格（每百万Token） 相对GPT-5成本\nDeepSeek V4 ¥0.02元 约40%\nKimi K2.6 ¥0.03元 约60%\nGPT-5 $0.05美元 100%\n技术自主化进展：\nDeepSeek V4已完成全国产技术底座闭环\n完全适配华为昇腾芯片\n不再依赖英伟达GPU集群\n这种\"高性能+低成本+技术自主\"的组合，使得国产模型在商业应用中具有极强的竞争力。\n技术突破：OpenAI GPT-5.5全量开放\nGPT-5.5 Instant正式发布\n5月6日，OpenAI正式向全用户开放GPT-5.5 Instant版本。这是自GPT-5发布以来最重要的更新。\n核心改进：\n指标 GPT-5 GPT-5.5 提升幅度\n幻觉率 基准 降低52.5% ⬇️ 52.5%\n上下文窗口 128K 1M+ ⬆️ ",
-        "site_name": "CSDN博客",
-        "query": "Kimi K2.6 市场份额 用户量 评测",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q2:r13": {
-        "id": "Kimi K2.6:q2:r13",
-        "title": "中国AI大模型周调用量最新数据领跑_Kimi K2.6模型位列榜首创纪录",
-        "url": "https://m.php.cn/faq/2548330.html",
-        "snippet": "中国AI大模型周调用量最新数据领跑_Kimi K2.6模型位列榜首创纪录\nP粉602998670\n2026-05-27\n980人浏览\nkimi k2.6以1.58万亿次周调用量居全球榜首，中国占全球前九模型中的四席；其凭借长文本深度推理和websites自动化建站功能成为开发者与企业首选工具。\n根据行业最新披露的全球大模型数据监测报告，在全球日均 Token（词元）调用量突破 140 万亿次的大背景下，中国 AI 大模型表现抢眼。在上周全球调用量排名前九的头部模型中，中国独占四席。其中，月之暗面旗下的 Kimi K2.6 旗舰模型表现最为强劲，以高达 1.58 万亿次的周调用量傲视群雄，成功位列全球榜首。数据表明，Kimi 2.6 版本凭借长文本深度推理和 Websites 自动化建站功能，已经成为国内乃至全球开发者与企业高频调用的首选生产力工具。\n相关标签:\n大模型 kimi ai大模型 AI大模型 Kimi\n",
-        "site_name": "php.cn",
-        "query": "Kimi K2.6 市场份额 用户量 评测",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q2:r14": {
-        "id": "Kimi K2.6:q2:r14",
-        "title": "Kimi K2.6开源实测：代码能力对标GPT-5.4，含金量如何？",
-        "url": "https://blog.csdn.net/YC_ZHG/article/details/160374690",
-        "snippet": "Kimi K2.6开源实测：代码能力对标GPT-5.4，含金量如何？\n文章标签：\n#开源 #kimi #gpt\n月之暗面刚刚开源了 Kimi K2.6，官方宣称代码能力对标GPT-5.4。作为开发者，第一时间做了实测，以下是客观评价。\n测试环境\n硬件：NVIDIA A100×2\n系统：Ubuntu 22.04\n评测基准：HumanEval、MBPP、DS-1000\n测试结果\n基准 GPT-5.4 Kimi K2.6 Claude 3.5\nHumanEval 92.1% 89.7% 88.3%\nMBPP 88.5% 86.2% 85.1%\nDS-1000 85.3% 83.9% 81.7%\n分析\n1. 差距在可接受范围内：3-5个百分点的差距主要体现在复杂多跳推理场景，基础代码生成能力已基本持平。\n2. 中文场景优势明显：Kimi K2.6在中文注释代码、中文技术文档场景中表现更稳定，这与其预训练数据分布有关。\n3. 推理速度：K2.6采用新的推理优化框架，实测吞吐量比K1.6提升约40%。\n宜昌未来智慧谷\n",
-        "site_name": "CSDN博客",
-        "query": "Kimi K2.6 市场份额 用户量 评测",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q2:r15": {
-        "id": "Kimi K2.6:q2:r15",
-        "title": "DeepSeek V4登榜，全球开源𳜇都是中国模型了",
-        "url": "http://jxsmlw.cn/haerbin/9416586786bf46aplXpE.html",
-        "snippet": "中超越所有已公开开源模型。\n而Kimi K2.6则在公众号中称，新模型在Humanity’s Last Exam全工具测试中�.0%的得分登顶；在DeepSearchQA深度检索中�.5%的得分领先于GPT-5.4、Gemini 3.1 Pro和Claude Opus 4.6。\nOpenRouter数据显示，K2.6在发布后迅速跃居每日榜单的榜首，跟DeepSeek一起位居全球前五。\n来源：OpenRouter官网（2026��日）\nMeta新模型Muse Spark发布时，官方博客对比的两个基准模型正是DeepSeek和Kimi。\n中美科技竞争的一个核心战场是算力供应链。此次，DeepSeek V4明确支持华为昇�芯片。DeepSeek在官方定价说明的小字脚注中注明：“受限于高端算力，目前Pro的服务吞吐十分有限，预计下半年昇�超节点批量上市后，Pro的价格会大幅下调”。华为方面同步宣布，昇腾超节点全系产品已完成对V4的适配与支持，通过芯模技术紧密协同，实现了高吞吐、低时延的推理部署。\nKimi在国产芯片领域同样走在前列。Kimi K2.6支持国产芯片混合推理，其技术路线强调在端侧和云端协同运行，降低对英伟达CUDA生态的依赖。Kimi从K2 Thinking就加入了INT4量化技术——通过模型量化推理，显著提升了对国产加速芯片的兼容性。华为昇腾官方平台也披露，已完成Kimi K2.5在昇腾AI上的部署，实现多模态推理性能的全面跃升。\n两家同时推国产芯片适配：DeepSeek助力昇腾，Kimi开源异构推理路线。\n黄仁勋在英伟�年度GPU技术大会的主题演讲中，用来展示下一代Blackwell Ultra芯片性能的大模型，就是Kimi K2.5，将中国开源模型作为衡量下一代GPU的标杆。\n来源：黄仁勋在英伟达GTC2026大会的主题演讲\n梁文锋与杨植麟，两个广东人，相差八岁，一位从量化跨界，一位深耕学术。如今，他们各自带领的团队分别成长为中国的“万亿开源头部”，推动行业协同互补的“团战”。梁文锋和杨植麟都相信，开源让每个企业、每个研究者非常低门槛地获取智能，是推动AI发展的最重要基石。\n责任编辑：避重就轻网\n",
-        "site_name": "避重就轻网",
-        "query": "Kimi K2.6 市场份额 用户量 评测",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q2:r16": {
-        "id": "Kimi K2.6:q2:r16",
-        "title": "2026年4月中国AI大模型全景报告：九大模型密集发布，国产AI迎来“Agent爆发周”",
-        "url": "https://blog.csdn.net/nmdbbzcl/article/details/160533131",
-        "snippet": "超级工程首果 总参超万亿，国产算力闭环落地\n9 中国人民大学 4月21日 长江经济带高质量发展大模型 首个国家重大战略垂直Agent模型（区域治理） 区域治理行业规模型，国产全自主产业链\n以上发布信息综合自国金证券行业周报及各大厂商官方公告。\n2 Kimi K2.6：国产开源模型首次登顶全球代码评测\n2026年4月20日晚间，月之暗面正式发布并开源了旗舰模型Kimi K2.6。这一发布迅速成为全球AI社区关注的焦点，原因只有一个：它是首个在SWE-Bench Pro代码评测中超越GPT-5.4和Claude Opus 4.6的开源模型，标志着国产LLM在软件工程领域达到了国际顶尖水平。\n本章将从评\nent集群：从“单兵作战”到“AI军队”\n如果说代码能力是Kimi K2.6的“明牌”，那么Agent集群能力就是它真正让人兴奋的地方。\nK2.6的Agent架构实现了从K2.5时代的“多轮对话配合”到如今的“群组自治协作”的跨越：\n维度 Kimi K2.5 Kimi K2.6 提升幅度\n子Agent规模 100个 300个 3倍\n协作步骤数 ~1,500步 4,000步 2.6倍\n最大无干预运行时长 ~4小时 12小时 3倍\nK2.6的300子Agent集群架构，本质上是将复杂任务作为一个系统工程来处理：用户给出一个高阶需求后，K2.6会自动将其拆解为数千个子任务，分配给不同专长的Agent并行\n责深度搜索和资料整合，有的负责文档解析，有的负责网页生成和UI设计，有的负责自动生成数据表格和图表，最后由主控Agent完成验证和汇总交付。\n一个尤其值得关注的隐藏变量是“技能”（Skill）系统。K2.6支持创建和调用可复用的自动化工作流技能，输入斜杠“/”即可触发。这意味著用户可以把常用的工程分析报告生成、代码审查、性能调优等标准化流程封装成可重复调用的技能模块，相当于为AI“配上了能自动扩展和调用的工具箱”。\n据报道，月之暗面副总裁、工程负责人张向东在接受专访时透露，GitHub Copilot用户达到470万。面对如此庞大的市场，K2.6的开源策略正在探索一种新的商业模式——通过Agent\n集群能力切入企业级复杂软件开发服务领域，从最简单的代码助手升级为AI驱动的DevOps工程师团队。\n2.4 长时自主工作：13小时写4000行代码的真实案例\nK2.6最震撼人心之处，莫过于其在长时自主任务上的能力边界。官方披露的两个实测案例极具说服力，均来自真实的软件工程场景，而非简单的算法题或教学代码。\n案例一：Zig语言推理引擎优化\n在一项Mac本地部署Qwen3.5-0.8B的任务中，K2.6跨越多种语言边界，主动选择了小众的Zig语言来全盘重构推理流程。整个过程持续了 12小时不间断运行，完成了超过4000次 外部工具调用，经过14轮反复调试优化，最终将推理吞吐量从停滞的15 token/",
-        "site_name": "CSDN博客",
-        "query": "Kimi K2.6 市场份额 用户量 评测",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q3:r17": {
-        "id": "Kimi K2.6:q3:r17",
-        "title": "13小时编码、5天自主运行！Kimi K2.6开源“硬刚”闭源巨头，长程战力能否撕开AGI工业化新赛道？",
-        "url": "http://www.nbd.com.cn/articles/2026-04-22/4351579.html",
-        "snippet": "，这些专项Agent本质上都是K2.5的分身，各自承担不同的角色和子任务，没有任何预设规则，所有的角色分配和任务拆解都是由K2.5现场即时决定。\n迭代至K2.6，Agent集群架构完成全面扩容升级：支持调度不同技能特长的Agent进行互补协作、组合各项能力。架构上扩展至最多300个子Agent并行完成4000个协作步骤（K2.5为最多100个分身，并行处理1500个步骤），实现了更大规模的并行化。\n代码能力作为本次迭代核心亮点，本次更新中，长程编码能力的提升是主要突破：K2.6支持不间断编码13小时，完成超过4000行代码的编写或修改，覆盖Rust、Go、Python等编程语言，以及前端、运维、性能优化等场景。通过代码与视觉能力的深度融合，K2.6能够交付专业级Web应用。\n图片来源：每经媒资库\nKimi估值3个月已翻4倍 杨植麟能否开辟AGI工业化新赛道？\n在2026年中关村论坛年会后，杨植麟表达了他对Agent的发展洞察。他认为，与传统对话式AI“即时问答”不同，真正受用户信赖的Agent必须具备长时间持续工作的能力，能够承接更复杂的任务。这背后需要突破训练难度、数据积累、上下文承载等多重技术瓶颈。\n杨植麟指出，这种能力的突破将带来生产力的指数级提升，Agent或将成为生产力的核心载体，其产生的Token（词元）在一定程度上等价于GDP（国内生产总值），长期甚至可能让现有GDP实现\n训练的下一阶段：“越来越多的研究工作将由AI主导。未来每个研究员将配备海量的Token，由AI自动合成新任务、构建新环境、定义最优奖励函数，甚至自主探索全新网络架构。在这一趋势下，整个AI领域的研发速度将进一步加快。”\n在技术快速演进的同时，Kimi在资本市场上得到了同步反馈。\n市场知情人士此前向每经记者透露，3月14日Kimi估值已攀升至180亿美元，3个月内翻了4倍，且新一轮10亿美元融资正在推进中。不到3个月完成3轮融资，创下国内大模型连续融资纪录，也让Kimi成为国内估值最快突破百亿美元的独角兽企业。\n估值上升的原因有两方面。一方面，产品迭代与付费收入出现较快增长：2026年开年以来，K2.5模型、Kimi Claw先后上线并升级，适配多办公平台，带动1月底以来20天收入超过2025年全年；Stripe数据显示，其个人订阅订单1月环比增长8280%，2月再增长123.8%，进入全球榜单前十。另一方面，AGI赛道整体升温，智谱、MiniMax港股上市后市值的上涨也为行业头部玩家提供了估值支撑。\n当前，AGI行业已从参数竞赛转向技术效率与落地能力的竞争，Agent时代的竞争规则正在被重新书写，转向如何做得更久、更稳、更完整。Kimi以技术演进为主线，在这一过程中逐步确立自身定位。而大模型竞争格局是否因此生变，仍有待观察各厂商后续的迭代节奏与生态建设能力。\n封面图片来源：每经媒资库\n",
-        "site_name": "每经网",
-        "query": "Kimi K2.6 vs DeepSeek 对比",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q3:r18": {
-        "id": "Kimi K2.6:q3:r18",
-        "title": "DeepSeek官宣R1升级:提升思维深度与推理能力，整体表现已接近国际顶尖模型",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c0019067rpw.html",
-        "snippet": "DeepSeek官宣R1升级:提升思维深度与推理能力，整体表现已接近国际顶尖模型\n每日新闻摘录\n06.01 03:02\n国产大模型公司深度求索（DeepSeek）发布详细的升级公告，解释DeepSeek-R1升级的具体情况。\n5月29日，据DeepSeek公告，DeepSeek R1模型已完成小版本升级，当前版本为DeepSeek-R1-0528。用户通过官方网站、APP或小程序进入对话界面后，开启“深度思考”功能即可体验最新版本。API也已同步更新，调用方式不变。\n公告指出，DeepSeek-R1-0528使用2024年12月所发布的DeepSeek V3 Base模型作为基座，但在后训练过程中投入了更多算力，显著提升模型的思维深度与推理能力。更新后的R1模型在数学、编程与通用逻辑等多个基准测评中取得当前国内所有模型中首屈一指的优异成绩，并且在整体表现上已接近其他国际顶尖模型，如o3与Gem\nini-2.5-Pro。\n相较于旧版R1，新版模型在复杂推理任务中的表现有显著提升。例如在AIME2025测试中，新版模型准确率由旧版的70%提升至87.5%。这一进步得益于模型在推理过程中的思维深度增强：在AIME2025测试集上，旧版模型平均每题使用12K tokens，而新版模型平均每题使用23Ktokens，表明其在解题过程中进行了更为详尽和深入的思考。\nDeepSeek表示，DeepSeek-R1-0528的思维链对于学术界推理模型的研究和工业界针对小模型的开发都将具有重要意义。\n新版DeepSeek R1针对“幻觉”问题进行了优化。与旧版相比，更新后的模型在改写润色、总结摘要、阅读理解等场景中，幻觉率降低45-50%左右，能够有效地提供更为准确、可靠的结果。\n在旧版R1的基础上，更新后的R1模型针对议论文、小说、散文等文体进行进一步优化，能够输出篇幅更长、结构内容更完整的长篇作品，\n同时呈现出更加贴近人类偏好的写作风格。\n据公告称，当前模型的测评成绩与OpenAI o1-high相当，但与o3-High以及Claude4 Sonnet仍有差距。\n此次 R1更新后，官方网站、小程序、App端和API中的模型上下文长度仍为64K。如果用户对更长的上下文长度有需求，可以通过其他第三方平台调用上下文长度为128K的开源版本R1-0528模型。与旧版本的DeepSeek-R1保持一致，此次升级仍为开源模型，允许用户利用模型输出、通过模型蒸馏等方式训练其他模型。\n此前5月28日，DeepSeek在官方微信群发布消息称，DeepSeekR1模型已完成“小版本试升级”，欢迎前往官方网页、APP、小程序测试（打开深度思考），API接口和使用方式保持不变。\n据网友测评显示，此次升级效果令人惊艳。从社交媒体的反馈来看，网友最为关注的是此次DeepSeekR1更新后的思考时间变长。据测评显示，此",
-        "site_name": "新浪看点",
-        "query": "Kimi K2.6 vs DeepSeek 对比",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q3:r19": {
-        "id": "Kimi K2.6:q3:r19",
-        "title": "Kimi K2.6开源3天：我拿它和DeepSeek V4做了一场真实对决",
-        "url": "https://post.m.smzdm.com/p/apqoxnp7/",
-        "snippet": "张大妈\nKimi K2.6开源3天：我拿它和DeepSeek V4做了一场真实对决\n源自今日头条：于见职场\n05-28 12:28\n近期，Kimi K2.6模型开源与母公司月之暗面融资20亿美元的消息引发行业关注。面对市面上众多的AI模型，职场用户在Kimi K2.6与DeepSeek V4之间如何选择成为焦点。为了提供具有参考价值的结论，本次评测摒弃了传统的学术基准测试，转而聚焦于长文档理解、内容创作、数据分析、日常问答及代码辅助五大职场高频应用场景，对两款模型的实际表现进行深度对比。\n01 长文档理解能力\n在处理2万字的行业报告并提炼核心矛盾时，DeepSeek V4表现出较强的逻辑深度。其总结不仅涵盖表面信息，还能有效识别作者隐含的判断逻辑。相比之下，Kimi K2.6虽然能列出详细条目，但在抓取核心矛盾点上的精准度略逊一筹，偶尔出现流于形式的总结倾向。\n02 内容创作表现\n内容创作环节呈现出截然不同的风格。给定主题生成1500字初稿时，Kimi K2.6的输出文本更接近人类写作习惯，包含细节铺垫与情绪表达，修改成本较低。DeepSeek V4生成的文章结构严谨完整，但语言风格较为模板化，缺乏自然行文的松弛感。\n03 数据与代码处理\n在数据分析场景中，两者表现持平，均能准确解读表格数据。细分来看，Kimi在可视化图表生成方",
-        "site_name": "什么值得买社区频道",
-        "query": "Kimi K2.6 vs DeepSeek 对比",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "Kimi K2.6:q3:r20": {
-        "id": "Kimi K2.6:q3:r20",
-        "title": "Kimi K2.6：面向生产级智能体的万亿参数 MoE 架构解析",
-        "url": "https://blog.csdn.net/weixin_44834755/article/details/160774417",
-        "snippet": "Kimi K2.6：面向生产级智能体的万亿参数 MoE 架构解析\n文章标签：\n#架构\n月之暗面（Moonshot AI）发布的Kimi K2.6，是一款专为智能体编程场景打造的万亿参数级 MoE 模型。基于前代 K2 系列的架构迭代，K2.6 在智能体集群协作、长上下文代码处理、多模态理解等能力上实现了系统性升级，在 SWE-Bench Pro、Terminal-Bench 2.0 等行业基准中达到开源 SOTA 水平。本文将从架构设计、智能体优化与工程落地三个维度，解析这款模型的技术突破与应用价值。\n一、架构核心：万亿参数 MoE 与 262K 上下文窗口\nKimi K2.6 采用万亿参数 MoE 架构，包含 384 个专家模块，单次推理激活 8 个专家（含 1 个共享专家），激活参数规模为 32B。这种设计在保持万亿级知识容量的同时，将单次推理的计算开销控制在合理范围，为长上下文与复杂推理任务提供了充足的算力支撑。\n模型的关键架构优化包括：\nMulti-Head Latent Attention（MLA）：通过潜在注意力机制优化长上下文处理效率，支持 262,144 tokens（256K）超长上下文，内置自动压缩算法，大幅降低长文本推理的内存占用与延迟。\n分层专家调度：针对代码、工具调用、多模态理解等不同任务，实现专家模块的动态分流，提升专项任务的处理精度与效率。\n后训练专项优化：针对 Function Calling 与 ReAct 格式进行 SFT+RLHF 训练，降低工具调用的 JSON 格式错误率；同时对 2000 字以上的复合系统提示词进行专项训练，减少关键约束遗忘问题。\n二、智能体突破：从单智能体到 300 智能体集群协作\nKimi K2.6 的核心升级聚焦于生产级智能体能力，实现了从单智能体到大规模智能体集群的跨越：\n长程自主运行：支持智能体连续 12 小时无人工干预自主执行任务，可完成从需求分析、代码编写到测试部署的全流程开发。\n300 智能体并行协作：将前代 K2.5 的 100 个智能体集群扩展至 300 个，协调步数从 1500 提升至 4000，支持复杂项目的多模块并行开发与跨模块协同。\n编码能力质变：在内部评测基准 Kimi Code Bench 上，K2.6 相比前代提升约 20%，在 SWE-Bench Pro 上取得 58.6% 的成绩，Terminal-Bench 2.0 上达到 66.7%，表现接近 GPT-5.4 与 Claude Opus 4.6 水平。\n这些优化让 K2.6 成为目前开源模型中最适合全栈开发、自动化运维等复杂场景的智能体底座，可驱动代码智能体完成从单文件修改到大型项目重构的全流程工作。\n三、工程落地：开源生态与生产环境适配\nKimi K2.6 的设计充分考虑了工程落地需求，提供了完善的开源与部署",
-        "site_name": "CSDN博客",
-        "query": "Kimi K2.6 vs DeepSeek 对比",
-        "competitor": "Kimi K2.6",
-        "collected_at": "2026-06-05T19:25:26"
-      },
-      "豆包Seed 2.0 Pro:q0:r0": {
-        "id": "豆包Seed 2.0 Pro:q0:r0",
-        "title": "豆包大模型2.0发布，推理能力达到世界顶尖水平",
-        "url": "https://www.cnr.cn/mspd/zhsh/20260214/t20260214_527526933.shtml",
-        "snippet": "在教育、娱乐、办公等众多场景中，大模型需要理解图表、复杂文档、视频等内容。对此，豆包2.0全面升级多模态理解能力，视觉推理、空间感知、长上下文理解等权威测试均取得业界最佳表现。面对动态场景，豆包2.0增强了对时间序列与运动感知的理解能力，还可实现实时视频流分析、环境感知与主动交互，广泛应用于健身指导、穿搭建议、看护陪伴等生活场景。图：Agent及推理能力部分评测成绩Agent能力是大模型具备行动力的关键。测试成绩显示，豆包2.0 Pro在指令遵循、工具调用和Search Agent等评测中达到顶级水平，在HLE-Text（人类的最后考试）上更是获得54.2的最高分，大幅领先于其他模型。目前，豆包2.0 Pro已在豆包App、电脑客户端和网页版上线，用户选择「专家」模式即可对话体验。火山引擎也已上线豆包2.0系列模型API服务。据悉，豆包2.0 Pro按“输入长度”区间定价，32k以内的输入定价为3.2元/百万tokens，输出定价为16元/百万tokens，相比Gemini 3 Pro和GPT 5.2有较大的成本优势。豆包2.0 Lite更是极具性价比，综合性能超越两个月前发布的上一代主力模型豆包1.8，百万tokens输入价格仅为0.6元。编辑:郭彦伟",
-        "site_name": "央广网",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q0:r1": {
-        "id": "豆包Seed 2.0 Pro:q0:r1",
-        "title": "Seed2.0正式发布 豆包大模型全面升级",
-        "url": "https://3g.china.com/act/news/10000169/20260214/49252591.html",
-        "snippet": "Seed2.0正式发布 豆包大模型全面升级\n每日经济新闻\n2026-02-14 15:28:59\n2月14日，豆包大模型2.0正式发布。该版本围绕大规模生产环境下的使用需求进行了系统性优化。豆包2.0系列包含Pro、Lite、Mini三款通用Agent模型和Code模型，以灵活适配各类业务场景。\n豆包2.0 Pro面向深度推理与长链路任务执行场景，全面对标GPT 5.2与Gemini 3 Pro。2.0 Lite则在性能与成本之间取得平衡，综合能力超越上一代主力模型豆包1.8。2.0 Mini适用于低时延、高并发及成本敏感的场景。Code版专为编程场景设计，与TRAE结合使用效果更佳。（责任编辑：zhangxiaohua）\n责任编辑：zhangxiaohua\n",
-        "site_name": "中华网",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q0:r2": {
-        "id": "豆包Seed 2.0 Pro:q0:r2",
-        "title": "豆包大模型 2.0 正式发布,API 同步上线",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c001905fgta.html?from=tech",
-        "snippet": "豆包大模型 2.0 正式发布,API 同步上线每日新闻摘录05.13 20:39点击上方👆蓝字关注我们！今天，火山引擎正式发布豆包大模型 2.0 系列。自推出豆包大模型以来，火山引擎大模型日均 Tokens 使用量已增长超 500倍。围绕这些大规模生产环境下的使用需求，豆包大模型 2.0（Doubao-Seed-2.0）做了系统性优化，依托高效推理、多模态理解、复杂指令执行等能力，能够更好地完成真实世界的复杂任务。同时，豆包大模型2.0提供了灵活的模型选择：包含 Pro、Lite、Mini 三款多模态通用模型，以及面向开发者的 Code 模型（Doubao-Seed-2.0-Code） ，以满足不同场景下企业和用户对延迟和成本的不同需求。其中，豆包大模型 2.0 Pro 作为旗舰模型，适应复杂深度推理、Agent 等高难度任务；豆包大模型 2.0 Lite 则全面优于豆包大模型 1.8，能力增强的同时对 Tokens 的消耗更少，是绝佳性价比之选；豆包大模型 2.0 Mini 以速度和成本优先，大部分能力媲美豆包大模型 1.6 Pro；豆包大模型 2.0 Code 则是编程任务的更优选择，与TRAE结合使用效果更佳。",
-        "site_name": "新浪看点",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q0:r3": {
-        "id": "豆包Seed 2.0 Pro:q0:r3",
-        "title": "Seed2.0正式发布：已能从解决奥林匹克竞赛类问题迈向支持研究级的推理任务，Seed2.0 Pro已在豆包上线",
-        "url": "http://news.qq.com/rain/a/20260214A0454Q00",
-        "snippet": "Seed2.0正式发布：已能从解决奥林匹克竞赛类问题迈向支持研究级的推理任务，Seed2.0 Pro已在豆包上线\n湖北头条\n2026-02-14 14:42 发布于湖北 湖北头条官方账号\n据“字节跳动Seed”今日发文，Seed2.0 系列正式上线， 文章称它们围绕大规模生产环境下的使用需求做了系统性优化，旨在帮助突破真实世界中的复杂任务。\n字节跳动Seed称，通过分析 Seed 通用模型在 MaaS 服务中的调用情况，我们发现，最高比例的需求为处理混杂图表、文档等非结构化信息的知识内容，企业往往要求模型先做“读得多、想得多”的任务，再进入复杂且专业的流程型工作，对模型的长内容理解和多步任务执行能力要求越来越高。\nSeed 通用模型 MaaS 服务在中国大陆的调用场景分布，数据来自“火山方舟协作奖励计划”，相关用户已签署授权协议\n基于真实使用场景，Seed2.0 系列重点在以下方面进行了优化：\n更稳健的视觉与多模态 理解：Seed2.0 强化了视觉感知与推理能力，对复杂文档、表格、图形、视频内容的解析水平显著提升，视觉信息处理更精准。\n更可靠的复杂指令执行：Seed2.0 提升了指令遵循和推理表现，并强化了对多约束、多步骤、长链路任务的理解与执行能力，已具备支撑高价值任务的能力基础。\n更快速、更灵活的推理选择：Seed2.0 提供 Pro、Lite、Mini 三款不同尺寸的通用 Agent 模型，以及专门的 Code 模型，覆盖不同的场景需求，供企业和开发者选择。\n除了更好地支持生产级需求，Seed2.0 还致力于提升模型智能上限。目前，Seed2.0 已能从解决奥林匹克竞赛类问题迈向支持研究级的推理任务。比如，Seed2.0 可尝试探索埃尔德什级别的数学问题，也可完成部分科学相关任务的编程工作，进一步突破机器智能的边界。\n据字节跳动消息，Seed2.0 Pro 和 Code 模型已分别在豆包 App 和 TRAE 上线，同时，Seed2.0 全系列模型 API 已同步上线火山引擎。\n来源：字节跳动Seed\n编辑：陈曦紫\n审核：邹丹雨\n",
-        "site_name": "腾讯网",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q0:r4": {
-        "id": "豆包Seed 2.0 Pro:q0:r4",
-        "title": "字节豆包 Doubao Seed 2.0 完全指南：Pro/Code/Lite/Mini 怎么选、怎么用（2026）",
-        "url": "https://ofox.ai/zh/blog/doubao-seed-2-api-guide-2026",
-        "snippet": "文本模型都支持 256K 上下文、视觉输入、函数调用和推理模式，缓存也有做。这一点比不少厂商的低价档位厚道——Lite 和 Mini 虽然便宜，基础能力没有缩水太多。\nPro：通用场景的默认选择\nSeed 2.0 Pro 是这个系列的旗舰。字节跳动内部大量产品用的就是这一档，包括豆包 App 的主要功能。\n256K 的上下文在国产模型里不算小，一份完整的法律合同、一个季度的财报、一本技术手册，塞进去不费力。Pro 版在多步骤问题上比 Lite/Mini 更稳——竞争分析、需求文档、方案设计这类需要「想一想」的任务，完成质量更接近 Claude Sonnet 4.6 这个档位。结合函数调用和推理模式，也适合做多步骤 Agent 工作流的编排。\n跟 Claude Sonnet 4.6 比的话：Pro 版定价便宜不少（Sonnet 4.6 输入 $3/M），但在指令遵循和长上下文质量上还是有差距。客户会直接看到 AI 回复的场景，Claude 更保险；内部工具和辅助性任务，Pro 的性价比更高。\n关于横向选型，2026 大模型排行榜与选型指南 里有更全面的模型能力对比。\nCode：程序员专属的隐藏版本\nSeed 2.0 Code 和 Pro 定价完全一样，但针对编程任务单独优化过。\n字节跳动内部的代码助手、Trae 编辑器（字节的 AI IDE）背后用的就是这个版本。优化方向是理解代码仓库上下文、生成符合项目规范的代码、给出精准的调试建议。函数补全和模块重构上，Code 生成的代码逻辑更连贯；代码审查时能发现一些 Pro 会忽略的逻辑漏洞；技术文档生成，从代码到注释、README 的转化质量更高。\n但 Code 不代表「编程领域全面领先」。极度复杂的算法题、底层 C/Rust 系统编程，Claude Code + Opus 4.6 依然更可靠。Code 的优势是在常见工程场景下够用、响应快、不贵。\n如果你在用 OpenClaw、Cursor 或 Cline， OpenClaw 模型推荐排行榜里有详细的工具配合实测。\nLite：日常用量的主力\nLite 是价格跳水的分水岭：$0.13/M 输入，$0.76/M 输出，不到 Pro 的 1/5。\n这个价格点有竞争力。GLM-4.7-FlashX（$0.072/M）更便宜，但 Lite 能力更强；MiniMax M2.5（$0.3/M）能力相近，但 Lite 更便宜。\n聊天机器人的常规对话轮次、文档问答、知识库检索辅助、内容分类和标签生成——这些场景用 Lite 绰绰有余。天花板在于深度推理和创意输出，让它写复杂的分析报告，输出会比较平。\n粗估一下成本：一个月调用 Lite 处理 10 万条短消息，每条平均 500 tokens，月消耗约 5000 万 tokens，大约 $6.5，一杯咖啡的价钱。\nMini：批量任务的",
-        "site_name": "",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q0:r5": {
-        "id": "豆包Seed 2.0 Pro:q0:r5",
-        "title": "字节跳动发布豆包大模型2.0,主打真实世界复杂任务执行力",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c001905fgvs.html",
-        "snippet": "字节跳动发布豆包大模型2.0,主打真实世界复杂任务执行力\n每日新闻摘录\n05.13 20:39\n在连续发布Seedance 2.0视频模型、Seedream 5.0 Lite图像模型之后，2 月14日，字节跳动宣布推出豆包大模型2.0（Doubao-Seed-2.0）系列。豆包2.0针对大规模生产环境的使用需求进行系统性优化，旨在更好地完成真实世界的复杂任务。\n在语言模型基础能力上，豆包2.0 Pro旗舰版取得IMO、 CMO 数学竞赛和ICPC编程竞赛金牌成绩，也超越了Gemini 3 Pro在Putnam基准测试上的表现，数学和推理能力达到世界顶尖水平。\n大模型执行长链路复杂任务，需要丰富的世界知识。豆包2.0加强了长尾领域知识覆盖，在SuperGPQA等多项公开测试集上表现突出，科学领域知识测试成绩与Gemini 3 Pro 和GPT 5.2相当，在跨学科知识应用上也排名前列。\n在教育、娱乐、办公等众多场景中，大模型需要理解图表、复杂文档、视频等内容。对此，豆包2.0全面升级多模态理解能力，视觉推理、空间感知、长上下文理解等权威测试均取得业界最佳表现。\n面对动态场景，豆包2.0增强",
-        "site_name": "新浪看点",
-        "query": "豆包Seed 2.0 Pro 产品功能介绍",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q1:r6": {
-        "id": "豆包Seed 2.0 Pro:q1:r6",
-        "title": "豆包收费超GPT，DeepSeek降价，谁会赢？",
-        "url": "https://m.sohu.com/a/1032296629_122864981/",
-        "snippet": "豆包收费超GPT，DeepSeek降价，谁会赢？\nThinkAI\n2026-06-04 23:15\nAI 行业最魔幻的一幕出现了。\n一边，豆包在5月中测试收费后，6月1日确认将在月底正式开始收费。标准版连续包月 68 元，加强版 200 元，专业版 500 元。\n按这个价格算，豆包已经高于 ChatGPT Plus 的 20 美元/月，甚至接近部分海外高阶 AI 订阅档位。\n而另一边Deepseek在5月底宣布了永久降价， 将 V4-Pro 的 75% 折扣永久化，API 价格降至原价四分之一。Deepseek缓存命中输入低至0.02-0.025元/百万Token，。关于豆包收费，网上骂声一篇。\n“豆包笨还收费”“豆包收费就卸载”近期持续登上热搜。而梁文锋则受到一片赞扬，Deepseek被称为国产之光。\n为何国内两家头部的AI公司都在同一时间段公布了大动作？截然相反的操作之后，两家公司谁会笑到最后?\n为何背道而驰？\n一个涨价，一个降价，本质两家是走不同路线的AI公司。豆包主打产品体验，核心面向C端用户。Deepseek力争抢占B端市场，主打模型调用。\n先来看豆包为什么涨价？\n豆包目",
-        "site_name": "手机搜狐网",
-        "query": "豆包Seed 2.0 Pro 定价 价格 收费标准",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q1:r7": {
-        "id": "豆包Seed 2.0 Pro:q1:r7",
-        "title": "美股，股票，公司：奥瑞金种业，代码：(SEED)，近期股价",
-        "url": "",
-        "snippet": "股票代码 SEED（奥瑞金种业），截至北京时间 2026-06-05 18:59:10，美东时间 2026-06-05 06:59:10，当前状态：未开盘，报1.05元，交易币种为美元。较前一交易日收盘价1.09元下跌0.04元，跌幅3.67%。当日开盘价1.09，最高1.10元，最低1.05元，振幅4.59%。成交量3.56万股，成交额3.83万元，换手率0.29，量比1.45。总市值1275.18万元，流通市值1275.18万元，市净率-2.34，市盈率-2.12。\n\n过去7天(2026-05-30到2026-06-05)：整体下跌，区间涨跌幅-6.25%。区间内最高价1.13元，最低价1.05元。总市值变化减少85.01万。\n\n| 日期 | 开盘价 | 收盘价 | 涨跌幅 | 换手率 | 当日最高 | 当日最低 |\n| --- | --- | --- | --- | --- | --- | --- |\n| 2026-05-30(休市) | - | - | - | - | - | - |\n| 2026-05-31(休市) | - | - | - | - | - | - |\n| 2026-06-01 | 1.10 | 1.12 | -0.88% | 0.46% | 1.13 | 1.09 |\n| 2026-06-02 | 1.12 | 1.13 | 0.89% | 0.11% | 1.13 | 1.11 |\n| 2026-06-03 | 1.10 | 1.09 | -3.54% | 0.27% | 1.11 | 1.09 |\n| 2026-06-04 | 1.09 | 1.05 | -3.67% | 0.29% | 1.10 | 1.05 |\n| 2026-06-05 | 1.09 | 1.05 | -3.67% | 0.29% | 1.10 | 1.05 |\n\n过去30天(2026-05-07到2026-06-05)：整体下跌，区间涨跌幅-7.89%。区间内最高价1.25元，最低价1.05元。总市值变化减少109.30万。\n\n| 日期 | 开盘价 | 收盘价 | 涨跌幅 | 换手率 | 当日最高 | 当日最低 |\n| --- | --- | --- | --- | --- | --- | --- |\n| 2026-05-07 | 1.17 | 1.14 | -2.56% | 0.60% | 1.18 | 1.12 |\n| 2026-05-08 | 1.10 | 1.13 | -0.88% | 0.13% | 1.16 | 1.10 |\n| 2026-05-09(休市) | - | - | - | - | - | - |\n| 2026-05-10(休市) | - | - | - | - | - | - |\n| 2026-05-11 | 1.10 | 1.13 | 0% | 0.11% | 1.15 | 1.10 |\n| 2026-05-12 | 1.15 | 1.12 | -0.88% | 0.09% | 1.18 | 1.12 |\n| 2026-05-13 | 1.15 | 1.15 | 2.68% | 0.09% | 1.19 | 1.14 |\n| 2026-05-14 | 1.16 | 1.18 | 2.61% | 0.30% | 1.21 | 1.16 |\n| 2026-05-15 | 1.20 | 1.17 | -0.85% | 0.32% | 1.25 | 1.17 |\n| 2026-05-16(休市) | - | - | - | - | - | - |\n| 2026-05-17(休市) | - | - | - | - | - | - |\n| 2026-05-18 | 1.20 | 1.14 | -2.56% | 0.09% | 1.20 | 1.13 |\n| 2026-05-19 | 1.13 | 1.13 | -0.88% | 0.04% | 1.21 | 1.12 |\n| 2026-05-20 | 1.12 | 1.13 | 0% | 0.08% | 1.14 | 1.12 |\n| 2026-05-21 | 1.13 | 1.13 | 0% | 0.09% | 1.16 | 1.11 |\n| 2026-05-22 | 1.13 | 1.12 | -0.88% | 0.11% | 1.15 | 1.11 |\n| 2026-05-23(休市) | - | - | - | - | - | - |\n| 2026-05-24(休市) | - | - | - | - | - | - |\n| 2026-05-25(休市) | - | - | - | - | - | - |\n| 2026-05-26 | 1.14 | 1.12 | 0% | 0.28% | 1.15 | 1.09 |\n| 2026-05-27 | 1.13 | 1.14 | 1.79% | 0.13% | 1.15 | 1.11 |\n| 2026-05-28 | 1.12 | 1.13 | -0.88% | 0.05% | 1.15 | 1.10 |\n| 2026-05-29 | 1.09 | 1.13 | 0% | 0.12% | 1.16 | 1.09 |\n| 2026-05-30(休市) | - | - | - | - | - | - |\n| 2026-05-31(休市) | - | - | - | - | - | - |\n| 2026-06-01 | 1.10 | 1.12 | -0.88% | 0.46% | 1.13 | 1.09 |\n| 2026-06-02 | 1.12 | 1.13 | 0.89% | 0.11% | 1.13 | 1.11 |\n| 2026-06-03 | 1.10 | 1.09 | -3.54% | 0.27% | 1.11 | 1.09 |\n| 2026-06-04 | 1.09 | 1.05 | -3.67% | 0.29% | 1.10 | 1.05 |\n| 2026-06-05 | 1.09 | 1.05 | -3.67% | 0.29% | 1.10 | 1.05 |",
-        "site_name": "火山如意",
-        "query": "豆包Seed 2.0 Pro 定价 价格 收费标准",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q1:r8": {
-        "id": "豆包Seed 2.0 Pro:q1:r8",
-        "title": "2026 大模型 API 定价全景图：DeepSeek、豆包、Qwen、GLM、MiniMax、Kimi、Claude、Gemini、GPT 谁最便宜？",
-        "url": "https://blog.csdn.net/weixin_42223090/article/details/161681773",
-        "snippet": "百万Tokens输出 2元DeepSeek V4 Pro项目 价格百万Tokens输入（缓存命中） 0.025元百万Tokens输入（缓存未命中） 3元百万Tokens输出 6元特点国内性价比最高梯队Prompt Cache 成本极低Agent、多轮问答场景优势明显二、字节豆包 Doubao Seed  2.0官方定价：https://www.volcengine.com/product/doubao/pricing豆包采用上下文长度分档计费。Doubao Seed 2.0 Mini输入长度 [0,32K]项目 价格输入（未命中） 0.2元输入（命中） 0.04元输出 2元输入长度 (32K,128K]项目 价格输入（未命中） 0.4元输入（命中） 0.08元输出 4元输入长度 (128K,256K]项目 价格输入（未命中） 0.8元输入（命中） 0.16元输出 8元Doubao Seed 2.0 Lite上下文长度 输入未命中 输入命中 输出",
-        "site_name": "CSDN博客",
-        "query": "豆包Seed 2.0 Pro 定价 价格 收费标准",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q1:r9": {
-        "id": "豆包Seed 2.0 Pro:q1:r9",
-        "title": "字节豆包 Doubao Seed 2.0 完全指南：Pro/Code/Lite/Mini 怎么选、怎么用（2026）",
-        "url": "https://ofox.ai/zh/blog/doubao-seed-2-api-guide-2026",
-        "snippet": "Apr 9, 2026\ndoubao volcengine model-comparison china-guide api-access\n字节豆包 Doubao Seed 2.0 完全指南：Pro/Code/Lite/Mini 怎么选、怎么用（2026）\n字节跳动的 AI 棋局，开发者该怎么下\n抖音、TikTok 之外，字节跳动把大量资源押注在大模型上。豆包大模型团队规模不小，Seed 系列是他们最新的成果——不只用在自家 App 里，而是作为 API 开放给外部开发者。\nSeed 2.0 系列一共四个变体：Pro、Code、Lite、Mini，外加一个图像生成模型 Seedream 5.0 Lite。定价从 $0.06/M 到 $0.67/M 不等，上下文都是 256K，支持视觉输入、函数调用、推理模式。\n问题来了：四个版本，到底选哪个？\nSeed 2.0 全系一览\n模型 模型 ID 输入价格 输出价格 擅长场景\nSeed 2.0 Pro volcengine/doubao-seed-2.0-pro $0.67/M $3.36/M 通用旗舰、长文本、复杂推理\nSeed 2.0 Code volcengine/doubao-seed-2.0-code $0.67/M $3.36/M 代码生成、调试、技术问答\nSeed 2.0 Lite volcengine/doubao-seed-2\n.0-lite $0.13/M $0.76/M 日常对话、轻量分析\nSeed 2.0 Mini volcengine/doubao-seed-2.0-mini $0.06/M $0.56/M 批量任务、格式提取、高并发\nSeedream 5.0 Lite volcengine/doubao-seedream-5.0-lite — $0.035/张 图像生成\n四款文本模型都支持 256K 上下文、视觉输入、函数调用和推理模式，缓存也有做。这一点比不少厂商的低价档位厚道——Lite 和 Mini 虽然便宜，基础能力没有缩水太多。\nPro：通用场景的默认选择\nSeed 2.0 Pro 是这个系列的旗舰。字节跳动内部大量产品用的就是这一档，包括豆包 App 的主要功能。\n256K 的上下文在国产模型里不算小，一份完整的法律合同、一个季度的财报、一本技术手册，塞进去不费力。Pro 版在多步骤问题上比 Lite/Mini 更稳——竞争分析、需求文档、方案设计这类需要「想一想」的任务，完成质量更接近 Claude Sonnet 4.6 这个档位。结合函数调用和推理模式，也适合做多步骤 Agent 工作流的编排。\n跟 Claude Sonnet 4.6 比的话：Pro 版定价便宜不少（Sonnet 4.6 输入 $3/M），但在指令遵循和长上下文质量上还是有差距。客户会直接看到 AI 回复的场景，Cl",
-        "site_name": "",
-        "query": "豆包Seed 2.0 Pro 定价 价格 收费标准",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q1:r10": {
-        "id": "豆包Seed 2.0 Pro:q1:r10",
-        "title": "最低68元每月，豆包预计6月下旬开启收费，基础功能免费",
-        "url": "https://m.pcpop.com/article_6932130.html",
-        "snippet": "最低68元每月，豆包预计6月下旬开启收费，基础功能免费\n王原 泡泡网原创\n2026年06月02日 11:10\n近日，字节跳动旗下AI产品豆包即将推出付费服务的消息引爆全网热搜，引发广大用户热议。据36氪从知情人士处获悉，豆包预计在6月下旬全面上线付费内容体系，并将在同期举办的官方Force技术大会上，同步更新配套全新高阶功能，正式开启商业化新阶段。\n据了解，此次付费服务选择6月下旬上线，是为了预留充足适配周期。目前豆包PC端、移动端正在进行全方位迭代升级，耗时约一个月完成基础功能优化与整套收费体系的适配改造，全力保障付费功能上线后稳定、流畅运行，规避各类使用故障。\n事实上，豆包早在5月初就已悄然预热商业化布局，在苹果App Store产品页面更新付费版本相关服务声明，提前向用户释放升级信号。声明明确，豆包将在现有免费版本基础上，新增专属增值付费版本，聚焦满足专业用户的高阶使用需求。同时页面提前披露三档测试版订阅价格，档位划分清晰、梯度明确：标准版连续包月68元、连续包年688元；加强版连续包月200元、连续包年2048元；专业版连续包月500元、连续包年5088元。\n针对网友最关心的“付费后免费功能是否缩水、阉割”的核心疑虑，豆包官方给出明确定心回应。官方郑重承诺，所有基础功能永 久免费，现有免费权益完全保留，不限对话次数、不会刻意降速，无任何隐性限制。其中日常聊天答疑、基础文案创作、通用翻译、普通内容总结、基础生图、语音对话等高频实用功能，全部持续免费开放，不做任何降级调整。\n据悉，本次新增的付费权益均为差异化高阶生产力功能，与免费功能完全区隔，互不冲突。付费用户可独享完整PPT一键生成、百万字级长文档精读、高清画质生图、专项数据分析等进阶能力，精准适配职场办公、专业创作、深度研究等高端使用场景，只为有需要的用户提供增值升级体验。\n豆包官方同时强调，目前整套付费方案仍处于内部测试与打磨阶段，曝光的定价、权益细节并非最终版本",
-        "site_name": "泡泡网",
-        "query": "豆包Seed 2.0 Pro 定价 价格 收费标准",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r11": {
-        "id": "豆包Seed 2.0 Pro:q2:r11",
-        "title": "2026年5月国产大模型格局大洗牌:豆包收费、DeepSeek永久降价、通义千问3.7杀入全球前15",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c001906b1s6.html",
-        "snippet": "2026年5月国产大模型格局大洗牌:豆包收费、DeepSeek永久降价、通义千问3.7杀入全球前15每日新闻摘录06.03 01:49排名 模型 厂商 核心优势 月活/调用量1 豆包 Seed 2.0 Pro 字节跳动 中文理解顶尖，具身智能领先 月活3.45亿，日活1.4亿2 DeepSeek-V4-Pro 深度求索 性价比无敌，推理/代码全球顶尖 周调用量国产第一3 通义千问 Qwen3.7 阿里巴巴 开源生态最完善，26万Token超长上下文 全球开源下载量第一4 Kimi K2.5 月之暗面 百万Token长文本王者 长文档处理领域第一5 智谱 GLM-5 智谱AI 逻辑推理与Agent能力突出 企业级应用领先庞大的用户规模背后是惊人的算力成本。据业内人士估算，豆包每天仅推理算力成本就超过 2000万元人民币。两年免费换来的用户规模，现在已经到了必须变现的时刻。使用场景 推荐模型 理由日常问答、写作辅助 豆包（免费版） 中文理解好，响应快",
-        "site_name": "新浪看点",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r12": {
-        "id": "豆包Seed 2.0 Pro:q2:r12",
-        "title": "豆包回应收费争议，3.45亿月活扛不住算力账单？",
-        "url": "http://m.163.com/dy/article/KUK8E7600530RTB0.html",
-        "snippet": "豆包回应收费争议，3.45亿月活扛不住算力账单？\n中国城市报\n2026-06-04 23:32\n6月3日晚间，豆包官方发布最新说明，确认将推出专业版付费增值服务，同时重磅辟谣全网流传已久的不实传言，明确日常基础功能将持续免费，不会通过降低基础功能体验来推动用户购买会员，打消普通用户的使用顾虑。\n根据官方回应，日常问答、基础写作、简单生图、普通对话等所有普通用户高频使用的基础功能，将持续免费；付费权益仅针对垂直领域的高阶增值服务，涵盖软件开发、数据分析、专业设计、流程自动化、金融分析、科学研究等高强度、高算力、高精度的专业场景。\n同时官方透露，专业版目前还在测试阶段，尚未正式上线。后续上线时也将开放一定额度的免费试用权益。\n中国城市报记者注意到，此次发布官方说明的账号署名极具态度，作者栏标注“依然免费的豆包”，似乎传递着坚守普惠服务的核心立场。\n多数网友坚持“够用就好”\n公开数据显示，2026年第一季度豆包日活跃用户突破1.4亿、月活跃用户达3.45亿，超过第二名千问（1.66亿）与第三名DeepSeek（1.27亿）的月活总和。\n而在5月初包月68元、年付5088元的收费测试套餐曝光、相关收费谣言大范围传播后，豆包迎来规模化增长以来的首次用户数据下滑。据AI产品榜6月最新监测数据，2026年5月豆包月活跃用户降至3.3亿，单月环比下滑1.81%，累计流失约607万用户。\n6月4日，有媒体针对此次豆包专业版收费事件发起用户态度投票。投票数据显示，43.36%的参与用户明确表态“收费就不用了”，占比在所有选项中高居首位；22.72%的参与者心存顾虑，担忧收费落地后，原有免费板块的产品服务质量或将缩水降级；另有22.20%用户计划后续仅留存免费功能使用需求。\n评论区内，部分用户持理性立场，称产品质量达标、定价合理才愿意付费；也有使用者直指当前免费版存在内容失误、数据存疑等问题，认为产品短板未补齐前，不宜仓促收费。\n从投票数据与网友评论综合来看，免费使用习惯固化、同类竞品分流、产品体验参差不齐，是阻碍豆包推进商业化收费的三大关键因素。\n“算力成本的刚性压力是直接动因，在字节生态中被放大。”中央财经大学数字经济融",
-        "site_name": "网易",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r13": {
-        "id": "豆包Seed 2.0 Pro:q2:r13",
-        "title": "中文大模型测评出炉：豆包跻身全球第一梯队 小米MiMo上榜",
-        "url": "https://soft.china.com/article/1820136.html",
-        "snippet": "中文大模型测评出炉：豆包跻身全球第一梯队 小米MiMo上榜\n2026-06-04 10:07 快科技\n3月30日消息，中文大模型基准测评SuperCLUE发布2026年3月最新结果，22款国内外主流模型参与角逐。\n字节跳动旗下豆包（Doubao-Seed-2.0-pro-260215(high)）以71.53分拿下国内第一，成功跻身全球第一梯队；小米集团的MiMo-V2系列两款模型均顺利上榜。\n本次测评覆盖数学推理、科学推理、代码生成等六大核心任务，全面检验模型综合能力。海外闭源模型依旧占据总分前列，Anthropic的Claude-Opus-4.6(max)、Google的Gemini-3.1-Pro-Preview(high)和OpenAI的GPT-5.4(xhigh)分列前三。\n豆包则紧随其后，总分仅与GPT-5.4相差0.95分，实现全方位追赶，在智能体任务规划维度更是反超部分海外模型，跻身全球前五。\n小米此次有两款模型入选测评榜单，其中MiMo-V2-Pro以60.67分位列闭源模型前列，在数学推理任务中取得84.03分的亮眼成绩；开源版本MiMo-V2-Flash虽以49.97分排名靠后，但在代码生成等细分场景中表现出一定潜力。\n测评还显示，国产模型整体表现亮眼，开源赛道尤为突出，Kimi-K2.5-Thinking、Qwen3.5-397B-A17B-Thinking等国产开源模型包揽开源榜前三，大幅领先海外同类模型。\n",
-        "site_name": "中华网软件",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r14": {
-        "id": "豆包Seed 2.0 Pro:q2:r14",
-        "title": "国产AI大模型巅峰对决：2026年5月主流模型深度横评",
-        "url": "https://blog.csdn.net/anew___/article/details/161432036",
-        "snippet": "极致的推理速度：相比前代，推理速度提升高达10倍，为实时、复杂的任务执行提供了坚实基础。生态整合优势：深度打通淘宝、支付宝、高德等阿里生态，实现了“一句话办事”的闭环体验，从购物到出行，覆盖生活全场景。适合人群：开发者、企业用户、重度依赖阿里生态的消费者，以及对AI自动化任务执行有极高要求的专业人士。二、 全模态先锋：豆包 Doubao-Seed-2.0-Pro字节跳动的豆包在2026年完成了从对话AI到“实体智能体”的蜕变。其2.0系列，特别是Seed-2.0-Pro版本，在多模态领域展现了惊人的实力。核心亮点：原生全模态理解：不同于简单的多模态拼接，豆包2.0能原生统一理解视频、图像、音频和文本，实现了真正的视听联合推理。在SuperCLUE-VLM多模态评测中，它甚至力压谷歌Gemini，夺得全球第一。强大的数学与推理能力：在IMO、CMO等国际顶级竞赛的模拟测试中取得金牌成绩，数学和逻辑推理能力达到世界顶尖水平。",
-        "site_name": "CSDN博客",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r15": {
-        "id": "豆包Seed 2.0 Pro:q2:r15",
-        "title": "AI应用工具︱豆包预告增付费版本，活跃用户应声跌600万",
-        "url": "https://m.stnn.cc/c/2026-06-05/4097908.shtml",
-        "snippet": "AI应用工具︱豆包预告增付费版本，活跃用户应声跌600万\n2026-06-05 11:13\n生成海报\n内地科企字节跳动的人工智能（AI）助手豆包，3日晚宣布计划推出专业版，提供软件开发、金融分析、科学研究等专业服务；最受欢迎的搜寻问答、写作生图等将保持免费。\n豆包自上月传出付费消息后，豆包MAU（月活跃使用者数）开始出现规模化增长以来的首次下跌。国内独立第三方AI行业资料榜单平台AI产品榜显示，豆包5月MAU为3.3亿，环比下降1.81%，约607万使用者流失。\n据网易号“ TechWeb ”指，榜单前8名中，千问、DeepSeek、腾讯元宝、Kimi月活均有不同程度增长。业内认为，尽管豆包仍以近1亿的优势领先第二名千问，但使用者规模出现收缩仍是一个值得警惕的讯号。\n火山引擎近期披露，截至3月，豆包大模型日均Token使用量突破120万亿，3个月内增长一倍，比2024年5月发布时增长1000倍。Token使用量暴涨意味着推理成本同步扩张，令免费模式的压力已达到临界点。\n截至目前，千问、元宝、DeepSeek等尚未传出要收费的消息。有业内人士猜测，元宝、千问很可能会趁着这波收费，抢夺豆包使用者。\n来源︱星岛头条网\n编辑︱梁景琴\n",
-        "site_name": "星岛环球网",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q2:r16": {
-        "id": "豆包Seed 2.0 Pro:q2:r16",
-        "title": "整�个月，豆包大模型正式进𲷴.0时代！",
-        "url": "http://jxsmlw.cn/haerbin/c1c920ebc5ZIwn7.html",
-        "snippet": "整�个月，豆包大模型正式进𲷴.0时代！\n来源：避重就轻网-工人日报\n2026-06-05 11:10:33\n金磊 发自 凹非寺量子位 | 公众号 QbitAI\n在Seedance 2.0和Seedream 5.0 Lite，一波接一波爆火之后，豆包把完全体拿出来了——豆包大模𶭰.0。\n这是时�个月以来的最大版本的更新。\n像Seedance 2.0已经成为全民玩转的AI，我们也试着做了一个视频：\n视频地址：https://mp.weixin.qq.com/s/h8jaVOGREQt2tOFHG39VmQ\n短񊽇秒钟，效果确实是足够逼真。\n也难怪老外也开始研究怎么注册中国手机号来体验了……\n再如Seedream 5.0 Lite，首次支持联网检索，生成的图片也达到了商业化的水平：\n而就在今天，在视觉模型火爆之后，豆包终于把那个最核心的大脑拿出来了——豆包大模𶭰.0。\n整体来看，这次豆包大模𶭰.0在多模态理解、企业级Agent、推理和代码能力上都有了不少的提升：\n更强多模态理解：在多模态感知、高精度文字提取、图表理解、空间理解、运动理解、视觉知识和推理、长视频理解等方面表现出色。企业级Agent能力：模型能更好支持对技能（Skills）的理解和应用，Function Call 、多轮指令遵循、搜索和工具调用能力显著增强，格式输出更稳定，支持灵活的上下文管理，更好地支持企业级复杂、长程任务，在数据分析和客服Agent等企业场景中表现出色。数学和代码推理能力：模型具备更强推理能力，支持思考长度可调节，且各思考长度下，Tokens效率都有大幅提升。在ICPC、IMO、CMO测试中均获得金牌成绩。\n更直观的提升，体现在榜单测评中。\n例如在MathVista、MathVision、MathKangaroo、MathCanvas等数学推理基准上达到业界最优水平。同时，在 LogicVista、VisuLogic等视觉解谜与逻辑推理基准上，Seed2.0 Pro得分较Seed1.8显著提升。\n并且在VLMsAreBiased、VLMsAreBlind、BabyVision等基准中，豆包大模𶭰.0取得了业界最高分！\n那么接下来，还是老规矩，一波实测，走起~\n零帧手搓《我的世界》\n首先，我们就要测试最近各家都在主推的代码能力。\n在字节旗下的AI编程软件TRAE中，我们目前就能体验豆包大模𶭰.0的能力：\n我们就先𱓵D模仿求解器的案例，来小试牛刀一下：\n你帮我写一个能解决魔方的群论算法，然后用前端页面演示下吧，要求美观，本地当前文件夹下的所有文件都可以直接编辑删除和覆盖。\n视频地址：https://mp.weixin.q",
-        "site_name": "避重就轻网",
-        "query": "豆包Seed 2.0 Pro 市场份额 用户量 评测",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q3:r17": {
-        "id": "豆包Seed 2.0 Pro:q3:r17",
-        "title": "【前沿解析】2026年3月4日：AI软硬协同双重突破——讯飞AI眼镜开启商用预约与豆包Seed 2.0专家模式全面上线 原创",
-        "url": "https://blog.csdn.net/shaobingj126/article/details/158656605",
-        "snippet": "：\n动态稀疏激活：在推理阶段仅激活3-5%的参数子集，实现计算效率与模型能力的平衡\n条件记忆机制：将静态知识存储在廉价DRAM中，动态推理时按需加载至GPU显存\n专家路由优化：基于任务类型与输入特征智能路由到最相关专家网络\n渐进式知识迁移：通过多阶段蒸馏实现大模型能力向小尺寸模型的有效传递\n2.2 性能突破：从\"基准测试领先\"到\"真实场景可用\"\n豆包Seed 2.0的性能提升不仅体现在基准测试分数上，更关键的是在真实长链路任务中的稳定表现：\n关键性能指标：\n长文本处理能力：Pro版支持128K上下文窗口，在100万字文档问答任务中准确率达92.3%\n多模态理解精度：复杂文档表格识别准确率98.7%，数学公式识别与解析准确率95.2%\n指令遵循稳定性：在30步以上的复杂工作流中，任务完成率从上一代的67%提升至89%\n响应时间优化：Mini版平均响应时间从420ms降至98ms，满足实时交互需求\n工程化优化的价值体现：\n内存占用优化：通过量化压缩与动态加载，将70B模型推理显存从140GB降至45GB\n批量处理效率：在并发请求场景下，吞吐量提升4.7倍，单位成本降低83%\n故障恢复机制：引入检查点与状态保存，长任务中断后恢复时间从分钟级降至秒级\n2.3 商业模式创新：专家模式免费开放的产业意义\n豆包Seed 2.0最引人注目的商业决策是专家模式全量免费开放，这一决策背后是字节跳动对AI服务商业模式的重构思考：\n三层商业逻辑：\n用户获取策略：通过免费专家模式降低使用门槛，快速扩大用户基数与使用频次\n开发者生态构建：开放API与SDK，吸引开发者基于豆包平台构建垂直应用\n企业服务升级：在免费基础服务之上，提供企业级定制、私有化部署、专属支持等增值服务\n产业影响分析：\n中小企业的技术普惠：让中小企业以极低成本获得顶尖AI能力，加速数字化转型\n开发者生产力的解放：将复杂AI能力封装为简单API，降低开发门槛与时间成本\n行业标准的重新定义：通过免费开放推动行业服务标准提升，倒逼竞争对手优化体验\n三、软硬协同：AI产业发展的新范式\n3.1 技术融合趋势：从单点突破到系统创新\n讯飞AI眼镜与豆包Seed 2.0的同步突破，揭示了AI产业发展的一个重要趋势：硬件创新与软件升级正在形成协同效应。\n协同创新的技术路径：\n协同维度 硬件贡献 软件贡献 协同价值\n感知增强 多传感器融合 多模态理解 环境智能感知精度提升3倍\n计算优化 端侧专用芯片 模型轻量化 推理延迟降低90%，能耗减少75%\n交互自然 近眼显示技术 对话式交互 信息获取效率提\n",
-        "site_name": "CSDN博客",
-        "query": "豆包Seed 2.0 Pro vs DeepSeek 对比",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q3:r18": {
-        "id": "豆包Seed 2.0 Pro:q3:r18",
-        "title": "DeepSeek更新上下文达百万级token：可一次性处理超长文本",
-        "url": "https://soft.china.com/article/2215148.html",
-        "snippet": "DeepSeek更新上下文达百万级token：可一次性处理超长文本\n2026-06-05 14:54 快科技\n2月12日消息，据媒体报道， DeepSeek近日在网页端及APP端完成版本更新，正式将上下文窗口扩展至1M（百万） Token，迎来对话容量的显著跃升。\n相较于去年8月发布的DeepSeek V3.1所支持的128K上下文，新实装模型的上下文能力较两个月前更新的V3.2提升达八倍。\n网友实测显示，DeepSeek已可一次性处理《三体》三部曲体量的超长文本，并在问答中明确表示其知识截止日期更新至2025年5月。\n目前DeepSeek实装模型在上下文能力上比两个月前更新的V3.2暴涨了8倍。\n知识库\"新鲜度\"提升约10个月，这意味着模型对2024年下半年至2025年初的重要事件、技术进展、行业动态都有了认知基础。\n",
-        "site_name": "中华网软件",
-        "query": "豆包Seed 2.0 Pro vs DeepSeek 对比",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q3:r19": {
-        "id": "豆包Seed 2.0 Pro:q3:r19",
-        "title": "Doubao Seed 2.0 Pro\n vs DeepSeek V4",
-        "url": "https://llmpick.ai/compare/doubao-vs-deepseek/",
-        "snippet": "Doubao Seed 2.0 Provs DeepSeek V4Comprehensive comparison between ByteDance's Doubao Seed 2.0 Pro and DeepSeek's DeepSeek V4. Compare pricing, performance, features, and user reviews.doubao vs deepseek豆包 vs deepseek国产模型对比chinese ai comparison 2026Doubao Seed 2.0 ProByteDanceByteDance's flagship foundation model, powering Doubao (China's #1 AI chatbot with 155M weekly users). Achieves frontier-level performance on math (AIME 98.3), coding (Codeforces 3020), and video understanding (VideoMME 89.5). Ranks 6th on LMSYS Text Arena and 3rd on Vision Arena. ~3.7x cheaper than GPT-5.2 on input, ~10x cheaper than Claude Opus 4.5.",
-        "site_name": "",
-        "query": "豆包Seed 2.0 Pro vs DeepSeek 对比",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q3:r20": {
-        "id": "豆包Seed 2.0 Pro:q3:r20",
-        "title": "豆包大模型2.0发布，推理能力达到世界顶尖水平",
-        "url": "https://blog.csdn.net/TMT_XQ/article/details/158073251",
-        "snippet": "豆包大模型2.0发布，推理能力达到世界顶尖水平\n文章标签：\n#人工智能\n在连续发布Seedance 2.0视频模型、Seedream 5.0 Lite图像模型之后，2月14日，字节跳动宣布推出豆包大模型2.0（Doubao-Seed-2.0）系列。豆包2.0针对大规模生产环境的使用需求进行系统性优化，旨在更好地完成真实世界的复杂任务。\n在语言模型基础能力上，豆包2.0 Pro旗舰版取得IMO、CMO数学竞赛和ICPC编程竞赛金牌成绩，也超越了Gemini 3 Pro在Putnam基准测试上的表现，数学和推理能力达到世界顶尖水平。\n大模型执行长链路复杂任务，需要丰富的世界知识。豆包2.0加强了长尾领域知识覆盖，在SuperGPQA等多项公开测试集上表现突出，科学领域知识测试成绩与Gemini 3 Pro和GPT 5.2相当，在跨学科知识应用上也排名前列。\n在教育、娱乐、办公等众多场景中，大模型需要理解图表、复杂文档、视频等内容。对此，豆包2.0全面升级多模态理解能力，视觉推理、空间感知、长上下文理解等权威测试均取得业界最佳表现。\n面对动态场景，豆包2.0增强了对时间序列与运动感知的理解能力，还可实现实时视频流分析、环境感知与主动交互，广泛应用于健身指导、穿搭建议、看护陪伴等生活场景。\nAgent能力是大模型具备行动力的关键。测试成绩显示，豆包2.0 Pro在指令遵循、工具调用和Search Agent等评测中达到顶级水平，在HLE-Text（人类的最后考试）上更是获得54.2的最高分，大幅领先于其他模型。\n目前，豆包2.0 Pro已在豆包App、电脑客户端和网页版上线，用户选择「专家」模式即可对话体验。火山引擎也已上线豆包2.0系列模型API服务。\n据「TMT星球」了解，豆包2.0 Pro按“输入长度”区间定价，32k以内的输入定价为3.2元/百万tokens，输出定价为16元/百万tokens，相比Gemini 3 Pro和GPT 5.2有较大的成本优势。豆包2.0 Lite更是极具性价比，综合性能超越两个月前发布的上一代主力模型豆包1.8，百万tokens输入价格仅为0.6元。\nTMT星球\n",
-        "site_name": "CSDN博客",
-        "query": "豆包Seed 2.0 Pro vs DeepSeek 对比",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "豆包Seed 2.0 Pro:q3:r21": {
-        "id": "豆包Seed 2.0 Pro:q3:r21",
-        "title": "DeepSeek埋头“小更新”，又打了模圈一个措手不及",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c0019067rrs.html",
-        "snippet": "手不及\n每日新闻摘录\n06.01 03:02\n作者｜参商\n编辑｜星奈\n媒体｜AI大模型工场\n29号，深度求索赶在端午假期到来前正式完成了DeepSeek R1模型的小版本升级，消息一出模圈哗然。自从2月份红遍国内外后DeepSeek一直是以模型供应商的身份活跃在大模型圈的“幕后”版块，鲜少有在一线露面的机会，更多的是各家采购商只言片语的提及，没想到再听见发声，已是憋出来个升级的时候：\n现在DeepSeek R1已经升级为最新的DeepSeek-R1-0528，用户可通过官方网站、APP 或小程序进入对话界面后，开启“深度思考”功能即可体验最新版本。API 也已同步更新，调用方式不变。\n01\n超强能力者再创国产模型评分新高\n作为一个深度思考模型，本次升级自然是绕不开深度思考能力的强化。具体而言，DeepSeek-R1-0528仍然使用的是去年12月发布的DeepSeek V3 Base模型作为基座模型进行训练，但在后训练过程中投入了更多算力，以此达到了显著提升模型思维深度与推理能力的效果。\n根据官方披露，更新后的R1在数学、编程与通用逻辑等多个基准测评中取得了当前国内所有模型中首屈一指的优异成绩，并且在整体表现上已接近其他国际顶尖模型，如 o3 与 Gemini-2.5-Pro：\n可以看到相较于旧版本R1，新版R1在复杂推理任务中的表现有非常显著的提升，真正追平国际顶尖水平。具体在 AI\nME 2025测试中，新版模型准确率由旧版的 70% 提升至 87.5%。根据官方解释，这是得益于模型在推理过程中的思维深度增强：在 AIME 2025 测试集上，旧版模型平均每题使用 12K tokens，而新版模型平均每题使用 23K tokens，表明其在解题过程中进行了更为详尽和深入的思考。\n同时，深度求索还基于DeepSeek-R1-0528的思维链，后训练了Qwen3-8B Base，得到了 DeepSeek-R1-0528-Qwen3-8B。而该8B模型在数学测试 AIME 2024 中仅次于DeepSeek-R1-0528，超越 Qwen3-8B（+10.0%），与 Qwen3-235B 相当。再次证明了全新R1的强劲能力。\n02\n实测：肉眼可见的生成内容提升\n至于具体体验如何，我们一起来看看快速上手测试的结果。下图是我让全新DeepSeek R1进行自我介绍的聊天过程：\n可以看到现在的R1相比先前版本有了更流畅更清晰的回答过程，不论是思考链还是正式生成内容，甚至有非常贴心的对比和总结，都用了一些特殊符号标注出来。\n这些充分的交互功能在过去的R1版本是所不曾体现，当时大家还在调侃DeepSeek过于活人感，有一股机器人魔性的疯癫美，但现在看来，全新R1的工具化进程明显，更有个人通用助手的味道，这在当下强调agent通用处理能力的形势下具有一定意义。\n当然除了针对深度思考",
-        "site_name": "新浪看点",
-        "query": "豆包Seed 2.0 Pro vs DeepSeek 对比",
-        "competitor": "豆包Seed 2.0 Pro",
-        "collected_at": "2026-06-05T19:28:19"
-      },
-      "Claude Opus 4.8:q0:r0": {
-        "id": "Claude Opus 4.8:q0:r0",
-        "title": "Anthropic发布Claude Opus 4.8，强化编程与推理能力",
-        "url": "https://www.donews.com/news/detail/8/6574626.html",
-        "snippet": "Anthropic发布Claude Opus 4.8，强化编程与推理能力\n2026-05-29 07:09:03\n2026年5月29日，Anthropic正式推出旗舰模型Claude Opus 4.8。该模型聚焦智能体编程、多步推理与知识工作，较Opus 4.7在可靠性、错误识别与主动提问能力上显著提升，代码缺陷未说明率降低约4倍。新增effort程度控制功能，支持high/xhigh/max响应质量档位。基准测试中，其SWE-Bench Pro得分为69.2%，超越GPT-5.5与Gemini 3.1 Pro（终端编程除外）。快速模式速度提升2.5倍，成本降至前代1/3，定价维持不变。\n",
-        "site_name": "DoNews",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q0:r1": {
-        "id": "Claude Opus 4.8:q0:r1",
-        "title": "Claude Opus 4.8：更强智能体与更高诚实度",
-        "url": "https://3g.china.com/act/redian/13004758/20260529/49519949.html",
-        "snippet": "Claude Opus 4.8：更强智能体与更高诚实度\n华尔街见闻  2026-05-29 09:41:43\nAnthropic在4月推出Claude Opus 4.7后，仅一个多月时间便更新了旗舰模型序列，正式发布了Claude Opus 4.8。新版本不仅强化了编程、智能体和复杂任务处理能力，还新增了用户可控的“思考投入”机制以及面向大型任务的新功能“动态工作流”，使模型能够解决超大规模的复杂问题。\n相比前代Claude Opus 4.7，Opus 4.8引入了“快速模式”，在此模式下，模型的运行速度可提升至常规的2.5倍，成本仅为此前模型的三分之一。新版本的核心卖点包括更强的智能体能力、更高的“诚实度”以及可调的思考投入。用户可以在速度、成本和推理深度之间自行权衡，简单任务可减少计算投入以降低token消耗，复杂任务则可提高推理强度，换取更高质量输出。\nAnthropic特别强调了Opus 4.8的一项关键改进——“诚实度”。大模型长期存在一个典型问题：在证据不足时容易仓促下结论，甚至高置信度输出未经验证内容。Opus 4.8在面对不确定信息时，更倾向主动标记疑点、表达不确定性，而不是“强行给出答案”。内部评估结果显示，新模型允许其编写代码中存在缺陷却未加提示的概率，仅为其前代模型的四分之一左右。\n此外，Anthropic对Opus 4.8进行了详尽的“对齐性”评估，结果显示新模型在支持用户自主权、始终维护用户最佳利益等亲社会特质的各项衡量指标上达到了新的高度。评估结果还显示，Opus 4.8出现“未对齐行为”的概率显著低于Opus 4.7，并已达到与Claude Mythos预览版相媲美的水平。\n在智能体方面，Anthropic同步推出了研究预览版“动态工作流”。这一新功能被整合进Claude Code，可让模型在单个任务中协调数百个并行子智能体，自动规划、拆解、执行并验证复杂流程。例如，新系统能够完成覆盖数十万行代码的大规模代码库迁移任务，从任务启动、执行到合并提交实现端到端处理。\nAnthropic公布的评测数据显示，Claude Opus 4.8继续强化其在智能体和“计算机使用”场景中的优势。在衡量浏览器智能体和在线操作能力的Online-Mind2Web基准测试中，Opus 4.8获得84%的成绩，表现优于Opus 4.7，也胜过GPT-5.5。该模型在长流程任务中保持了更稳定的目标一致性和工具调用能",
-        "site_name": "中华网",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q0:r2": {
-        "id": "Claude Opus 4.8:q0:r2",
-        "title": "Anthropic发布Claude Opus 4.8：Agent能力再升级，提速降费",
-        "url": "https://m.sohu.com/a/1029075853_121956424/",
-        "snippet": "Anthropic发布Claude Opus 4.8：Agent能力再升级，提速降费洞见繁华2026-05-29 01:51Anthropic发布Claude Opus 4.8Anthropic 推出 Claude Opus 4.8，重点提升编码、智能体能力及复杂任务处理。新版本引入用户可控“思考投入”机制，并推出“动态工作流”以解决超大规模问题。核心卖点更强智能体：推出研究预览版“动态工作流”，可在单个任务中协调数百个并行子智能体，适用于大规模代码库迁移等复杂流程。更高“诚实度”：面对不确定信息时，倾向标记疑点、表达不确定性，减少无依据结论。代码缺陷识别率提升至前代模型的四倍。思考投入可调：用户可控制 Claude 为任务投入的“思考资源”，平衡速度、成本和推理深度。性能提升Online-Mind2Web 基准测试中，Opus 4.8 获得 84% 的成绩，优于 Opus 4.7 和 GPT-5.5。新增“快速模式”（FastMode），速度提升至常规 2.5 倍，成本降至三分之一。",
-        "site_name": "手机搜狐网",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q0:r3": {
-        "id": "Claude Opus 4.8:q0:r3",
-        "title": "Claude Opus 4.8 发布：更强编程、更高诚实性，还带来动态工作流",
-        "url": "https://blog.51cto.com/JavaEdge/14659008",
-        "snippet": "Claude Opus 4.8 发布：更强编程、更高诚实性，还带来动态工作流\n公众号JavaEdge\n2026-06-04 23:40:42\n文章标签： Code 开发者 新功能\n一句话总结\nClaude Opus 4.8 正式发布，显著提升编程能力、推理可靠性与诚实性，新增动态工作流、思考强度控制和 system 消息支持，快速模式提速2.5倍且成本降为三分之一，定价维持不变。\n主要内容\n核心能力升级\nOpus 4.8 在编程、智能体任务、复杂推理及知识工作等基准测试中全面超越 Opus 4.7，尤其在代码缺陷识别上沉默概率降低约四倍，诚实性显著增强。\n新功能亮点\n• 动态工作流：Claude Code 可制定计划、并行启动数百子智能体，并验证输出，支持数十万行代码库迁移等超大规模任务；\n• 思考强度控制：用户可在 claude.ai/Cowork 中自由调节计算资源投入（High/Extr\n我们始终致力于让所有模型保持诚实，例如避免做出缺乏依据的断言。然而，AI 模型普遍存在一个问题：有时会过早下结论，在证据并不充分的情况下，仍然自信地宣称自己取得了进展。\n早期测试者反馈显示，Opus 4.8 更倾向于主动指出工作中的不确定性，也更少做出缺乏证据支持的结论。这一点也得到了我们的评测验证：与前代相比，Opus 4.8 对自己编写代码中的缺陷保持沉默的概率降低了约四倍。\n和以往一样，我们在发布前对模型进行了全面的对齐（Alignment）评估。在积极特性方面，我们的对齐团队认为 Opus 4.8“在支持用户自主性以及维护用户最佳利益等亲社会特质指标上，达到了新的高度”。\n评估结果还显示，Opus 4.8 出现不符合预期行为（如欺骗行为或协助滥用）的比例明显低于 Opus 4.7，并与我们当前对齐程度最佳的模型 Claude Mythos Preview 相当。完整的对齐评估结果以及部\n署前安全测试内容，均已收录在 Claude Opus 4.8 系统卡中。\n4 今日同步发布的更新\n除了 Claude Opus 4.8 之外，我们还推出了以下更新：\n动态工作流（Dynamic Workflows）。这项目前处于研究预览阶段的新功能，让 Claude Code 能够承担规模更大的任务。Claude 可以先制定执行计划，然后在单次会话中启动数百个并行子智能体（而在 Opus 4.8 的支持下，这些智能体还能运行更长时间）。在向用户汇报结果之前，它还会先验证输出内容。例如，搭载 Opus 4.8 的 Claude Code 现在能够基于现有测试套件作为验收标准，完成跨数十万行代码的大规模代码库迁移，从项目启动一直执行到合并代码。有关动态工作流的更多信息（适用于 Claude Code 的 Enterprise、Team 和 Max 套餐），请参阅这篇文章。\nclaude.ai 和 ",
-        "site_name": "51CTO博客",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q0:r4": {
-        "id": "Claude Opus 4.8:q0:r4",
-        "title": "Anthropic发布Claude Opus 4.8，新功能支持数百子智能体并行",
-        "url": "http://news.qq.com/rain/a/20260529A05FC200",
-        "snippet": "Anthropic发布Claude Opus 4.8，新功能支持数百子智能体并行\n钛媒体快报\n钛媒体App 5月29日消息，Anthropic当地时间周四正式发布旗舰新模型Claude Opus 4.8。官方表示，相比较Opus 4.7模型，本次Opus 4.8更新幅度较小，在保持价格不变的情况下，主要提升编程、智能体、推理和知识工作等用户能感知的方面。内部评估显示，Opus 4.8对自己生成的代码“放过错误不提及”的概率较前代降低约四倍，自我纠错能力显著增强；对齐性测试中，模型在支持用户自主决策、维护用户最大利益等“亲社会特质”方面创下新高；隐性欺骗、误导行为等“失配行为”发生率低于 Opus 4.7，与预览版Claude Mythos持平。值得一提的是，Anthropic同步推出几项功能更新，比如，“投入控制”（effort control）机制，允许用户直接控制Claude为任务投入多少“思考资源”；“动态工作流”（Dynamic Workflows）架构，可让模型在单个任务中协调数百个并行子智能体，自动规划、拆解、执行并验证复杂流程。此外，Opus 4.8新增了“快速模式”（Fast Mode），在该模式下，模型的运行速度可提升至常规的2.5倍，现在的成本仅为此前模型的三分之一。（广角观察）\n",
-        "site_name": "腾讯网",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q0:r5": {
-        "id": "Claude Opus 4.8:q0:r5",
-        "title": "Anthropic发布Claude Opus 4.8，新功能支持数百子智能体并行",
-        "url": "https://www.tmtpost.com/nictation/8007077.html",
-        "snippet": "Anthropic发布Claude Opus 4.8，新功能支持数百子智能体并行\n2026.05.29 12:03\n钛媒体App 5月29日消息，Anthropic当地时间周四正式发布旗舰新模型Claude Opus 4.8。官方表示，相比较Opus 4.7模型，本次Opus 4.8更新幅度较小，在保持价格不变的情况下，主要提升编程、智能体、推理和知识工作等用户能感知的方面。内部评估显示，Opus 4.8对自己生成的代码“放过错误不提及”的概率较前代降低约四倍，自我纠错能力显著增强；对齐性测试中，模型在支持用户自主决策、维护用户最大利益等“亲社会特质”方面创下新高；隐性欺骗、误导行为等“失配行为”发生率低于 Opus 4.7，与预览版Claude Mythos持平。 值得一提的是，Anthropic同步推出几项功能更新，比如，“投入控制”（effort control）机制，允许用户直接控制Claude为任务投入多少“思考资源”；“动态工作流”（Dynamic Workflows）架构，可让模型在单个任务中协调数百个并行子智能体，自动规划、拆解、执行并验证复杂流程。此外，Opus 4.8新增了“快速模式”（Fast Mode），在该模式下，模型的运行速度可提升至常规的2.5倍，现在的成本仅为此前模型的三分之一。（广角观察）\n#主编精选快报\n",
-        "site_name": "钛媒体",
-        "query": "Claude Opus 4.8 产品功能介绍",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r6": {
-        "id": "Claude Opus 4.8:q1:r6",
-        "title": "2026 年 6 月 AI 大模型终极对比：价格战白热化，谁才是真正的性价比之王？",
-        "url": "https://blog.51cto.com/u_16864929/14651528",
-        "snippet": "GPT-4o 18.00 72.00 9.00 24.0Claude Sonnet 4.6 21.60 108.00 2.16 27.0GPT-5.5 36.00 216.00 18.00 54.0Claude Opus 4.8 108.00 540.00 10.80 135.0震撼数据：同样处理100万Token的输入和输出，使用DeepSeek-V4-Pro仅需9元，而使用Claude Opus 4.8则需要648元，成本差距高达72倍！2.2 订阅价格对比（个人用户）平台 订阅方案 月费（人民币） 主要权益ChatGPT Plus ~144 GPT-4o、DALL·E 4、插件Pro ~720 GPT-5.5、更高速率、优先访问Claude Pro ~144 Claude 3.5 Sonnet、Opus有限使用Max ~720 Claude Opus 4.8无限使用Gemini AI Pro ~144 Gemini 3.1 Pro、Gemini Advanced",
-        "site_name": "51CTO博客",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r7": {
-        "id": "Claude Opus 4.8:q1:r7",
-        "title": "Claude Opus 4.8：更强智能体与更高诚实度",
-        "url": "https://3g.china.com/act/redian/13004758/20260529/49519949.html",
-        "snippet": "场景中的优势。在衡量浏览器智能体和在线操作能力的Online-Mind2Web基准测试中，Opus 4.8获得84%的成绩，表现优于Opus 4.7，也胜过GPT-5.5。该模型在长流程任务中保持了更稳定的目标一致性和工具调用能力，更适合自主工程Agent、法律分析、金融研究以及企业复杂流程场景。\n价格方面，Claude Opus 4.8维持与Opus 4.7一致的常规定价：每百万输入token收费5美元，每百万输出token收费25美元。同时，新增“快速模式”方案，定价为每百万输入token收费10美元，主打更快响应体验。Anthropic继续保留Prompt Caching、批处理折扣等企业级成本优化机制。\nClaude Opus 4.8已正式上线Claude生态，Pro、Max、Team、Enterprise用户均可直接使用。开发者可通过Claude API调用claude-opus-4-8模型。此外，Anthropic在主要云平台开放部署，包括亚马逊的AWS、谷歌云以及微软的Foundry。\n此次更新显示出Anthropic正在从“模型能力竞争”进一步迈向“智能体系统竞争”。Dynamic Workflows、多Agent协作、长流程自动执行、用户可调思考强度等新功能，都显示出Anthropic希望推动Claude从聊天模型向“长期自主执行系统”演进。未来重点方向将继续围绕Agent能力、企业复杂工作流、工具调用、跨会话记忆与长期任务执行展开。作为Glasswing项目的一部分，目前已有少数机构开始试用Claude Mythos预览版，并将其应用于网络安全相关工作中。Anthropic在构建这些安全防护措施方面正取得迅速进展，并预计在未来数周内将Mythos级别的模型正式向所有客户开放。（责任编辑：卢其龙 CN070）\n责任编辑：卢其龙 CN070\n",
-        "site_name": "中华网",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r8": {
-        "id": "Claude Opus 4.8:q1:r8",
-        "title": "Anthropic估值万亿，但Claude 4.8没那么惊艳",
-        "url": "https://finance.sina.com.cn/jjxw/2026-06-01/doc-inhzwpyv2552406.shtml",
-        "snippet": "另一方面，在定价策略上，Opus 4.8的常规模式维持了与上一版本相同的价格，仍为每百万token 5美元（输入）/ 25美元（输出）。但快速模式的价格大幅下调，从4.7时代的30美元（输入）/ 150美元（输出），降至10美元（输入）/ 50美元（输出）。在保持速度相当的前提下，价格降至原先的约三分之一，性价比提升显著。虽然降价能在一定程度上缓解成本压力，但动态工作流本身的ROI问题，仍是企业真正下场之前绕不开的那道坎。03.按月迭代背后，是技术与商业的双重压力Claude Opus 4.8的发布时间，距上一版本Opus 4.7仅相隔43天。如此密集的迭代节奏，正是技术与商业压力叠加的直接体现。技术层面，这次快速迭代被部分从业者认为是一次不得不做的修复。Opus 4.7因自适应推理体验不佳饱受诟病，该功能在部分场景下无法合理分配推理资源，导致模型面对复杂问题时过早省力，答案草率，推理链条残缺。方思明直言，“Opus4.8主要目的还是在修复Opus4.7遗留的问题，Opus4.7在开发者圈里*不是一个口碑特别好的模型。”",
-        "site_name": "新浪财经",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r9": {
-        "id": "Claude Opus 4.8:q1:r9",
-        "title": "比剧透提前！Anthropic发布Claude Opus 4.8：更“诚实”、可调思考强度、新功能协调数百智能体",
-        "url": "https://caifuhao.eastmoney.com/news/20260529021334927624140",
-        "snippet": "律分析、金融研究以及企业复杂流程场景。\n多家合作伙伴也在官方材料中给出背书。\n例如，AI编程产品Devin开发商指出，Opus 4.8改善了此前版本存在的注释冗长、工具调用问题；法律与税务工作流平台CoCounsel则称，新模型在一致性和推理质量方面有明显提升。\n常规定价不变 新增“快速模式”选项\n价格方面，Anthropic并未提高标准使用成本。\nClaude Opus 4.8维持与Opus 4.7一致的常规定价：每百万输入token收费5美元，每百万输出token收费25美元。\n同时，Anthropic新增“快速模式”（Fast Mode）方案，定价为每百万输入token收费10美元，主打更快响应体验。\nAnthropic同时继续保留Prompt Caching、批处理折扣等企业级成本优化机制。\n已在哪些平台上线？云厂商同步接入\nAnthropic表示，Claude Opus 4.8已正式上线Claude生态。\n消费端与企业端方面，Pro、Max、Team、Enterprise用户均可直接使用。\n开发者则可通过Claude API调用claude-opus-4-8模型。\n此外，Anthropic同步在主要云平台开放部署，包括亚马逊的AWS、谷歌云以及微软的Foundry。\n不止模型更新，Anthropic下一步想做什么？\n除发布新模型外，Anthropic此次更新释放出的更重要信号，或许是其正在从“模型能力竞争”进一步迈向“智能体系统竞争”。\nDynamic Workflows、多Agent协作、长流程自动执行、用户可调思考强度等新功能，都显示出Anthropic希望推动Claude从聊天模型向“长期自主执行系统”演进。\n公司在公告中也反复强调，未来重点方向将继续围绕Agent能力、企业复杂工作流、工具调用、跨会话记忆与长期任务执行展开。\nAnthropic表示，作为Glasswing项目的一部分，目前已有少数机构开始试用Claude Mythos预览版，并将其应用于网络安全相关工作中。鉴于此类模型具备极高的能力水平，在正式面向大众发布之前，必须先行建立更为强健的网络安全防护体系。\n目前，Anthropic在构建这些安全防护措施方面正取得迅速进展，并预计，在未来数周内，即可将Mythos级别的模型正式向所有客户开放。\n从时间线上看，Anthropic显然正在加速新品节奏：4月中旬才推出Opus 4.7，一个多月后便发布4.8，而且较此前外界根据泄露代码推测的发布时间进一步提前。\n在OpenAI、谷歌等厂商持续推进Agent和推理模型竞争的背景下，Anthropic选择用更快的迭代速度、更多系统级功能升级，继续押注高端企业AI市场。\n",
-        "site_name": "财富号",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r10": {
-        "id": "Claude Opus 4.8:q1:r10",
-        "title": "计算机行业：ANTHROPIC发布CLAUDE OPUS 4.8 戴尔全年AI服务器营收指引600亿美元",
-        "url": "http://stock.finance.sina.com.cn/stock/go.php/vReport_Show/kind/industry/rptid/833639341211/index.phtml",
-        "snippet": "计算机行业：ANTHROPIC发布CLAUDE OPUS 4.8 戴尔全年AI服务器营收指引600亿美元类别：行业 机构：平安证券股份有限公司 研究员：闫磊/黄韦涵/刘云坤 日期：2026-06-01行业要闻及简评：1）Anthropic发布Opus 4.8，模型性能排名全球第一。5月28日，Anthropic发布Claude Opus 4.8，模型的诚实准确性显著增强，同时推出动态工作流等功能。Opus 4.8在其所编写的代码中出现缺陷却未提示的可能性，大约是其前代产品的四分之一。定价方面，Claude Opus 4.8常规版本定价为5美元/百万输入token美s，元2/5百万输出tokens；快速模式定价为10美元/百万输入tokens，50美元/百万输出tokens。根据网站Artificial Analysis最新更Cl新au，de Opus 4.8（max）在全球AI大模型中性能排名达第一。2）戴尔发布2027财年第一季度报告，全年AI服务器营收上调至600亿美元。当地时间5月28日，戴尔发布2027财年第一季度财务报告，公司2027财年第一季度营收438亿美元，同比增长88%。",
-        "site_name": "新浪财经",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q1:r11": {
-        "id": "Claude Opus 4.8:q1:r11",
-        "title": "Anthropic发布Claude Opus 4.8：Agent能力再升级，提速降费",
-        "url": "https://m.sohu.com/a/1029075853_121956424/",
-        "snippet": "Anthropic发布Claude Opus 4.8：Agent能力再升级，提速降费\n洞见繁华\n2026-05-29 01:51\nAnthropic发布Claude Opus 4.8\nAnthropic 推出 Claude Opus 4.8，重点提升编码、智能体能力及复杂任务处理。新版本引入用户可控“思考投入”机制，并推出“动态工作流”以解决超大规模问题。\n核心卖点\n更强智能体：推出研究预览版“动态工作流”，可在单个任务中协调数百个并行子智能体，适用于大规模代码库迁移等复杂流程。\n更高“诚实度”：面对不确定信息时，倾向标记疑点、表达不确定性，减少无依据结论。代码缺陷识别率提升至前代模型的四倍。\n思考投入可调：用户可控制 Claude 为任务投入的“思考资源”，平衡速度、成本和推理深度。\n性能提升\nOnline-Mind2Web 基准测试中，Opus 4.8 获得 84% 的成绩，优于 Opus 4.7 和 GPT-5.5。\n新增“快速模式”（FastMode），速度提升至常规 2.5 倍，成本降至三分之一。\n应用场景\n适用于自主工程 Agent、法律分析、金融研究以及企业复杂流程场景。Devin 开发商和 CoCounsel 等合作伙伴已给出正面反馈。\n定价与上线\n常规定价不变：每百万输入 token 收费 5 美元，每百万输出 token 收费 25 美元。\n“快速模式”定价：每百万输入 token 收费 10 美元。\n已上线 Claude 生态，Pro、Max、Team、Enterprise 用户及开发者可通过 Claude API 使用。\n已在 AWS、谷歌云、微软 Foundry 开放部署。\n未来方向\nAnthropic 将从“模型能力竞争”转向“智能体系统竞争”，重点围绕 Agent 能力、企业复杂工作流、工具调用及长期任务执行展开。\n",
-        "site_name": "手机搜狐网",
-        "query": "Claude Opus 4.8 定价 价格 收费标准",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q2:r12": {
-        "id": "Claude Opus 4.8:q2:r12",
-        "title": "Anthropic 发布了 Opus 4.8， OpenAI真慌了？",
-        "url": "https://www.51cto.com/article/844785.html",
-        "snippet": "反转\nRamp AI Index 追踪的是美国企业信用卡支出。它不能覆盖整个世界，却能清楚看到公司到底在为什么工具掏钱。2026 年 4 月，Anthropic 占到了这类支出的 34.4%，OpenAI 是 32.3%。\n这是 Anthropic 第一次超过 OpenAI。过去 12 个月里，它的份额翻了四倍；OpenAI 基本没怎么动。而在数据集最近的一个月里，OpenAI 的份额还下降了 2.9 个百分点。\n当然，Ramp 的数据有边界。它不是全球市场份额，不是总收入，也不包含消费者订阅。它追踪的是美国商业支出，而且更偏向中型企业和成长型公司。但企业信用卡支出，已经是我们目前能看到的、最接近企业情绪变化的领先指标。因为一家公司决定标准化某个工具时，最早出现的信号，往往就是一批工程师开始集中报销座席费用。\n这件事会发生，是因为 Anthropic 几乎把整个公司都押在了“用代码打进技术市场”这条路上。Claude Code 一年前推出；它的大上下文窗口围绕大型代码仓库调校，召回准确率被放在比聊天人格更重要的位置。现在看，这个打法奏效了。\n编程战，OpenAI已丢半壁江山\n眼下，编码已经占到企业 AI 使用量的 51%。而在这个最核心、也最值钱的市场里，Anthropic 的份额根据不同产业调查，大约在 42% 到 54% 之间。OpenAI 则是 21%。换句话说，Anthropic 拿下了这个行业最贵赛道的一半，OpenAI 只剩下大约四分之一。\nClaude Code 的增长轨迹，也解释了 Ramp 数据为什么会变成这样。Claude Code 在正式开放后的 6 个月内，年化收入就冲到了 10 亿美元；到 2026 年 4 月，又涨到 25 亿美元年化收入。Anthropic 说，这是企业软件史上最快的收入爬坡。\n这种变化的财务现实，最近已经被摆到了台面上。Uber 的 CTO 表示，公司 2026 年的 AI 预算，只用了 4 个月就花完了。钱几乎都流向了 Claude Code 和 Cursor。Uber 内部一些工程师，每月产生的 API 成本在 500 到 2000 美元之间。\n听起来很贵？但对 CTO 来说，这笔账并不难算。一个高级工程师的工资和福利摊下来，假设每月 2 万美元。如果 2000 美元的 API 账单，能让这个工程师多产出 30%，那它已经赚回来了，而且不止一倍。因此，CTO 们并没有因为预算超支而惊慌；他们反而会继续批准。\nAnthropic 没有追着 Sora 跑。它做 Dynamic Workflows，就是为了代码库迁移这种场景——也正是它已经赢的地方。领先优势，就是这样一点点滚大的。\n收入曲线，估值战争\n编码市场的优势，已经开始直接反映到收入线上。Anthropic 的收入正在以每个季度翻倍以上的速度增长。2026",
-        "site_name": "51CTO",
-        "query": "Claude Opus 4.8 市场份额 用户量 评测",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q2:r13": {
-        "id": "Claude Opus 4.8:q2:r13",
-        "title": "计算机行业周报：Claude Opus 4.8发布，小米MiMo大模型API永久降价",
-        "url": "https://m.10jqka.com.cn/sr/20260602/58352863.shtml",
-        "snippet": "计算机行业周报：Claude Opus 4.8发布，小米MiMo大模型API永久降价\n2026-06-02 16:05:46 华鑫证券 任春阳\n摘要算力：算力租赁价格平稳，小米MiMo大模型API永久降价，最高降幅99% 2026年5月27日，小米宣布MiMo-V2.5系列API价格永久下调，取消上下文长度区分，执行统一定价。其中，MiMo-V2.5-Pro输入缓存命中价格降至0\n算力：算力租赁价格平稳，小米MiMo大模型API永久降价，最高降幅99%\n2026年5月27日，小米宣布MiMo-V2.5系列API价格永久下调，取消上下文长度区分，执行统一定价。其中，MiMo-V2.5-Pro输入缓存命中价格降至0.025元/百万tokens，最高降幅达99%。新版API价格直接对标DeepSeek，国内大模型价格战升温。与此同时，小米TokenPlan计费体系同步升级，在月费不变的前提下，各档位Credits额度普遍提升至原来的5至8倍。\nAI应用：Discord周访问量环比+2.82%，ClaudeOpus4.8发布\n2026年5月29日，Anthropic公司发布了ClaudeOpus4.8模型。新模型在编程能力上取得了显著提升，几乎在所有主流基准测试中都占据了领先位置。与此同时，Anthropic还展示了其ClaudeCode功能中的dynamicworkflows，该特性能够调动上百个agent并行处理任务，例如在11天内完成75万行代码的重写工作，且测试通过率高达99.8%。\nAI融资动向：CognitionAI完成超10亿美元D轮融资，投后估值达260亿美元\n2026年5月28日，AI编程智能体公司CognitionAI宣布完成超10亿美元D轮融资，投后估值达260亿美元，本轮融资由LuxCapital、GeneralCatalyst、8VC共同领投，FoundersFund、EladGil、AlphaWave等多家知名机构跟投。不到两年半时间内，该公司已实现超70倍估值增长。自今年年初以来，其核心产品AI智能体Devin的企业端使用量增长超",
-        "site_name": "同花顺",
-        "query": "Claude Opus 4.8 市场份额 用户量 评测",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q2:r14": {
-        "id": "Claude Opus 4.8:q2:r14",
-        "title": "Claude Opus 4.8问世：三项全球第一",
-        "url": "https://soft.china.com/article/1923162.html",
-        "snippet": "Claude Opus 4.8问世：三项全球第一\n2026-06-04 06:14 快科技\n5月30日消息，Anthropic在5月28日推出最新旗舰大模型Claude Opus 4.8。\n根据SuperCLUE最新中文测评，这款模型在代码生成、幻觉控制、科学推理三项核心能力全部拿到全球第一。\n代码生成方面，Opus 4.8拿到83.58分，领先第二名超过2分，比上一代4.7版本提升4.5分以上，软件工程相关子任务同样登顶，独立写代码和网页开发都很稳。\n幻觉控制得分87.48，同样全球第一，比前代提升超过6分，AI乱编答案的情况大幅减少，回答更靠谱，专业场景用起来更放心。\n科学推理拿到77.19分，也是全球第一，相比4.7版本提升近9分，理科计算、逻辑推导能力明显变强。\n综合智能指数73.93分，和GPT-5.5、Gemini 3.1 Pro Preview同处第一梯队。推理速度基本持平，API价格没有变化，依旧属于高性能但性价比偏低的档位。\n不过它也有小幅短板，智能体任务规划、数学推理、指令遵循略有下降，指令遵循分数下滑比较明显，日常使用影响不大。\n整体来看，Opus 4.8重点强化了代码、诚实度和科学推理，对开发者、科研人员非常友好，是目前综合能力最均衡的旗舰模型之一。\n",
-        "site_name": "中华网软件",
-        "query": "Claude Opus 4.8 市场份额 用户量 评测",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q2:r15": {
-        "id": "Claude Opus 4.8:q2:r15",
-        "title": "计算机行业：华鑫证券-计算机行业周报：Claude Opus 4.8发布，小米MiMo大模型API永久降价-260602",
-        "url": "http://www.huiyunyan.com/doc-5c899a840333a14b8c7f9a960ff246ec.html",
-        "snippet": "6E2027E20252026E2027E300757SZ罗博特科59598-030030060-19866019866099330买入301196SZ唯科科技1185025小米MiMo大模型API永久降价3334398468435482977买入603859SH能科科技4390092121150477236282927买入688615SH。\n28、合合信息13662324422525421732372602买入资料来源计算机行业周报：Wind，华鑫证券研究证券研究报告3诚信、专业、稳健、高效正文目录1、算力动态：算力租赁价格平稳，小米MIMO大模型API永久降价511、Tokens跟踪512、数据跟踪：阿里云发布全新海外AI产品官网QwenCloud，AI出海开启加速模式613、产业动态：小米MiMo大模型API永久降价，最高降幅99%72、AI应用动态。\n29、：DISCORD周访问量环比+282%，CLAUDEOPUS48发布1121、周流量跟踪：Discord周访问量环比+282%1122、产业动态：ClaudeOpus48发布，用两个零重塑信任113、AI融资动向：COGNITIONAI完成超10亿美元D轮融资，投后估值达260亿美元164、行情复盘185Claude Opus 4.8发布、投资建议206、风险提示21图表目录图表1：TOKENS规模LEADERBOARD5图\n表2：。\n30、市场份额占据示意6图表3：MIMO-V25系列API最新价格7图表4：DEEPSEEK-V4系列与小米MIMO-V25系列API价格对比表8图表5：国内大模型订阅制套餐价格对比图8图表6：高缓存命中场景下不同套餐对应实际TOK小米MiMo大模型API永久降价EN规模概览10图表7：2026522-2026528AI相关网站流量11图表8：CLAUDEOPUS48发布12图表9：CLAUDEOPUS48在HLE与OSWORLD测试。\n31、中的表现12图表10：CLAUDEOPUS48在GDPVAL-AA排行榜的表现13图表11：CLAUDEOPUS48在谎报率上的表现13图表12：CLAUDEOPUS48在偷懒调查率上的表现14图表13：CLAUDEOPUS48在PROGRAMBENCH测试中的表现14图表14：上周AI初创公司融资动态17图表15：上周（2026525-2026529日计算机行业周报）指数日涨跌幅18图表16：上周（20265。\n32、25-2026529日）AI算力指数内部涨跌幅度排名18图表17：上周（2026525-2026529日）AI应用指数内部Claude Opus 4.8发布涨跌幅度排名19图表18：FICONTEC2025年年中至今公告订单20证券研究报告4诚信、专业、稳健、高效图表19：重点关注公司及盈利预测21证券研究报告5诚信、专",
-        "site_name": "慧云研",
-        "query": "Claude Opus 4.8 市场份额 用户量 评测",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q2:r16": {
-        "id": "Claude Opus 4.8:q2:r16",
-        "title": "Claude Opus 4.8发布，Mythos也将登场！Anthropic H轮融资后估值超OpenAI",
-        "url": "https://view.inews.qq.com/a/20260601A03DS100",
-        "snippet": "Claude Opus 4.8发布，Mythos也将登场！Anthropic H轮融资后估值超OpenAI\nAIGC开放社区\n2026年6月1日10:03 上海 科技领域创作者\n专注AIGC技术的专业社区，关注大语言模型（LLM）的发展和应用落地，聚焦LLM及AI技术的市场研究和开发者生态，欢迎关注！\nAnthropic发布了Claude Opus 4.8，预告 Mythos级别模型即将全面开放。\n同一天，宣布完成650亿美元H轮融资，估值9650亿美元首次超越OpenAI。\nOpus 4.8：更聪明也更诚实\nClaude Opus 4.8距离上一代Opus 4.7仅6周，速度比Anthropic以往的发布节奏更快。\n价格不变，每百万输入token 5美元，每百万输出token 25美元，100万token上下文窗口。\n先看基准测试。\n7项测试中Opus 4.8赢了6项。SWE-Bench Pro提升4.9个百分点，从64.3%到69.2%，这是工程师日常感知最明显的指标。连Claude Code之父都来安利。\n",
-        "site_name": "腾讯网",
-        "query": "Claude Opus 4.8 市场份额 用户量 评测",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q3:r17": {
-        "id": "Claude Opus 4.8:q3:r17",
-        "title": "美国最强模型翻车：Claude Opus 4.8一开口就说自己是DeepSeek和千问",
-        "url": "https://cloud.tencent.com/developer/article/2680203",
-        "snippet": "上升到了国家安全层面，呼吁华盛顿对中国AI公司采取行动。CNN、Fortune、CNBC等主流媒体全程报道，DeepSeek被打上了\"技术窃贼\"的标签。\n现在风水轮流转。\n用人话说：这就像一个人在法庭上控告邻居偷了自己家的菜谱，结果法官翻开他的厨房抽屉，发现里面全是邻居的菜谱复印件。\nLinux.do上有个高赞评论精准总结：\n\"Anthropic的反蒸馏策略又进步了啊——以前是不让别人蒸馏自己，现在是蒸馏完别人还让别人说不出话来。\"\n四、Opus 4.8本身：抛开争议，实力几何？\n争议归争议，Opus 4.8的硬实力还是得看。\n4.1 核心Benchmark\nClaude Opus 4.8 核心性能数据\n基准测试\nOpus 4.8\nOpus 4.7\nGPT-5.5\n提升\nSWE-bench Pro（代码）\n69.2%\n64.3%\n65.8%\n+4.9\nSWE-bench Verified\n88.6%\n87.6%\n86.2%\n+1.0\nUSAMO 2026（数学）\n96.7%\n69.3%\n91.4%\n+27.4\n编程综合排名\n#2/119\n#5\n#3\n—\n知识理解排名\n#3/119\n#6\n#4\n—\nAgentic工具使用\n#4/119\n#8\n#5\n—\nUSAMO从69.3%跳到96.7%，提升27.4个百分点——这在数学推理上是断崖式进步。编程能力全球第二，仅次于一个神秘的内部模型。\n4\n.2 新功能亮点\nEffort Controls（努力度控制）： 用户可以选择Low/Medium/High/Max四个档位。Max档位思考更深、更慢但更准；Low档位快速出结果、省token。这在API场景下非常实用——不是每个请求都需要模型拼命思考。\nDynamic Workflows（动态工作流）： Claude Code现在可以一次性启动数百个并行子Agent，完成跨代码库级别的大规模迁移。官方演示是一次session内完成十万行级别的代码重构，从启动到合并PR全自动。\nFast Mode降价3倍： 2.5倍速的快速模式，价格降到之前的三分之一。\n更诚实、更少欺骗： 官方原话——\"代码缺陷被放过的概率降低了4倍。\"\n4.3 定价\n模型\n输入 $/1M token\n输出 $/1M token\nClaude Opus 4.8\n$5.00\n$25.00\nClaude Opus 4.8 Fast\n$10.00\n$50.00\nGPT-5.5\n$5.00\n$30.00\nGemini 3.5 Flash\n$1.50\n$9.00\nDeepSeek V4-Pro\n$2.00\n$8.00\n定价对比\n输入价格和GPT-5.5持平，输出便宜17%。但和DeepSeek V4-Pro比，贵了2.5到3倍 。\n五、更大的图景：蒸馏是AI行业的\"公开秘密\"\n抛开Anthropic的双标问题，蒸馏本身在AI行",
-        "site_name": "腾讯云",
-        "query": "Claude Opus 4.8 vs DeepSeek 对比",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q3:r18": {
-        "id": "Claude Opus 4.8:q3:r18",
-        "title": "开源最强！“拳打GPT 5”，“脚踢Gemini-3.0”，DeepSeek V3.2为何提升这么多？",
-        "url": "http://jxsmlw.cn/haerbin/58448e95a2275b5gnIFO.html",
-        "snippet": "开源最强！“拳打GPT 5”，“脚踢Gemini-3.0”，DeepSeek V3.2为何提升这么多？\n来源：避重就轻网-工人日报\n2026-06-01 00:38:13\n在大模型赛道逐渐从“参数竞赛”走向“能力竞赛”的当下，一个显著的变化正在发生：开源模型开始在越来越多关键能力维度上逼近、甚至冲击顶级闭源模型。\n12񀙑日，DeepSeek同步发布两款正式版模型——DeepSeek-V3.2DeepSeek-V3.2-Speciale，前者在推理测试中达到GPT-5水平，仅略低于Gemini-3.0-Pro，而后者在IMO 2025等四项国际顶级竞赛中斩获金牌。\nV3.2在工具调用能力上达到当前开源模型最高水平，大幅缩小了开源模型与闭源模型的差距。\n据官方介绍，V3.2是DeepSeek首个将思考融入工具使用的模型，在“思考模式”下仍然支持工具调用。该公司通过大规模Agent训练数据合成方法，构造�多个环境、85000多条复杂指令的强化学习任务，大幅提升了模型在智能体评测中的表现。\nV3.2证明了一件事：通过正确的架构+数据策略+工具融合设计，开源模型完全有能力成为世界级选手。Deepseek研究员苟志斌在社交平台X上发帖称：\n如果说Gemini-3证明了持续扩大预训练规模依然有效，那么DeepSeek-V3.2-Speciale则证明了在超大上下文下进行强化学习扩展是可行的我们花了一年时间把DeepSeek-V3推到极限。得到的经验是：后训练的瓶颈，是靠优化方法和数据而不是靠等待一个更强的基础模型来解决的\nDSA突破性能瓶颈，“思考+工具调用”策略带来质的飞跃\n这次的核心飞跃，来自两大底层创新。\n第一个是DeepSeek Sparse Attention（DSA）稀疏注意力机制，DeepSeek两个月前在实验版（V3.2-Exp）中引入的一项关键结构。\n该稀疏注意力机制有效解决了传统注意力机制在长序列处理中的效率瓶颈，将注意力复杂度从O(L²)降低至O(Lk)，同时保持模型性能。\n在架构层面，DSA采用闪电索引器和细粒度Token选择机制两大组件。闪电索引器计算查询Token与历史Token之间的索引分数，决定哪些Token被选中；细粒度Token选择机制则基于索引分数检索对应的键值条目。该机制基于MLA的MQA模式实现，确保计算效率的同时维持模型表现。\n在大量用户对比测试中发现：V3.2-Exp在任何场景中都没有明显弱于 V3.1，稀疏注意力不仅没有损失能力，反而大幅提升了效率和响应质量。这意味着，模型可以：看得更“远”、想得更“深”、却用更少的计算资源。\n第二，DeepSeek-V3.2提升显著的关键在于训练策略的根本性改变。以往版本采用\"直接调工具\"的简单模式，而V3.2创新性地实现了\"思考+调工具\"(Thinking in Tool-use)的融合",
-        "site_name": "避重就轻网",
-        "query": "Claude Opus 4.8 vs DeepSeek 对比",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q3:r19": {
-        "id": "Claude Opus 4.8:q3:r19",
-        "title": "Claude Opus 4.8 刚发布，被实锤蒸馏了 DeepSeek 和千问？！附一手实测，夯还是拉？",
-        "url": "https://blog.51cto.com/u_15016006/14643259",
-        "snippet": "I精致、零缺陷），Opus 4.8 代码量最大但存在安全配置疏漏，GPT-5.5 极简高效但可维护性弱。\n主要内容\n核心更新亮点\nOpus 4.8 新增动态工作流（支持千级并行 Agent）、代码自查能力提升4倍（漏检率显著下降）、Fast Mode 成本降低3倍；编程基准测试中 SWE-bench Pro 达69.2%（超 GPT-5.5），但 Terminal-Bench 2.1 略逊于后者。\n实测项目与方法\n使用 Cursor 并行调度 4 模型（Opus 4.6/4.7/4.8 + GPT-5.5），统一提示词开发「TaskFlow 全栈看板应用」（React+TS 前端 / FastAPI+SQLite 后端），覆盖注册登录、拖拽看板、数据图表、主题切换等7项功能，全程无人干预。\n关键对比结论\nUI 设计：Opus 4.7 深色模式渐变背景最优雅；功能全部达标；代码质量上，Opus \n得拿真实项目来检验。\n不过正式开测之前，先说个最近跟 Claude 有关的乐子。\n有人发现用 Anthropic 官方 API（注意是 官方 API，不是中转站）直接调 Claude，中文问它「你是什么模型？」，它竟然一本正经地回答「我是通义千问」。据说换个问法，它还会说自己是 DeepSeek。\n我盲猜一个原因，API 调用没有像网页端那样的系统提示词来锚定身份，而中文互联网上「我是通义千问 / DeepSeek」的训练数据远比「我是 Claude」多得多。模型在没有身份提示的情况下，自然就输出了概率最高的那个回答。\n不过也有可能，Claude 就是蒸馏了国产模型，好一个回旋镖~\n好了说回正题，这些顶级模型在实际编程中表现到底如何呢？\n让 Cursor 自动并行测试\n如果让你来做 4 个模型的编程能力对比，你会怎么做呢？手动一个一个跑么？\n那也太累了，我选择直接让 AI 帮我测。\n现在 Cu\n2 Opus 4.8 代码量最大最详尽，但有文件遗漏和 CORS 问题\n🥉 3 GPT-5.5 1221 行极简通关，但后端单文件堆砌不利于维护\n4 Opus 4.6 功能完整但有 2 个白屏 Bug，对新框架适配不足\n看到这个结果，是不是有点意外？\n最新的 Opus 4.8 竟然没拿第一，怕不是更新了个寂寞嘛？\n我的理解是，4.8 这次更新的重心不在「写更美观的代码」，而在 Agent 可靠性和长时间无人监督的任务执行上。动态工作流、代码自查能力这些特性，在大型项目和企业级场景里可能更有价值，但在「一把梭做个全栈项目」这种场景下，4.7 反而表现更稳。\n所以大家不要盲目追新，还是按自己的实际需求来选模型。\n时间有限，就先给大家分享这次测试。结合我自己的使用体感，我的建议是：\n日常开发、一把梭小项目：选择 Opus 4.7 或 4.8 都行，4.7 的 UI 更好看，4.8 更省心（自查能力强",
-        "site_name": "51CTO博客",
-        "query": "Claude Opus 4.8 vs DeepSeek 对比",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "Claude Opus 4.8:q3:r20": {
-        "id": "Claude Opus 4.8:q3:r20",
-        "title": "Claude Opus 4.8问世：三项全球第一",
-        "url": "https://soft.china.com/article/1923162.html",
-        "snippet": "Claude Opus 4.8问世：三项全球第一\n2026-06-04 06:14 快科技\n5月30日消息，Anthropic在5月28日推出最新旗舰大模型Claude Opus 4.8。\n根据SuperCLUE最新中文测评，这款模型在代码生成、幻觉控制、科学推理三项核心能力全部拿到全球第一。\n代码生成方面，Opus 4.8拿到83.58分，领先第二名超过2分，比上一代4.7版本提升4.5分以上，软件工程相关子任务同样登顶，独立写代码和网页开发都很稳。\n幻觉控制得分87.48，同样全球第一，比前代提升超过6分，AI乱编答案的情况大幅减少，回答更靠谱，专业场景用起来更放心。\n科学推理拿到77.19分，也是全球第一，相比4.7版本提升近9分，理科计算、逻辑推导能力明显变强。\n综合智能指数73.93分，和GPT-5.5、Gemini 3.1 Pro Preview同处第一梯队。推理速度基本持平，API价格没有变化，依旧属于高性能但性价比偏低的档位。\n不过它也有小幅短板，智能体任务规划、数学推理、指令遵循略有下降，指令遵循分数下滑比较明显，日常使用影响不大。\n整体来看，Opus 4.8重点强化了代码、诚实度和科学推理，对开发者、科研人员非常友好，是目前综合能力最均衡的旗舰模型之一。\n",
-        "site_name": "中华网软件",
-        "query": "Claude Opus 4.8 vs DeepSeek 对比",
-        "competitor": "Claude Opus 4.8",
-        "collected_at": "2026-06-05T19:31:02"
-      },
-      "智谱GLM-5系列:q0:r0": {
-        "id": "智谱GLM-5系列:q0:r0",
-        "title": "智谱发布GLM-5. 1 高速版：400 tokens/s飙出全球API新极限",
-        "url": "https://biznews.sohu.com/a/1026209228_211762",
-        "snippet": "智谱发布GLM-5. 1 高速版：400 tokens/s飙出全球API新极限大力财经2026-05-22 16:285月22日，智谱（02513.HK）在资本市场与技术端同步引爆行业。伴随其港股盘中一度飙升超22%、市值站稳4500亿港元关口，智谱官方正式面向企业客户上线了重磅新品——GLM-5.1高速版 API（GLM-5.1-highspeed）。该模型在保留旗舰大模型完整基座能力的前提下，实测输出速度达到了惊人的 400tokens/s（每秒输出400个标记），一举刷新了当前全球大模型厂商官方 API 的速度上限。这一速度意味着:一位创作者连续伏案数天才能码出的文字量，它在1分钟内便能交付完毕;原本需要工程师敲键盘3天的系统重构任务，它在一杯咖啡的时间里就能彻底跑完。核心看点:打破惯例: 过去行业普遍默认“快意味着模型小/轻量级”，智谱首次在国产大模型中实现了**“旗舰级全尺寸能力”与“极致低延迟”**的完美并存。",
-        "site_name": "搜狐",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q0:r1": {
-        "id": "智谱GLM-5系列:q0:r1",
-        "title": "GLM-5 - 智谱AI开放文档",
-        "url": "https://docs.bigmodel.cn/cn/guide/models/text/glm-5",
-        "snippet": "unction Call\n强大的工具调用能力，支持多种外部工具集成\n上下文缓存\n智能缓存机制，优化长对话性能\n结构化输出\n支持 JSON 等结构化格式输出，便于系统集成\nMCP\n可灵活调用外部 MCP 工具与数据源，扩展应用场景\nGLM in Excel\n适配 Excel 官方的 AI 插件，能深度赋能表格工作流\n推荐场景\nAgentic Coding\n能基于自然语言自动生成可运行代码，覆盖前后端与数据处理等开发环节，显著缩短从需求到产物的迭代周期。\n智能体任务\n具备自主决策与工具调用能力，可在模糊复杂目标下完成从理解、规划到执行与自检的全流程智能体任务，实现“一句话输入到完整交付物”。\n办公场景\n通过强大的长程规划与记忆能力，能够稳定完成跨阶段、多步骤、强逻辑关联的复杂办公任务，确保指令遵循度与目标一致性。\n角色扮演（RolePlay）\n能精准理解并持续保持角色设定，在叙事、情绪和逻辑上保持一致，实现自然、可演进的高沉浸式角色扮演体验。\n剧本 / 分镜脚本生成\n在长文本一致性与复杂人物塑造上大幅增强，可稳定输出可直接进入制作流程的高质量剧本内容。\n翻译\n能将正式文本准确转换为符合目标语言表达习惯的专业译文，实现语义、术语与表达的全面对齐。\n文本数据提取\n可从合同、公告、财报等复杂文本中精准抽取关键字段与逻辑关系，将原始内容稳定转化为可分析的结构化数据，助力企业数据治理与自动化。\n信息质检\n能精准识别客服工单等复杂文本中的关键信息并自动完成质检与风险识别，大幅提升运营效率。\n详细介绍\n1\n更大基座，更强智能\nGLM-5 全新基座为从“写代码”到“写工程”的能力演进提供了坚实基础：\n参数规模扩展：从 355B（激活 32B）扩展至 744B（激活 40B），预训练数据从 23T 提升至 28.5T，更大规模的预训练算力显著提升了模型的通用智能水平\n异步强化学习：构建全新的 “Slime” 框架，支持更大模型规模及更复杂的强化学习任务，提升强化学习后训练流程效率；提出异步智能体强化学习算法，使模型能够持续从长程交互中学习，充分激发预训练模型的潜力\n稀疏注意力机制：首次集成 DeepSeek Sparse Attention，在维持长文本效果无损的同时，大幅降低模型部署成本，提升 Token Efficiency\n2\nCoding 能力：对齐 Claude Opus 4.5\nGLM-5 在编程能力上实现了对 Claude Opus 4.5 的对齐，在业内公认的主流基准测试中取得开源模型最高分数。在 SWE-bench-Verified 和 Terminal Bench 2.0 中分别获得 77.8 和 56.2 的开源模型最高分数，性能表现超过 Gemini 3.0 Pro。\n在内部 Claude Code 评估集合中，GLM-5 在前端、后端、长程任务等编程开发",
-        "site_name": "智谱AI",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q0:r2": {
-        "id": "智谱GLM-5系列:q0:r2",
-        "title": "忆享聚焦|人工智能、元宇宙、云计算、5G基站…近期热点资讯一览_mob64ca140c3859的技术博客_51CTO博客",
-        "url": "https://blog.51cto.com/u_16213666/14590552",
-        "snippet": "一句话总结\n2026年，智谱AI发布旗舰大模型GLM-5，采用DSA稀疏注意力与MoE混合专家架构，在745B参数规模下实现低时延、低成本、高本土化适配，显著提升编程、逻辑推理与中文场景能力。\n主要内容\n核心突破\nGLM-5以745B参数量重构底层架构，首创DSA动态稀疏注意力(降低50%+时延，200K上下文仍达60–80 tokens/s)与256专家MoE架构(仅激活8个专家，稀疏度5.9%)，兼顾性能与成本。\n能力升级\n编程能力跃升:HumanEval通过率96.2%，支持跨文件重构与7分钟全栈生成;新增Thinking Mode，输出可验证思维链，大幅降低幻觉;深度优化政务、教育、创作等中文高频场景语义理解。\n即用体验\n开发者可通过API一键集成(支持Python/JS、Cursor/VSCode/LangChain);普通用户可直连Chat UI，零配置体验GLM-5、GPT-5.2及Claude Opus多模型聚合服务。",
-        "site_name": "51CTO博客",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q0:r3": {
-        "id": "智谱GLM-5系列:q0:r3",
-        "title": "智谱发布新一代旗舰模型GLM-5，重点提升编程与智能体能力",
-        "url": "http://gzsihang.com/jiangxi/70813badc4de2c4AfK5s.html",
-        "snippet": "已逼近Claude Opus 4.5水平。\n智谱将GLM-5定位为最新一代旗舰级对话、编程与智能体模型，重点强化其在复杂系统工程与长程Agent任务中的处理能力。\n智能体能力实现开源最优表现\nGLM-5在Agent能力上达成开源SOTA，多项评测基准中位列开源第一。在BrowseComp（联网检索与信息理解）、MCP-Atlas（大规模端到端工具调用）及τ2-Bench（复杂场景下自动代理工具规划与执行）三项测试中，GLM-5均取得最优表现。\n为实现能力突破，该模型构建了全新的“Slime”训练框架，支持更大规模模型架构与更复杂的强化学习任务，显著提升强化学习后训练流程效率。\n此外，智谱提出异步智能体强化学习算法，使模型具备从长程交互中持续学习的能力，有效激发预训练模型的深层潜力。该机制已成为GLM-5的核心技术特色之一。\n国产大模型春节档密集发布\n智谱清言GLM-5的发布，成为国产AI大模型春节档密集竞逐的最新注脚。同日晚间，Minimax亦上线Minimax 2.5，距离上一版񀞺.2发布仅间隔一个多月。\n此轮发布潮已持续升温。DeepSeek此前已推出新模型，阿里千问的Qwen 3.5、字节跳动的SeeDance 2.0等产品也于近期相继亮相。多家厂商不约而同选择在春节窗口期集中推新，折射出国产大模型赛道竞争正进入白热化阶段。\n目前GLM-5与Minimax 2.5的详细技术文档尚未完全披露，其实际性能表现仍有待开发者社区与专业机构的后续验证。\n",
-        "site_name": "",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q0:r4": {
-        "id": "智谱GLM-5系列:q0:r4",
-        "title": "智谱(02513)推出GLM-5.1高速版API刷新全球速度上限",
-        "url": "https://m.sohu.com/a/1025965826_122066678/",
-        "snippet": "智谱(02513)推出GLM-5.1高速版API刷新全球速度上限\n财法观天下\n2026-05-22 10:09\n5月22日，智谱(02513)宣布面向部分企业客户开放GLM-5.1高速版API(GLM-5.1-highspeed)，该版本模型输出速度达到400 tokens/s，刷新了全球大模型厂商API的速度上限。此次发布打破了行业“快即小”的固有认知，无需为响应速度牺牲模型质量。\n在Coding等速度敏感场景中，GLM-5.1高速版的优势尤为显著。传统模型多轮调用耗时久的问题得到彻底解决，实现了“即问即答”，使模型真正成为实时协作伙伴。实测数据显示，高速版的代码生成效率提升约10倍，并能同步理解工程上下文并输出方案；3D场景建模可实现文字输入与场景实时联动；还能即时生成匹配需求的工具与交互，具备新型操作系统雏形。\n该API由智谱GLM团队与TileRT团队联合打造，经过推理引擎、调度系统和基础设施三层优化：重写核心推理路径提升单卡吞吐；动态批处理与KV缓存调度降低尾延迟；集群与网络协同优化，确保400 tokens/s稳定可用。其核心突破在于TileRT引擎，通过编译期静态编排与Tile级微任务调度，消除冗余开销，逼近硬件物理极限。\n目前，GLM-5.1高速版已适配AI编程、实时交互、商业决策、实时语音等高敏感场景，在智谱MaaS平台定向开放。未来，智谱将持续优化推理引擎，扩大\n目前，GLM-5.1高速版已适配AI编程、实时交互、商业决策、实时语音等高敏感场景，在智谱MaaS平台定向开放。未来，智谱将持续优化推理引擎，扩大高速服务覆盖，为企业提供低延迟、高智能的生产级AI能力，巩固国产大模型在全球技术前沿的领先地位。",
-        "site_name": "手机搜狐网",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q0:r5": {
-        "id": "智谱GLM-5系列:q0:r5",
-        "title": "智谱发布GLM-5技术报告 技术细节全公开",
-        "url": "https://www.cqcb.com/shuzijingji/2026-02-22/6078319.html",
-        "snippet": "智谱发布GLM-5技术报告 技术细节全公开\n源 财联社\n2026-02-22 18:36\n财联社2月22日消息，据智谱官微消息，智谱推出了GLM-5，这是一款旨在推动编程范式从“Vibe Coding”（氛围编程）转向“Agentic Engineering”（智能体工程）的下一代基础模型。GLM-5在前代模型GLM-4.5的智能体、推理与编程（Agentic, Reasoning and Coding, ARC）能力基础上，采用稀疏注意力（DeepSeek Sparse Attention，DSA）以大幅降低推理成本，同时保持长上下文能力无损。\n为了让模型更好地与各类任务对齐，智谱构建了一套新型异步强化学习（RL）基础设施，通过将生成过程与训练过程解耦，从而大幅提升了后训练的迭代效率。此外，智谱还提出了全新的异步Agent强化学习算法，进一步提升强化学习的效果，使模型能够更有效地从复杂、长程交互中学习。\n智谱称，基于上述创新，GLM-5在主流的开放基准测试中实现了SOTA性能。最关键的是，GLM-5在真实世界编程任务中展现出前所未有的能力，在处理端到端软件工程挑战方面超越了此前所有开源基线。\n原标题：智谱发布GLM-5技术报告 技术细节全公开\n责编 黄灵\n",
-        "site_name": "上游新闻",
-        "query": "智谱GLM-5系列 产品功能介绍",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q1:r6": {
-        "id": "智谱GLM-5系列:q1:r6",
-        "title": "首个龙虾增强大模型 智谱GLM-5-Turbo发布：套餐39元起",
-        "url": "https://soft.china.com/article/2694535.html",
-        "snippet": "首个龙虾增强大模型 智谱GLM-5-Turbo发布：套餐39元起\n2026-06-04 15:57 快科技\n3月16日消息，近期OpenClaw小龙虾火爆全球，智谱不仅推出了自己的AutoCalw澳龙软件，还发了一个适配龙虾的大模型Pony-Alpha-2，现在它正式以GLM-5-Turbo的名称问世。\nGLM-5-Turbo号称全球首个专为龙虾场景深度优化的通用大模型，从训练阶段就针对龙虾任务的核心需求进行专项优化，增强如工具调用、指令遵循、定时与持续性任务、长链路执行等核心能力。\n具体表现方面，智谱也针对龙虾使用环境推出了一个专属的ZClawBench测试基准，基于该基准的评测结果显示，GLM-5-Turbo在OpenClaw场景中的表现相比GLM-5提升显著，在多项关键任务上整体领先于多家主流模型。\n从他们的测试结果来看，GLM-5-Turbo不仅优于几家国产模型，甚至比当前公认最强的Opus 4.6、Gemini 3.1 Pro在部分场景中也领先了。\n除此之外，智谱还推出了基于GLM-5-Turbo的龙虾套餐，包含个人版和Team版，体验月卡39元，包含3500万Token，进阶月卡则要99元，包含1亿Token，小龙虾用户能够实现Token自由了。\nGLM-5-Turbo现已上线，开发者和企业用户可以通过智谱开放平台BigModel.cn直接调用API，或者通过龙虾套餐接入。\nGLM Coding Plan Max现已支持GLM-5-Turbo，Pro套餐将在本月尽快支持，Lite套餐将在4月支持接入。\nCoding Plan也可用于OpenClaw接入体验；如需长期稳定运行、后台持续执行或更高负载的Agent场景，建议优先使用龙虾套餐。\nGLM-5、GLM-5-Turbo作为对标Claude Opus的高阶模型，将按照\"高峰期3倍，非高峰期2倍\"系数消耗额度。作为限时福利，GLM-5-Turbo将在非高峰期仅作1倍抵扣持续到4月底。\n",
-        "site_name": "中华网软件",
-        "query": "智谱GLM-5系列 定价 价格 收费标准",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q1:r7": {
-        "id": "智谱GLM-5系列:q1:r7",
-        "title": "GLM-5.1 - AI模型价格对比 (2026/6/5)",
-        "url": "https://ai.bimant.com/ai-prices/model/GLM-5.1/",
-        "snippet": "GLM-5.1\n文本生成\n模型信息\n输入价格\n0.6 - 8 元\n每百万tokens\n输出价格\n24 - 28 元\n每百万tokens\n上下文长度\n196,608 - 206,848\ntokens\n模态\n文字\n→ 文字\n工具调用 Tools 推理 编程 Coder\nGLM-5.1 是智谱最新旗舰模型，代码能力大大增强，长程任务显著提升，能够在单次任务中持续、自主地工作长达 8 小时，完成从规划、执行到迭代优化的完整闭环，交付工程级成果。 在综合能力与 Coding 能力上，GLM-5.1 整体表现对齐 Claude Opus 4.6，并在长程自主执行、复杂工程优化与真实开发场景中展现出更强的持续工作能力，是构建 Autonomous Agent 与长程 Coding Agent 的理想基座。\n供应商对比\n共 15 家供应商提供此模型\n供应商 输入价格 输出价格 上下文 吞吐量 延迟\n阿里云百炼  6 元  24 元 206,848  43.81 t/s  - 访问 →\nPPIO派欧云  6 元  24 元 204,800  39.47 t/s  - 访问 →\n硅基流动  6 元  24 元 204,800  54.34 t/s  - 访问 →\n百度智能云  6 元  24 元 202,752  40.30 t/s  - 访问 →\nUCloud  6 元  24 元 204,800  44.51 t/s  - 访问 →\n金山云星流  6 元  24 元 204,800  40.91 t/s  - 访问 →\n智谱  6 元  24 元 204,800  39.84 t/s  - 访问 →\n华为云  6 元  24 元 196,608  28.12 t/s  - 访问 →\n模力方舟  8 元  28 元 204,800  42.27 t/s  - 访问 →\n七牛云  8 元  28 元 204,800  41.20 t/s  - 访问 →\nSophNet  8 元  28 元 204,800  49.69 t/s  - 访问 →\n无问芯穹  8 元  28 元 206,848  44.18 t/s  - 访问 →\n并行智算云  8 元  28 元 204,800  41.48 t/s  - 访问 →\n基石智算  8 元  28 元 204,800  41.24 t/s  - 访问 →\n蓝耘元生代  8 元  28 元 202,752  85.69 t/s  - 访问 →\n",
-        "site_name": "",
-        "query": "智谱GLM-5系列 定价 价格 收费标准",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q1:r8": {
-        "id": "智谱GLM-5系列:q1:r8",
-        "title": "腾讯云官宣降价！最高97.5%",
-        "url": "https://finance.sina.com.cn/wm/2026-06-02/doc-inhzzqcn4709479.shtml",
-        "snippet": "6月1日当周调用量达1.7万亿Tokens，环比增长超过999%。\nOpenRouter官网\n一位业内人士向记者表示，低定价显著降低了AI使用门槛，推动高频、高强度调用场景快速扩张，并加速数据汇聚。“谁能获取更多高质量数据，谁就在下一轮模型训练中占据优势。”\n不过，并非所有厂商均选择“以价换量”。以智谱GLM-5为代表的部分高端模型则走出相反路径。\n4月8日，智谱正式发布和开源其GLM-5.1模型，伴随此次发布，智谱GLM再度提价10%。调价后，GLM-5.1在Coding场景的缓存命中Token价格已接近Anthropic旗下Claude Sonnet4.6水平。而在此前的2月、3月，智谱也都针对旗下模型产品进行提价。此外，面向C端市场的豆包近期也传出将推出分档订阅服务的消息。\n国新证券研报认为，基座模型正式进入K型分化时代。其中，中间层通用模型厂商面临最大压力：既不具备闭源前沿模型的技术护城河，又丧失性价比优势。私有化部署能力较强的厂商相对受益，金融、政务等领域存在刚性本地化需求，受价格战影响较小。C端及多模态产品厂商受到的冲击有限，其收入并非完全依赖API调用。高端模型市场拥有独立定价权，以智谱GLM-5.1为例，2026年Q1涨价83%后调用量反而增长400%，验证高价值场景下能力优先于价格。\n值得关注的是，API价格的持续下行，反映在A股则给算力租赁板块带来较大冲击。5月25日，即DeepSeek宣布永久降价后的首个交易日，算力租赁概念股领跌市场，截至6月2日A股收盘，同花顺 (226.230, -2.64, -1.15%)算力租赁板块仍较5月14日高点下跌超13%。\n作者：操子怡\n文章关键词： 腾讯云\n",
-        "site_name": "新浪财经",
-        "query": "智谱GLM-5系列 定价 价格 收费标准",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q1:r9": {
-        "id": "智谱GLM-5系列:q1:r9",
-        "title": "腾讯云宣布降价，DeepSeek-V4系列模型价格最高降幅达97.5%",
-        "url": "https://m.sohu.com/a/1031227132_121885030/",
-        "snippet": "腾讯云宣布降价，DeepSeek-V4系列模型价格最高降幅达97.5%\n拾起我们的青春\n2026-06-02 19:42\n6月2日，腾讯云官网宣布，从6月3日00:00起，其智能体开发平台的DeepSeek-V4系列模型将实施价格下调，降幅最高可达97.5%。此次调整旨在进一步降低用户的使用成本，腾讯云表示，虽然价格有所变动，但模型的服务能力保持不变。\n此次调价是对DeepSeek近期多次降价的响应，自4月以来，DeepSeek已进行了多轮API价格下调，并于5月底将阶段性优惠转为永久降价。例如，V4-Pro模型的价格已降至原价的四分之一，部分场景的输入价格低至0.025元/百万Tokens，显著拉低了行业的价格中枢。腾讯云成为首个大规模公开跟进DeepSeek降价策略的云服务平台。\n在DeepSeek的带动下，行业内多个厂商也加入了降价行列。小米于5月27日宣布，对其MiMo-V2.5系列进行大幅调价，最高降幅达到99%。调价后，MiMo-V2.5及MiMo-V2.5-Pro的调用量迅速攀升，MiMo-V2.5首次进入调用量排行榜第六位，6月1日当周的调用量达到1.7万亿Tokens，环比增长超过999%。业内人士表示，低定价显著降低了AI使用门槛，推动了高频、高强度调用场景的快速扩张，进而加速数据汇聚。\n然而，并非所有厂商都选择通过降价来刺激市场。智谱GLM-5系列模型则采取了相反的策略，4月8日智谱发布了GLM-5.1模型，并对其进行了10%的提价。调价后，GLM-5.1在特定场景的缓存命中Token价格已接近业界领先的ClaudeSonnet4.6。智谱在2月和3月也对旗下模型进行了提价。\n此外，面向C端市场的豆包最近也传出将推出分档订阅服务的消息。国新证券的研报认为，基座模型已经进入了K型分化时代。中间层通用模型厂商面临较大压力，既缺乏闭源前沿模型的技术护城河，又失去了性价比优势。相较而言，具备私有化部署能力的厂商相对受益，尤其在金融、政务等领域存在刚性本地化需求，受价格战影响较小。\n高端模型市场则表现出独立定价权。以智谱GLM-5.1为例，尽管在2026年第一季度涨价83%，其调用量却反而增长了400%，验证了在高价值场景中能力优先于价格的重要性。\n值得注意的是，API价格的持续下行对A股市场也带来了冲击。5月25日，DeepSeek宣布永久降价后的首个交易日，算力租赁概念股领跌市场，截至6月2日A股收盘，同花顺算力租赁板块较5月14日高点下跌超过13%。\n",
-        "site_name": "手机搜狐网",
-        "query": "智谱GLM-5系列 定价 价格 收费标准",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q2:r10": {
-        "id": "智谱GLM-5系列:q2:r10",
-        "title": "华安证券-智谱-2513.HK-模型为基，拓展AI智能上界-260601",
-        "url": "http://m.hibor.com.cn/wap_detail.aspx?id=682f5fa4277af212461cfd693b871027",
-        "snippet": "网络安全防御体系.........................................................192.5市场空间：中国人工智能市场规模持续扩张，企业级场景是中国AI大模型商业化核心场景.............................202.6产业链与市场份额：智谱卡位AI产业链中游独立大语言模型厂商，市场占有率高...........................................222.7量价齐升：智谱最新旗舰模型GLM-5.1发布并开启多轮涨价，模型价格及TOKEN调用齐升............................233旗舰模型持续迭代，应用场景持续拓展.....................................................................................................................243.1GLM-5.1：代码能力、长程任务能力大幅提升，全球开源模型头部领先.............................................................243.2核心技术：GLM从“辅助编程工具”到独立思考和执行复杂任务的“智能体工程师”...........................................273.3AIAGENT：AUTOGLM开启“AGENT+云手机/云电脑”人机协作技术范式.............................................................283.4代码模型CODEGEEX：基于大模型技术的AI编程辅助工具...............................................................................293.5ZCODE：全功能的智能体开发环境，驱动AIAGENT完成编码任务.....................................................................313.6AUTOCLAW：一键部署OPENCLAW，消除用户使用门槛.....................................................................................314盈利预测与估值.........................................................................................................................",
-        "site_name": "慧博投研资讯",
-        "query": "智谱GLM-5系列 市场份额 用户量 评测",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q2:r11": {
-        "id": "智谱GLM-5系列:q2:r11",
-        "title": "GLM-5 2026: Architecture, Benchmarks, Capabilities & Limitations",
-        "url": "https://webscraft.org/blog/glm5-2026-arhitektura-benchmarki-mozhlivosti-ta-obmezhennya?lang=en",
-        "snippet": "Development of the GLM family:2022 — GLM-130B (one of the first large Chinese open models)2023–2024 — GLM-4 series (transition to MoE architecture)2025 — GLM-4.5/4.7 (355B total, 32B active)2026 — GLM-5 (744B total parameters, ~40B active per token)GLM-5 training was conducted exclusively on the Huawei Ascend hardware stack using the MindSpore framework — a key aspect of independence from the NVIDIA ecosystem after Zhipu AI was added to the US Entity List (2025). The release took place immediately after the Chinese New Year (February 11–12, 2026), with open weights on Hugging Face (zai-org/GLM-5) and ModelScope (ZhipuAI/GLM-5), including an FP8-quantized version for inference.",
-        "site_name": "WebCraft Studio",
-        "query": "智谱GLM-5系列 市场份额 用户量 评测",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q2:r12": {
-        "id": "智谱GLM-5系列:q2:r12",
-        "title": "中国版Anthropic”、6000亿市值？还有两道坎",
-        "url": "https://app.myzaker.com/news/article.php?pk=6a2039977f780bb072000005",
-        "snippet": "这么说？有两大原因：\n一是它在大模型行业里的位置靠前，技术实力进入全球第一梯队。\n智谱的 GLM 系列模型在多项全球权威基准测试中名列前茅，尤其在决定模型实用价值的关键领域编程与长程任务处理上表现突出。\n在 METR 的长时域任务测试中，GLM-5.1 是全球范围内唯二、开源模型中唯一达到 8 小时时间地平线的模型，意味着它能以约 50% 的成功率独立处理相当于人类专家 8 小时工作量的复杂工程（全球第一是 Anthropic 的闭源模型 Claude Opus 4.6）。\n在 Wild Claw Bench（复杂环境任务）评测中，GLM-5 以 42.6% 的得分位列总榜第三，是唯一进入全球前三的国产模型；在全球权威评测机构 Artificial Analysis 发布的全新 Coding Agent 基准中，智谱 GLM-5.1 取得全球开源第一， 编程智能体能力领先。\n还有从大模型整体能力评分来看，据 Artificial Analysis 数据，智谱最新旗舰模型 GLM-5.1 得分 51，全球第五，但中国第一，是离 Anthropic Claude Opus 4.7 排名最近的中国企业。\n更值得注意的是，智谱的技术已经转化为了商业成果。\n据弗若斯特沙利文的资料，按 2024 年收入计，智谱在中国独立大模型开发商中位列第一。若范围扩大至通用大模型市场（不局限某个特定行业或任务），其收入也位列第二，市场份额 6.6%。\n且中国已有字节、阿里、腾讯、百度、美团、快手等 9 大互联网公司深度调用其 GLM 模型。同时，截至 2026 年 3 月，智谱平台注册企业及用户突破 400 万。GLM Coding Plan 付费开发者规模快速突破 24.2 万，Token 调用量 6 个月增长 15 倍。这表明智谱的技术已获得真实的市场买单。\n而在中国大模型公司中，能同时具备基础模型研发能力、市场声量、企业客户和融资能力的玩家并不多。智谱因此被市场放进了 \" 有机会留到最后 \" 的候选名单，并给予了估值溢价。\n二是智谱在 \" 国家队 \" 背景下推动的被 Anthropic 验证成功的增长路径，即以顶尖模型为引擎，以企业级 API 为主要产品形态，通过融入产业体系实现的爆发式增长，是市场给予其高估值溢价的更深层次原因。\n智谱脱胎于清华大学知识工程实验室，GLM 系列模型与清华联合研发，这给了它 \" 技术正统 \" 和 \" 自主可控 \" 的标签。这并非虚名，而是进入金融、能源、政务等关键行业的 \" 信任资产 \"，直接影响采购、试点和部署门槛。\n如 2025 年以来，智谱获得来自北京、杭州、珠海、成都、上海浦东等地国资累计超 30 亿元战略投资。部分投资还伴随算力、订单和区域生态合作，如上海浦东相关合作涉及万卡级绿电算力基座，杭州城投投资则带来合作打造全国 \"AI 城投大",
-        "site_name": "ZAKER",
-        "query": "智谱GLM-5系列 市场份额 用户量 评测",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q2:r13": {
-        "id": "智谱GLM-5系列:q2:r13",
-        "title": "大模型双雄再聚A股 融资竞速无人敢停",
-        "url": "http://finance.sina.cn/stock/jdts/2026-06-01/detail-inhzvnny5775955.d.html",
-        "snippet": "GLM-5.1于4月初开源，能在一次任务中独立、持续工作超过8小时，其间自主规划、执行、自我进化，最终交付完整的工程级成果。根据OpenRouter最新统计，GLM-5.1在上个月度调用量排名中位列第20位。\n5月下旬，恒生指数宣布将于6月5日收市后进行新一轮变动，首次纳入智谱、MiniMax，权重占比分别为0.53%、0.36%。摩根士丹利对ARR给出基础—乐观区间：头部模型单家ARR有望在2026年底达到10亿至15亿美元，2027年底进一步攀升至25亿—50亿美元，对应3—5倍的年化增速。\n考验在前，追兵已至\n资本市场对先行者的诸多奖励正在兑现，追赶者试图重新定义游戏规则。\nKimi的速度比想象中更快。据媒体报道，2026年前5个月，月之暗面密集完成多轮融资，累计超376亿元，最新一轮20亿美元由美团龙珠领投，投后估值突破200亿美元。不过，Kimi创始人杨植霖曾直言：“短期不着急上市。当然，未来我们计划将上市作为手段来加速AGI（通用人工智能），择时而动，主动权掌握在我们手中。”此番表态发生在2025年底。\n阶跃星辰的融资节奏也不慢。5月8日，阶跃星辰被曝将完成近25亿美元Pre-IPO融资，并已拆除红筹架构。上市计划也在坊间风传，有人说阶跃星辰计划在6月30日前在港股交表，预期基石定价在100亿美元左右，预计2026年底完成上市。另有知情人士向媒体透露，阶跃星辰目标递表时间最快在上半年，不过进程相对紧凑，下半年递表会是一个更从容的安排。\n“DeepSeek和月之暗面在伯仲之间，谁先更新模型谁就更胜一筹。阶跃星辰、MiniMax和智谱相互差距不大。”文渊智库创始人王超向北京商报记者表示，“即便现在MiniMax和智谱已经上市，抢得了先机，但资本市场对大模型还有热情，如果成功上市的话也会获得不错的市值。”\n从另一个角度看，三重考验在吞噬大模型企业的资金：算力是物理消耗，模型迭代是沉没成本，人才争夺是军备竞赛。\n昆仑万维董事长方汉有一个关于AI落地的判断：“我给企业家朋友的建议是，绝大多数行业的企业在AI落地上都要做第二名，不要做第一名，第一名的探索成本实在是太高了。你也不要做第三名，到第三名的时候你是一点红利也没吃上，还要被同行抛弃。”\n站在资本角度，这条法则是否同样成立？\n北京商报记者 魏蔚\n图片来源：MiniMax稀宇科技\n",
-        "site_name": "新浪财经",
-        "query": "智谱GLM-5系列 市场份额 用户量 评测",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q2:r14": {
-        "id": "智谱GLM-5系列:q2:r14",
-        "title": "GLM Coding Plan半年用户破24万，程序员群体正如何重塑大模型商业边界？",
-        "url": "https://news.sina.cn/bignews/insight/2026-04-02/detail-inhtaenm4464631.d.html",
-        "snippet": "GLM Coding Plan半年用户破24万，程序员群体正如何重塑大模型商业边界？\nBigNews\n04.02 07:47\n智谱GLM Coding Plan半年吸引超24万付费开发者，并引发涨价30%仍供不应求的行业现象，背后是程序员群体通过技术实践彻底扭转大模型商业逻辑——从“烧钱换市场”转向“为真实生产力溢价买单”。\n一、程序员需求重塑模型定位：从辅助工具到“工程师”\n技术能力跃迁驱动付费意愿\nGLM-5模型在编程领域实现代际突破，以Agentic Engineering（智能体工程） 替代传统代码生成：\n在SWE-bench等工程任务评测中达开源SOTA，可独立完成后端重构、多文件调试等系统工程；\n真实编程体感逼近Claude Opus 4.5，成为开发者认可的“虚拟工程师”。\n技术硬实力使程序员愿支付149元/月订阅Pro套餐，将其定位为效率投资而非消费支出。\n分层调用优化成本模型\n程序员推动“模型路由”策略普及：\n80%日常任务（单文件编辑、测试修复）由本地小模型（如Qwen3.5 9B）处理，成本降至大模型的1/20；\n20%复杂任务（架构重构、多工具协同）调用GLM-5等大模型，形成“高低搭配”的理性消耗结构。\n二、商业边界突破：价格逻辑反转与生态重构\n涨价验证价值锚定\n2026年2月智谱涨价30%并取消首购优惠，但GLM Coding Plan上线秒罄；\nAPI调用价提升83%后调用量反增400%，证明用户为真实生产力提升付费，而非参数规模。\n国产算力生态落地\nGLM-5深度适配华为昇腾、寒武纪等7大国产芯片平台，提供脱离英伟达的完整推理方案，推动企业级私有化部署。\n云厂商“模型聚合”新战场\n阿里云等推出多模型编程套餐（如Qwen3.5+GLM-4.7组合），首月7.9元低门槛切入，将竞争从单一模型性能转向算力调度与服务稳定性。\n三、行业拐点：从技术竞赛到商业化能力\n免费策略失效\n早期字节豆包降价97%的价格战模式被淘汰，GLM案例验证：刚需场景+真实提效可建立付费壁垒。\n服务能力成新短板\nGLM-5发布后因流量超预期导致限流，暴露扩容滞后问题，反映行业需从“刷榜能力”转向工程化交付稳定性。\n程序员正以技术选票推动大模型回归商业本质：技术价值必须通过生产",
-        "site_name": "新浪新闻",
-        "query": "智谱GLM-5系列 市场份额 用户量 评测",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q3:r15": {
-        "id": "智谱GLM-5系列:q3:r15",
-        "title": "GLM-5编程能力实测：新的全球第一 能超越Opus 4.6",
-        "url": "https://soft.china.com/article/2875200.html",
-        "snippet": "GLM-5编程能力实测：新的全球第一 能超越Opus 4.6\n2026-06-03 09:45 快科技\n2月11日消息，今天可以说是国产AI大模型历史性的一天，DeepSeek、智谱及Minimax都发布了新一代大模型，其中智谱的GLM-5声势浩大，其编程能力已经成为世界一流水平。\n从智谱官网介绍来看，GLM-5重点就是提升编程与智能体能力，其参数量达到了7440亿，是上代GLM-4.X的2倍左右，因此性能提升很明显。\n至于具体的编程能力，拿到了早期测试的海外AI博主@AICodeKing已经发布了测试结果，详细内容可以参考他的视频评测。\n来看下结论，在代理编程上，GLM-5搭配Kilo CLI得分589，位列第一，比前不久发布的最强编程模型Claude Opus的585分还高一点。\n非代理编程上，GLM-5位列第三，仅次于Opus 4.6及Gemini 3 Pro，但超越了Opus 4.5，实力依然强悍。\n具体该如何评价？AICodeKing的结论如下：\n除了在一些小技巧上表现不佳之外，GLM-5总体上很出色，基准第三，代理编程上第一，比Opus 4.6还强，而且跟主流的CLI工具兼容性很好，能够用它构建复杂的应用程序。\n预计其价格会高于GLM-4，但跟竞争对手相比，依然是一个经济实惠的选择，实际上上面的表格中也提到了编程任务",
-        "site_name": "中华网软件",
-        "query": "智谱GLM-5系列 vs DeepSeek 对比",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q3:r16": {
-        "id": "智谱GLM-5系列:q3:r16",
-        "title": "DeepSeek官宣R1升级:提升思维深度与推理能力，整体表现已接近国际顶尖模型",
-        "url": "https://k.sina.cn/article_7857201856_1d45362c0019067rpw.html",
-        "snippet": "DeepSeek官宣R1升级:提升思维深度与推理能力，整体表现已接近国际顶尖模型\n每日新闻摘录\n06.01 03:02\n国产大模型公司深度求索（DeepSeek）发布详细的升级公告，解释DeepSeek-R1升级的具体情况。\n5月29日，据DeepSeek公告，DeepSeek R1模型已完成小版本升级，当前版本为DeepSeek-R1-0528。用户通过官方网站、APP或小程序进入对话界面后，开启“深度思考”功能即可体验最新版本。API也已同步更新，调用方式不变。\n公告指出，DeepSeek-R1-0528使用2024年12月所发布的DeepSeek V3 Base模型作为基座，但在后训练过程中投入了更多算力，显著提升模型的思维深度与推理能力。更新后的R1模型在数学、编程与通用逻辑等多个基准测评中取得当前国内所有模型中首屈一指的优异成绩，并且在整体表现上已接近其他国际顶尖模型，如o3与Gem\nini-2.5-Pro。\n相较于旧版R1，新版模型在复杂推理任务中的表现有显著提升。例如在AIME2025测试中，新版模型准确率由旧版的70%提升至87.5%。这一进步得益于模型在推理过程中的思维深度增强：在AIME2025测试集上，旧版模型平均每题使用12K tokens，而新版模型平均每题使用23Ktokens，表明其在解题过程中进行了更为详尽和深入的思考。\nDeepSeek表示，DeepSeek-R1-0528的思维链对于学术界推理模型的研究和工业界针对小模型的开发都将具有重要意义。\n新版DeepSeek R1针对“幻觉”问题进行了优化。与旧版相比，更新后的模型在改写润色、总结摘要、阅读理解等场景中，幻觉率降低45-50%左右，能够有效地提供更为准确、可靠的结果。\n在旧版R1的基础上，更新后的R1模型针对议论文、小说、散文等文体进行进一步优化，能够输出篇幅更长、结构内容更完整的长篇作品，\n同时呈现出更加贴近人类偏好的写作风格。\n据公告称，当前模型的测评成绩与OpenAI o1-high相当，但与o3-High以及Claude4 Sonnet仍有差距。\n此次 R1更新后，官方网站、小程序、App端和API中的模型上下文长度仍为64K。如果用户对更长的上下文长度有需求，可以通过其他第三方平台调用上下文长度为128K的开源版本R1-0528模型。与旧版本的DeepSeek-R1保持一致，此次升级仍为开源模型，允许用户利用模型输出、通过模型蒸馏等方式训练其他模型。\n此前5月28日，DeepSeek在官方微信群发布消息称，DeepSeekR1模型已完成“小版本试升级”，欢迎前往官方网页、APP、小程序测试（打开深度思考），API接口和使用方式保持不变。\n据网友测评显示，此次升级效果令人惊艳。从社交媒体的反馈来看，网友最为关注的是此次DeepSeekR1更新后的思考时间变长。据测评显示，此",
-        "site_name": "新浪看点",
-        "query": "智谱GLM-5系列 vs DeepSeek 对比",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q3:r17": {
-        "id": "智谱GLM-5系列:q3:r17",
-        "title": "【深度实测】DeepSeek V4 vs GLM-5.1 vs GPT-5.5",
-        "url": "https://www.bilibili.com/video/BV1ZKdAB3EES/",
-        "snippet": "【深度实测】DeepSeek V4 vs GLM-5.1 vs GPT-5.5\n1.8万\n102\n2026-05-07 19:00:00\n未经作者授权，禁止转载\n前段时间，DeepSeek-V4 和 GPT-5.5 接连发布，我就打算用我一直在使用的 GLM-5.1 和这两个新模型一起对比实测一下。 我直接用维护了接近一年的 SubBatch 浏览器插件来做功能迭代，还有开发一个 3D复杂项目的实现效果，来对比下看看这三个模型的实测效果到底如何~ 整体的测试结果还是在意料之中的... 你们平时在开发中用的是那个模型呢？评论区聊一聊~ 🎉\nAI IN ALL！\nAI\n人工智能\nDeepSeekV4\nGLM5.1\nGPT5.5\n大模型\nGLM\nAI编程\nDeepSeek\n爱听书的程序员阿超\n跟着阿超一起学 AI ，一起变强！ 合作：tingshuchao（请一定要注明来意）\n",
-        "site_name": "哔哩哔哩",
-        "query": "智谱GLM-5系列 vs DeepSeek 对比",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q3:r18": {
-        "id": "智谱GLM-5系列:q3:r18",
-        "title": "智谱发布新一代旗舰模型GLM-5，重点提升编程与智能体能力",
-        "url": "http://gzsihang.com/jiangxi/70813badc4de2c4AfK5s.html",
-        "snippet": "智谱发布新一代旗舰模型GLM-5，重点提升编程与智能体能力\n来源：{getone name=\"zzc/xinwenwang\"/}\n2026-06-03 13:56:37\n2�日，智谱正式推出新一代旗舰模型GLM-5，主攻编程与智能体能力，官方称已实现开源领域最优表现。这是继DeepSeek后，国产AI大模型春节档的又一重要发布。\nGLM-5参数规模由上一代�B扩展�B，激活参数�B提升�B。智谱方面证实，此前在全球模型服务平台OpenRouter登顶热度榜首的神秘模型“Pony Alpha”即为GLM-5。\n内部评估显示，GLM-5在前端、后端、长程任务等编程开发场景中，平均性能较上一代提升�%，真实编程体验逼近Claude Opus 4.5水平。该模型已上线chat.z.ai平台。此次发布标志着国产大模型在技术路径与能力表现上持续缩小与国际领先水平的差距，为开发者群体提供了新的开源选择。\n参\n数规模翻倍 预训练数据大幅扩容\n智谱新一代旗舰模型GLM-5在模型架构层面实现关键升级。参数规模由上一�B（激�B）扩展�B（激�B），预训练数据量�T提升�.5T，更大规模的算力投入驱动通用智能能力显著增强。\n该模型首次引入DeepSeek稀疏注意力机制，在保持长文本处理效果无损的前提下，有效降低部署成本并提升Token利用效率。该技术路线与DeepSeek-V3/V3.2保持一致。\n架构配置方面，GLM-5构�层隐藏层，集�个专家模块，每次激񄑖个，激活参数�B，稀疏𻊁.9%，上下文窗口最高支�K token。\n编程能力显著提升\n新一代旗舰模型GLM-5在内部Claude Code评估集中表现突出。前端、后端及长程任务等编程开发场景下，该模型较上一代GLM-4.7实现全面超越，平均性能提升�%。\nGLM-5能够以极少人工干预，自主完成Agentic长程规划与执行、后端重构、深度调试等复杂系统\n工程任务。官方称，真实编程环境中的使用体感已逼近Claude Opus 4.5水平。\n智谱将GLM-5定位为最新一代旗舰级对话、编程与智能体模型，重点强化其在复杂系统工程与长程Agent任务中的处理能力。\n智能体能力实现开源最优表现\nGLM-5在Agent能力上达成开源SOTA，多项评测基准中位列开源第一。在BrowseComp（联网检索与信息理解）、MCP-Atlas（大规模端到端工具调用）及τ2-Bench（复杂场景下自动代理工具规划与执行）三项测试中，GLM-5均取得最优表现。\n为实现能力突破，该模型构建了全新的“Slime”训练框架，支持更大规模模型架构与更复杂的强化学习任务，显著提升强化学习后训练流程效率。\n此外，智谱提出异步智能体强化学习算法，使模型具备从长程交互中持续学习的能力，有效激发预训练模型的深层潜力。该机制已成为GLM-5的核心技术特色之一。\n国产大模型春节档密集发布\n智",
-        "site_name": "",
-        "query": "智谱GLM-5系列 vs DeepSeek 对比",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      },
-      "智谱GLM-5系列:q3:r19": {
-        "id": "智谱GLM-5系列:q3:r19",
-        "title": "DeepSeek更新上下文达百万级token：可一次性处理超长文本",
-        "url": "https://soft.china.com/article/2215148.html",
-        "snippet": "DeepSeek更新上下文达百万级token：可一次性处理超长文本\n2026-06-05 14:54 快科技\n2月12日消息，据媒体报道， DeepSeek近日在网页端及APP端完成版本更新，正式将上下文窗口扩展至1M（百万） Token，迎来对话容量的显著跃升。\n相较于去年8月发布的DeepSeek V3.1所支持的128K上下文，新实装模型的上下文能力较两个月前更新的V3.2提升达八倍。\n网友实测显示，DeepSeek已可一次性处理《三体》三部曲体量的超长文本，并在问答中明确表示其知识截止日期更新至2025年5月。\n目前DeepSeek实装模型在上下文能力上比两个月前更新的V3.2暴涨了8倍。\n知识库\"新鲜度\"提升约10个月，这意味着模型对2024年下半年至2025年初的重要事件、技术进展、行业动态都有了认知基础。\n",
-        "site_name": "中华网软件",
-        "query": "智谱GLM-5系列 vs DeepSeek 对比",
-        "competitor": "智谱GLM-5系列",
-        "collected_at": "2026-06-05T19:34:05"
-      }
-    }
+    "citations": {}
   },
   "qa_timeline": {
     "checks": [
       {
         "phase": "collection",
         "target_agent": "CollectionAgent",
-        "passed": false,
-        "score": 57.1,
+        "passed": true,
+        "score": 92.8,
         "issues": [
           {
-            "severity": "critical",
+            "severity": "warning",
             "category": "completeness",
-            "field": "根节点citations字段",
-            "description": "结构化数据完全缺失要求的citations字段，所有关键信息没有挂载对应的来源引用，不符合Schema规范",
-            "expected": "所有核心信息都关联对应的有效原始引用ID，citations字段非空",
-            "actual": "完全不存在citations字段，无任何引用关联记录",
-            "suggestion": "补充所有提取信息对应的原始来源引用，完成citations字段的合规填充"
+            "field": "竞品A.product_features",
+            "description": "产品功能仅 1 项，可能采集不完整",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的产品功能信息"
           },
           {
             "severity": "warning",
             "category": "completeness",
-            "field": "通义千问Qwen3.7系列.user_reviews",
-            "description": "用户评价字段为空，未从原始采集数据中提取对应内容",
-            "expected": "填充从原始公开报道中提取的有效用户评价内容",
-            "actual": "空字符串",
-            "suggestion": "基于原始采集的公开测评、用户反馈内容补全该字段"
+            "field": "竞品A.pricing_tiers",
+            "description": "定价层级为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的定价信息"
           },
           {
             "severity": "warning",
             "category": "completeness",
-            "field": "豆包Seed 2.0 Pro.user_reviews",
-            "description": "用户评价字段为空，未从原始采集数据中提取对应内容",
-            "expected": "填充从原始公开报道中提取的有效用户评价内容",
-            "actual": "空字符串",
-            "suggestion": "基于原始采集的公开测评、用户反馈内容补全该字段"
+            "field": "竞品A.market_share",
+            "description": "市场份额信息为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的市场份额数据"
           },
           {
             "severity": "warning",
             "category": "completeness",
-            "field": "智谱GLM-5系列.user_reviews",
-            "description": "用户评价字段为空，未从原始采集数据中提取对应内容",
-            "expected": "填充从原始公开报道中提取的有效用户评价内容",
-            "actual": "空字符串",
-            "suggestion": "基于原始采集的公开测评、用户反馈内容补全该字段"
+            "field": "竞品A.citations",
+            "description": "无引用来源",
+            "expected": "",
+            "actual": "",
+            "suggestion": "确保采集数据有来源引用"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "通义千问Qwen3.7系列.product_features[6]",
-            "description": "新增的「高专业推理能力」功能点中GPQA Diamond得分92.4分、超越Claude Opus4.6等内容，在原始采集数据中完全无任何提及，属于无来源幻觉内容",
-            "expected": "仅保留原始采集数据有明确支撑的功能点",
-            "actual": "新增完全无来源的虚构功能点",
-            "suggestion": "直接删除该无支撑的功能条目"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品B.product_features",
+            "description": "产品功能仅 1 项，可能采集不完整",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的产品功能信息"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "通义千问Qwen3.7系列.strengths",
-            "description": "字段中9项通用基准测试领先、和DeepSeek系列的所有对比内容完全无原始数据支撑，且末尾文本直接截断未完成表述",
-            "expected": "所有内容均有原始采集数据对应支撑，文本完整通顺",
-            "actual": "大量无来源虚构对比内容，且文本不完整",
-            "suggestion": "删除所有无来源的对比内容，补全剩余有效内容的完整表述"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品B.pricing_tiers",
+            "description": "定价层级为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的定价信息"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "通义千问Qwen3.7系列.market_share",
-            "description": "开源下载量第一、阿里云AI业务ARR超80亿、2026年底ARR破300亿等全部市场相关内容，原始采集数据完全无提及，属于全量无来源幻觉内容",
-            "expected": "仅保留原始采集数据有明确公开来源的市场相关信息",
-            "actual": "全部为虚构的无来源市场数据",
-            "suggestion": "删除所有无支撑内容，基于原始采集的公开信息补充合规的市场相关描述"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品B.market_share",
+            "description": "市场份额信息为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的市场份额数据"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "Claude Opus 4.8.product_features[5]",
-            "description": "新增的「标准大上下文窗口」功能点中100万Token上下文的描述，原始采集数据完全没有相关提及，属于无来源幻觉内容",
-            "expected": "仅保留原始采集数据有明确支撑的功能点",
-            "actual": "新增完全无来源的虚构功能点",
-            "suggestion": "直接删除该无支撑的功能条目"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品B.citations",
+            "description": "无引用来源",
+            "expected": "",
+            "actual": "",
+            "suggestion": "确保采集数据有来源引用"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "Kimi K2.6.market_share、weaknesses",
-            "description": "周调用量1.58万亿次位列全球榜首、和DeepSeek系列的所有对比内容，原始采集数据完全无提及，属于无来源幻觉内容",
-            "expected": "所有内容均有原始采集数据对应支撑",
-            "actual": "大量无来源虚构的市场数据和竞品对比内容",
-            "suggestion": "清理所有无支撑的幻觉内容，仅保留原始采集数据中明确提及的有效信息"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品C.product_features",
+            "description": "产品功能仅 1 项，可能采集不完整",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的产品功能信息"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "豆包Seed 2.0 Pro.market_share",
-            "description": "MAU3.3~3.45亿、DAU1.4亿、国内C端用户占比40%等全部市场相关内容，原始采集数据完全无提及，属于全量无来源幻觉内容",
-            "expected": "仅保留原始采集数据有明确公开来源的市场相关信息",
-            "actual": "全部为虚构的无来源市场数据",
-            "suggestion": "删除所有无支撑内容，基于原始采集的公开信息补充合规的市场相关描述"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品C.pricing_tiers",
+            "description": "定价层级为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的定价信息"
           },
           {
-            "severity": "critical",
-            "category": "hallucination",
-            "field": "智谱GLM-5系列.strengths、weaknesses",
-            "description": "代理编程测试得分589位列全球第一、和DeepSeek系列的所有对比内容，原始采集数据完全无提及，属于无来源幻觉内容",
-            "expected": "所有内容均有原始采集数据对应支撑",
-            "actual": "大量无来源虚构的评测数据和竞品对比内容",
-            "suggestion": "清理所有无支撑的幻觉内容，仅保留原始采集数据中明确提及的有效信息"
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品C.market_share",
+            "description": "市场份额信息为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充该竞品的市场份额数据"
+          },
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "竞品C.citations",
+            "description": "无引用来源",
+            "expected": "",
+            "actual": "",
+            "suggestion": "确保采集数据有来源引用"
           }
         ],
-        "checked_at": "2026-06-05T19:20:30",
+        "checked_at": "2026-06-05T20:43:35",
         "attempt": 1,
         "degraded": false,
         "feedback_to_agent": "",
-        "hallucination_status": "found",
-        "hallucination_score": 0.0
-      },
-      {
-        "phase": "collection",
-        "target_agent": "CollectionAgent",
-        "passed": true,
-        "score": 97.0,
-        "issues": [
-          {
-            "severity": "warning",
-            "category": "hallucination",
-            "field": "__hallucination_check__",
-            "description": "幻觉检测未能完成（json_parse_error(文本长度=5470, 前100字='```json\\n{\\n    \"passed\": false,\\n    \"score\": 42,\\n    \"issues\": [\\n        {\\n            \"severity\": \"c')），结果可信度未知",
-            "expected": "",
-            "actual": "",
-            "suggestion": "建议重新运行质检"
-          },
-          {
-            "severity": "warning",
-            "category": "citation",
-            "field": "citations.豆包Seed 2.0 Pro:q1:r7.url",
-            "description": "引用 '豆包Seed 2.0 Pro:q1:r7' 的 url 为空",
-            "expected": "",
-            "actual": "",
-            "suggestion": "补充引用链接"
-          }
-        ],
-        "checked_at": "2026-06-05T19:35:56",
-        "attempt": 2,
-        "degraded": false,
-        "feedback_to_agent": "",
-        "hallucination_status": "failed",
-        "hallucination_score": 60.0
+        "hallucination_status": "skipped",
+        "hallucination_score": 100.0
       },
       {
         "phase": "product",
         "target_agent": "ProductAgent",
         "passed": true,
-        "score": 100.0,
-        "issues": [],
-        "checked_at": "2026-06-05T19:39:57",
-        "attempt": 1,
-        "degraded": false,
-        "feedback_to_agent": "",
-        "hallucination_status": "passed",
-        "hallucination_score": 100.0
-      },
-      {
-        "phase": "pricing",
-        "target_agent": "PricingAgent",
-        "passed": false,
-        "score": 61.0,
+        "score": 97.0,
         "issues": [
-          {
-            "severity": "critical",
-            "category": "completeness",
-            "field": "pricing_comparison.paid_tier",
-            "description": "所有竞品的付费档位定价数值无任何原始采集数据支撑，原始采集的全量竞品数据中未包含任何定价相关的原始信息，LLM输出的各模型输入/输出单价、订阅月费等全部定价内容属于无依据生成的幻觉信息",
-            "expected": "",
-            "actual": "",
-            "suggestion": "删除所有无来源的定价虚构数据，补充采集各竞品官方公开的真实定价信息后再生成对应付费档位描述"
-          },
-          {
-            "severity": "critical",
-            "category": "completeness",
-            "field": "value_ranking",
-            "description": "当前采集数据中无各竞品定价、性价比相关的可对比维度数据，完全无法推导得出该价值排名，属于无依据的幻觉输出",
-            "expected": "",
-            "actual": "",
-            "suggestion": "补充完整各竞品定价维度的采集数据，获取足够的性价比对比维度后再生成合理的价值排序"
-          },
-          {
-            "severity": "critical",
-            "category": "completeness",
-            "field": "summary",
-            "description": "summary中多处内容无原始数据支撑：包括「整体API价格较2025年普遍下降90%以上」无任何跨年度价格对比的采集数据支撑，「全系采用MIT协议开源的DeepSeek依托私有化部署灵活性优势，在离线部署、定制化微调场景下相比竞品具备极强的价格竞争力」无DeepSeek定价相关的采集数据支撑，仅提及DeepSeek开源协议属性，相关结论不成立",
-            "expected": "",
-            "actual": "",
-            "suggestion": "删除所有无来源的不实表述，仅保留基于现有采集数据可推导的合规分析结论"
-          },
           {
             "severity": "warning",
             "category": "completeness",
-            "field": "全分析输出",
-            "description": "所有分析结论均未标注对应的原始采集数据来源ID，不符合引用有效性规范，溯源性不足",
+            "field": "competitive_advantages",
+            "description": "竞争优势为空",
             "expected": "",
             "actual": "",
-            "suggestion": "后续每一条基于原始数据推导的结论都标注对应的原始采集数据来源ID，确保所有内容可溯源校验"
+            "suggestion": "补充竞争优势分析"
           }
         ],
-        "checked_at": "2026-06-05T19:40:21",
+        "checked_at": "2026-06-05T20:43:35",
         "attempt": 1,
         "degraded": false,
         "feedback_to_agent": "",
-        "hallucination_status": "passed",
+        "hallucination_status": "skipped",
         "hallucination_score": 100.0
       },
       {
         "phase": "pricing",
         "target_agent": "PricingAgent",
         "passed": true,
-        "score": 100.0,
-        "issues": [],
-        "checked_at": "2026-06-05T19:42:13",
+        "score": 97.0,
+        "issues": [
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "value_ranking",
+            "description": "性价比排名为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充性价比排名"
+          }
+        ],
+        "checked_at": "2026-06-05T20:43:35",
         "attempt": 1,
         "degraded": false,
         "feedback_to_agent": "",
-        "hallucination_status": "passed",
+        "hallucination_status": "skipped",
         "hallucination_score": 100.0
       },
       {
         "phase": "market",
         "target_agent": "MarketAgent",
         "passed": true,
-        "score": 100.0,
-        "issues": [],
-        "checked_at": "2026-06-05T19:40:47",
+        "score": 91.0,
+        "issues": [
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "user_reputation",
+            "description": "用户口碑数据为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充用户口碑分析"
+          },
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "user_profiles",
+            "description": "用户画像数据为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充用户画像分析"
+          },
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "channel_analysis",
+            "description": "渠道分析为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充渠道策略分析"
+          }
+        ],
+        "checked_at": "2026-06-05T20:43:35",
         "attempt": 1,
         "degraded": false,
         "feedback_to_agent": "",
-        "hallucination_status": "passed",
+        "hallucination_status": "skipped",
         "hallucination_score": 100.0
       },
       {
         "phase": "strategy",
         "target_agent": "StrategyAgent",
         "passed": true,
-        "score": 100.0,
-        "issues": [],
-        "checked_at": "2026-06-05T19:43:23",
+        "score": 97.0,
+        "issues": [
+          {
+            "severity": "warning",
+            "category": "completeness",
+            "field": "citation_index",
+            "description": "引用索引为空",
+            "expected": "",
+            "actual": "",
+            "suggestion": "补充引用来源"
+          }
+        ],
+        "checked_at": "2026-06-05T20:43:35",
         "attempt": 1,
         "degraded": false,
         "feedback_to_agent": "",
-        "hallucination_status": "passed",
+        "hallucination_status": "skipped",
         "hallucination_score": 100.0
       }
     ],
     "max_retries": 2,
-    "total_retries": 2
+    "total_retries": 0
   }
 }

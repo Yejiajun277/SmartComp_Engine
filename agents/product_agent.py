@@ -35,6 +35,7 @@ class ProductAgent(BaseAgent):
 
     async def run(self, product_name: str,
                   competitors_data: dict[str, CompetitorData],
+                  target_product_data: CompetitorData | None = None,
                   sub_dimensions: str = "",
                   feedback: str = "") -> ProductAnalysis:
         """
@@ -53,7 +54,7 @@ class ProductAgent(BaseAgent):
             self.set_sub_dimensions(sub_dimensions)
 
         # 构建竞品数据摘要
-        competitors_text = self._build_competitors_text(product_name, competitors_data)
+        competitors_text = self._build_competitors_text(product_name, competitors_data, target_product_data)
 
         # 注入质检反馈
         if feedback:
@@ -74,16 +75,17 @@ class ProductAgent(BaseAgent):
                 self._log("⚠️ LLM产品分析失败，降级到规则引擎")
 
         # Fallback: 规则引擎分析
-        return self._rule_analyze(product_name, competitors_data)
+        return self._rule_analyze(product_name, competitors_data, target_product_data)
 
     def _build_competitors_text(self, product_name: str,
-                                 competitors_data: dict[str, CompetitorData]) -> str:
+                                 competitors_data: dict[str, CompetitorData],
+                                 target_product_data: CompetitorData | None = None) -> str:
         """构建竞品数据文本，附带引用来源编号"""
         lines = []
-        for name, data in competitors_data.items():
+
+        def append_entity(name: str, data: CompetitorData):
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
-            # 结构化产品功能
             if data.product_features:
                 features_text = "; ".join([f"{fi.name}: {fi.description}" for fi in data.product_features[:10]])
                 lines.append(f"- 产品功能: {features_text[:300]}")
@@ -94,6 +96,11 @@ class ProductAgent(BaseAgent):
             if data.citations:
                 lines.append(f"- 数据来源:")
                 lines.append(self.build_citations_text(data.citations))
+
+        if target_product_data:
+            append_entity(product_name, target_product_data)
+        for name, data in competitors_data.items():
+            append_entity(name, data)
         return "\n".join(lines)
 
     def _parse_product_analysis(self, result: dict) -> ProductAnalysis:
@@ -130,10 +137,9 @@ class ProductAgent(BaseAgent):
         )
 
     def _rule_analyze(self, product_name: str,
-                       competitors_data: dict[str, CompetitorData]) -> ProductAnalysis:
+                       competitors_data: dict[str, CompetitorData],
+                       target_product_data: CompetitorData | None = None) -> ProductAnalysis:
         """规则引擎产品分析"""
-        # 简单的关键词匹配
-        all_features = set()
         feature_keywords = {
             "即时通讯": ["通讯", "消息", "聊天"],
             "视频会议": ["视频", "会议", "通话"],
@@ -147,16 +153,14 @@ class ProductAgent(BaseAgent):
         feature_matrix = []
         for feature, keywords in feature_keywords.items():
             values = {}
-            # 先检查我方产品（使用产品描述+竞品数据中标注为"我方"的信息）
             product_text = product_name.lower()
-            for name, data in competitors_data.items():
-                features_str = " ".join([fi.name + " " + fi.description for fi in data.product_features])
-                product_text += f" {features_str} {data.strengths}".lower()
+            if target_product_data:
+                features_str = " ".join([fi.name + " " + fi.description for fi in target_product_data.product_features])
+                product_text += f" {features_str} {target_product_data.strengths}".lower()
             if any(kw.lower() in product_text for kw in keywords):
                 values[product_name] = "✅"
             else:
                 values[product_name] = "❌"
-            # 再检查每个竞品
             for name, data in competitors_data.items():
                 features_str = " ".join([fi.name + " " + fi.description for fi in data.product_features])
                 text = f"{features_str} {data.strengths}".lower()

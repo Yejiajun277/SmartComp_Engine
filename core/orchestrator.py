@@ -75,6 +75,7 @@ class Orchestrator:
         self.artifact_store: ArtifactStore | None = None
         self.run_dir: str = ""
         self._run_meta: dict = {}
+        self._last_target_product_data: CompetitorData | None = None
 
     async def analyze(self, product_description: str,
                       max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
@@ -125,6 +126,20 @@ class Orchestrator:
                 competitor_count=0,
             )
             return report
+
+        print(f"\n{'█' * 65}")
+        print("  🧾 Phase 1.5: 目标产品采集")
+        print(f"{'█' * 65}")
+
+        target_collection_start = time.time()
+        target_product_data = self.collection_agent.collect_target_product(
+            product_description, competitor_list.product_name
+        )
+        self.timings["target_collection"] = time.time() - target_collection_start
+
+        print(f"\n  ⏱️ 目标产品采集耗时: {self.timings['target_collection']:.2f}s")
+        print(f"  🎯 目标产品: {target_product_data.name}")
+        self._save_artifact_json("00_target_product_data.json", target_product_data)
 
         # ── Phase 2: 数据采集（串行，逐竞品）──
         print(f"\n{'█' * 65}")
@@ -216,12 +231,15 @@ class Orchestrator:
         # 并行执行三个分析Agent
         product_analysis, pricing_analysis, market_analysis = await asyncio.gather(
             self.product_agent.run(product_name, competitors_data,
+                                   target_product_data=target_product_data,
                                    sub_dimensions=product_sub_dims_text,
                                    feedback=degradation_warning),
             self.pricing_agent.run(product_name, competitors_data,
+                                   target_product_data=target_product_data,
                                    sub_dimensions=pricing_sub_dims_text,
                                    feedback=degradation_warning),
             self.market_agent.run(product_name, competitors_data,
+                                  target_product_data=target_product_data,
                                   feedback=degradation_warning),
         )
 
@@ -255,16 +273,19 @@ class Orchestrator:
                 if atype == "product":
                     product_analysis = await self.product_agent.run(
                         product_name, competitors_data,
+                        target_product_data=target_product_data,
                         sub_dimensions=product_sub_dims_text, feedback=feedback
                     )
                 elif atype == "pricing":
                     pricing_analysis = await self.pricing_agent.run(
                         product_name, competitors_data,
+                        target_product_data=target_product_data,
                         sub_dimensions=pricing_sub_dims_text, feedback=feedback
                     )
                 else:
                     market_analysis = await self.market_agent.run(
-                        product_name, competitors_data, feedback=feedback
+                        product_name, competitors_data,
+                        target_product_data=target_product_data, feedback=feedback
                     )
 
                 # 重新质检
@@ -300,6 +321,7 @@ class Orchestrator:
             product_analysis,
             pricing_analysis,
             market_analysis,
+            target_product_data=target_product_data,
             competitors_data=competitors_data,
         )
         self.timings["strategy"] = time.time() - phase4_start
@@ -326,6 +348,7 @@ class Orchestrator:
                     product_analysis,
                     pricing_analysis,
                     market_analysis,
+                    target_product_data=target_product_data,
                     competitors_data=competitors_data,
                     feedback=feedback,
                 )
@@ -358,6 +381,7 @@ class Orchestrator:
         self._last_market_analysis = market_analysis
         self._last_competitor_list = competitor_list
         self._last_competitors_data = competitors_data
+        self._last_target_product_data = target_product_data
 
         print(f"\n  ⏱️ 策略建议耗时: {self.timings['strategy']:.2f}s")
         print(f"\n{'═' * 65}")

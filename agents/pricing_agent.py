@@ -35,6 +35,7 @@ class PricingAgent(BaseAgent):
 
     async def run(self, product_name: str,
                   competitors_data: dict[str, CompetitorData],
+                  target_product_data: CompetitorData | None = None,
                   sub_dimensions: str = "",
                   feedback: str = "") -> PricingAnalysis:
         """
@@ -52,7 +53,7 @@ class PricingAgent(BaseAgent):
         if sub_dimensions:
             self.set_sub_dimensions(sub_dimensions)
 
-        competitors_text = self._build_competitors_text(product_name, competitors_data)
+        competitors_text = self._build_competitors_text(product_name, competitors_data, target_product_data)
 
         # 注入质检反馈
         if feedback:
@@ -74,13 +75,14 @@ class PricingAgent(BaseAgent):
         return self._rule_analyze(product_name, competitors_data)
 
     def _build_competitors_text(self, product_name: str,
-                                 competitors_data: dict[str, CompetitorData]) -> str:
+                                 competitors_data: dict[str, CompetitorData],
+                                 target_product_data: CompetitorData | None = None) -> str:
         """构建竞品定价数据文本，附带引用来源编号"""
         lines = []
-        for name, data in competitors_data.items():
+
+        def append_entity(name: str, data: CompetitorData):
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
-            # 结构化定价信息
             if data.pricing_tiers:
                 pricing_text = "; ".join([f"{pt.tier_name}: {pt.price}" for pt in data.pricing_tiers])
                 lines.append(f"- 定价信息: {pricing_text[:300]}")
@@ -91,6 +93,11 @@ class PricingAgent(BaseAgent):
             if data.citations:
                 lines.append(f"- 数据来源:")
                 lines.append(self.build_citations_text(data.citations))
+
+        if target_product_data:
+            append_entity(product_name, target_product_data)
+        for name, data in competitors_data.items():
+            append_entity(name, data)
         return "\n".join(lines)
 
     def _parse_pricing_analysis(self, result: dict) -> PricingAnalysis:

@@ -33,6 +33,26 @@ class CollectionAgent(BaseAgent):
         """返回每个竞品的原始搜索文本（供幻觉检测使用）"""
         return self._last_search_texts
 
+    def collect_target_product(self, product_description: str,
+                               product_name: str,
+                               feedback: str = "") -> CompetitorData:
+        """采集目标产品自身信息"""
+        self._log(f"   采集目标产品: {product_name}")
+        queries = [
+            f"{product_name} 产品功能介绍",
+            f"{product_name} 定价 价格 收费标准",
+            f"{product_name} 市场份额 用户量 评测",
+            f"{product_name} 用户评价 使用场景",
+        ]
+        return self._collect_entity(
+            product_name=product_name,
+            product_description=product_description,
+            entity_name=product_name,
+            queries=queries,
+            feedback=feedback,
+            cache_search_text=False,
+        )
+
     async def run(self, product_description: str,
                   competitor_list: CompetitorList,
                   feedback: str = "") -> dict[str, CompetitorData]:
@@ -67,14 +87,28 @@ class CollectionAgent(BaseAgent):
                             competitor_name: str,
                             feedback: str = "") -> CompetitorData:
         """采集单个竞品数据，同时构建结构化引用"""
-        # 生成搜索查询
         queries = [
             f"{competitor_name} 产品功能介绍",
             f"{competitor_name} 定价 价格 收费标准",
             f"{competitor_name} 市场份额 用户量 评测",
             f"{competitor_name} vs {product_name} 对比",
         ]
+        return self._collect_entity(
+            product_name=product_name,
+            product_description=product_description,
+            entity_name=competitor_name,
+            queries=queries,
+            feedback=feedback,
+            cache_search_text=True,
+        )
 
+    def _collect_entity(self, product_name: str,
+                        product_description: str,
+                        entity_name: str,
+                        queries: list[str],
+                        feedback: str = "",
+                        cache_search_text: bool = True) -> CompetitorData:
+        """采集单个实体数据，同时构建结构化引用"""
         # 执行搜索
         search_results = self.search_client.batch_search(queries)
 
@@ -99,18 +133,19 @@ class CollectionAgent(BaseAgent):
                 if not ref_url and not ref_title:
                     continue
                 citations.append(Citation(
-                    id=f"{competitor_name}:q{i}:r{citation_counter}",
+                    id=f"{entity_name}:q{i}:r{citation_counter}",
                     title=ref_title,
                     url=ref_url,
                     snippet=ref.get("content", "") or ref.get("summary", ""),
                     site_name=ref.get("site_name", ""),
                     query=query,
-                    competitor=competitor_name,
+                    competitor=entity_name,
                 ))
                 citation_counter += 1
 
         # 缓存原始搜索文本（供幻觉检测使用）
-        self._last_search_texts[competitor_name] = all_text
+        if cache_search_text:
+            self._last_search_texts[entity_name] = all_text
 
         # 注入质检反馈
         if feedback:
@@ -121,7 +156,7 @@ class CollectionAgent(BaseAgent):
             prompt = self._prompt_collect.format(
                 product_name=product_name,
                 product_description=product_description,
-                competitor_name=competitor_name,
+                competitor_name=entity_name,
                 search_results=all_text[:8000],
             )
             result = self.ask_llm_json(prompt, max_tokens=4096)
@@ -148,7 +183,7 @@ class CollectionAgent(BaseAgent):
                         ))
 
                 return CompetitorData(
-                    name=competitor_name,
+                    name=entity_name,
                     product_features=product_features,
                     pricing_tiers=pricing_tiers,
                     market_share=result.get("market_share", ""),
@@ -160,11 +195,11 @@ class CollectionAgent(BaseAgent):
                     citations=citations,
                 )
             else:
-                self._log(f"   ⚠️ {competitor_name} LLM汇总失败，降级到规则引擎")
+                self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
 
         # Fallback: 规则引擎提取
         return CompetitorData(
-            name=competitor_name,
+            name=entity_name,
             product_features=[FeatureItem(name="数据采集失败", description=all_text[:500] if all_text else "")],
             search_sources=sources,
             citations=citations,
