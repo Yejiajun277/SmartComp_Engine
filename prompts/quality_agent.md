@@ -13,7 +13,10 @@
 3. 区分严重度：critical（必须修复）vs warning（建议修复）
 
 ### 输出要求
-严格JSON格式，不要任何多余文字。
+只输出严格合法的 JSON 对象，不要任何多余文字。
+禁止使用 ```json 代码块，禁止输出注释、省略号、尾逗号。
+所有字符串中的双引号必须转义为 \"，换行必须转义为 \n。
+顶层格式必须是：{"passed": false, "score": 0, "issues": []}
 
 ## prompt_check_collection
 
@@ -46,14 +49,13 @@
 如果发现引用不匹配或错误使用，在 issues 中添加 category 为 "citation" 的条目。
 
 ### 输出格式
-```json
 {{
-    "passed": true或false,
-    "score": 0到100的整数,
+    "passed": false,
+    "score": 0,
     "issues": [
         {{
-            "severity": "critical或warning",
-            "category": "completeness或hallucination或schema或citation",
+            "severity": "critical",
+            "category": "completeness",
             "field": "字段路径",
             "description": "问题描述",
             "expected": "期望值",
@@ -62,7 +64,8 @@
         }}
     ]
 }}
-```
+
+注意：实际输出时必须是纯 JSON，不要 Markdown 代码块，不要中文占位词。
 
 ## prompt_check_analysis
 
@@ -94,7 +97,7 @@
    - 引用内容是否支撑了对应的分析结论
 
 ### 输出格式
-同 prompt_check_collection 的输出格式。
+同 prompt_check_collection 的输出格式。实际输出时必须是纯 JSON，不要 Markdown 代码块，不要注释、省略号或尾逗号。
 
 ## prompt_check_strategy
 
@@ -118,7 +121,7 @@
    - 风险评估是否基于竞品数据中的信号
 
 ### 输出格式
-同 prompt_check_collection 的输出格式。
+同 prompt_check_collection 的输出格式。实际输出时必须是纯 JSON，不要 Markdown 代码块，不要注释、省略号或尾逗号。
 
 ## prompt_build_feedback
 

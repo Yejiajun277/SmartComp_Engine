@@ -293,7 +293,7 @@ class QualityAgent(BaseAgent):
             competitors_data_json=json.dumps(data_summary, ensure_ascii=False, indent=2),
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=2048)
+        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -537,7 +537,7 @@ class QualityAgent(BaseAgent):
             feedback="",
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=2048)
+        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ {analysis_type} 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -710,7 +710,7 @@ class QualityAgent(BaseAgent):
             strategy_report_json=json.dumps(strategy_json, ensure_ascii=False, indent=2),
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=2048)
+        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ 策略报告幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason

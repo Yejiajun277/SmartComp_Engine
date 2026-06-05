@@ -172,40 +172,56 @@ def check_llm_backend() -> dict:
     }
 
 
+def _format_json_error(source_name: str, error: json.JSONDecodeError, text_len: int) -> str:
+    return (
+        f"json_parse_error(source={source_name}, line={error.lineno}, "
+        f"col={error.colno}, pos={error.pos}, msg={error.msg}, 文本长度={text_len})"
+    )
+
+
+def _try_parse_json(candidate: str, source_name: str, original_len: int) -> tuple[object, str]:
+    try:
+        return json.loads(candidate.strip()), ""
+    except json.JSONDecodeError as e:
+        return None, _format_json_error(source_name, e, original_len)
+
+
 def parse_llm_json(text: str) -> dict:
     """解析 LLM 返回的 JSON。"""
     global _last_call_error
     if not text:
         return {}
 
-    try:
-        return json.loads(text.strip())
-    except json.JSONDecodeError:
-        pass
+    parse_errors = []
+    parsed, error = _try_parse_json(text, "raw_text", len(text))
+    if not error:
+        return parsed
+    parse_errors.append(error)
 
-    json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if json_match:
-        try:
-            return json.loads(json_match.group(1).strip())
-        except json.JSONDecodeError:
-            pass
+    code_blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)```", text)
+    for i, block in enumerate(code_blocks, 1):
+        parsed, error = _try_parse_json(block, f"code_block_{i}", len(text))
+        if not error:
+            return parsed
+        parse_errors.append(error)
 
     brace_match = re.search(r"\{[\s\S]*\}", text)
     if brace_match:
-        try:
-            return json.loads(brace_match.group(0))
-        except json.JSONDecodeError:
-            pass
+        parsed, error = _try_parse_json(brace_match.group(0), "first_object", len(text))
+        if not error:
+            return parsed
+        parse_errors.append(error)
 
     bracket_match = re.search(r"\[[\s\S]*\]", text)
     if bracket_match:
-        try:
-            return json.loads(bracket_match.group(0))
-        except json.JSONDecodeError:
-            pass
+        parsed, error = _try_parse_json(bracket_match.group(0), "first_array", len(text))
+        if not error:
+            return parsed
+        parse_errors.append(error)
 
-    _last_call_error = f"json_parse_error(文本长度={len(text)}, 前100字={text[:100]!r})"
-    print(f"  [LLM] ⚠️ JSON解析失败，原始文本前200字: {text[:200]}...")
+    _last_call_error = parse_errors[-1] if parse_errors else f"json_parse_error(文本长度={len(text)})"
+    print(f"  [LLM] ⚠️ JSON解析失败: {_last_call_error}")
+    print(f"  [LLM] ⚠️ 原始文本前200字: {text[:200]}...")
     return {}
 
 

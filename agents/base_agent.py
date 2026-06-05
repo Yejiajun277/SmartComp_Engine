@@ -51,6 +51,7 @@ class BaseAgent(ABC):
             "user_message_len": len(user_message),
             "result_len": len(result) if result else 0,
             "success": bool(result),
+            "parse_error": "",
         })
 
         return result
@@ -65,6 +66,8 @@ class BaseAgent(ABC):
             if parsed:
                 return parsed
             else:
+                if self.llm_logs:
+                    self.llm_logs[-1]["parse_error"] = get_last_call_error() or "json_parse_error"
                 self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
         return {}
 
@@ -79,6 +82,8 @@ class BaseAgent(ABC):
                 return parsed, "success"
             else:
                 reason = get_last_call_error() or "json_parse_error"
+                if self.llm_logs:
+                    self.llm_logs[-1]["parse_error"] = reason
                 self._log(f"   ⚠️ LLM返回了文本但JSON解析失败: {reason}")
                 return {}, reason
         reason = get_last_call_error() or "empty_response"
