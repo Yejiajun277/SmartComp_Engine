@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.py[cod]
+.python-version
+.venv/
+venv/
+ARCHITECTURE.md
+output/
+findings.md
+process.md
+task_plan.md
+progress.md
+项目业务介绍.md
+planning-with-files-skill任务文档/
+docs/
+CLAUDE.md
+

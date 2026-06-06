@@ -1,0 +1,5 @@
+# 智能竞品分析多Agent系统 — 依赖清单
+# pip install -r requirements.txt
+
+# ======== 核心依赖 ========
+requests>=2.28.0           # 千帆API + 百度搜索 HTTP调用（LLM/搜索模式必需）
