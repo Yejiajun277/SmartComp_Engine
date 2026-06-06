@@ -99,6 +99,7 @@ class MarketAgent(BaseAgent):
         for pp in pain_points:
             if not pp or not pp.strip():
                 continue
+            # 检查是否包含商业术语
             if any(term in pp for term in cls._COMMERCIAL_TERMS):
                 continue
             cleaned.append(pp.strip())
