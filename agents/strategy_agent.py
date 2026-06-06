@@ -425,14 +425,24 @@ class StrategyAgent(BaseAgent):
                     return val
             return None
 
-        def trend_icon(trend: str) -> str:
+        def normalize_trend(trend: str) -> str:
+            """标准化趋势描述为枚举值：上升/稳定/下降"""
             t = trend.strip()
-            if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑"]):
-                return f'<span style="color:#22c55e;">↗ {esc(t)}</span>'
-            elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓"]):
-                return f'<span style="color:#ef4444;">↘ {esc(t)}</span>'
+            if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑", "高速", "快速增长", "大幅增长"]):
+                return "上升"
+            elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓", "小幅下降", "大幅下降"]):
+                return "下降"
             else:
-                return f'<span style="color:#64748b;">→ {esc(t)}</span>'
+                return "稳定"
+
+        def trend_icon(trend: str) -> str:
+            normalized = normalize_trend(trend)
+            if normalized == "上升":
+                return f'<span style="color:#22c55e;">↗ {esc(normalized)}</span>'
+            elif normalized == "下降":
+                return f'<span style="color:#ef4444;">↘ {esc(normalized)}</span>'
+            else:
+                return f'<span style="color:#64748b;">→ {esc(normalized)}</span>'
 
         def render_target_product_intro(data: CompetitorData | None) -> str:
             """渲染目标产品介绍板块"""
@@ -586,36 +596,50 @@ class StrategyAgent(BaseAgent):
                     </tr>'''
 
             # 定价行
+            no_data_label = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
             if pi:
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else '—'}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else '—'}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.pricing_model) if pi.pricing_model else '—'}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.pricing_model) if pi.pricing_model else no_data_label}</td>
+                </tr>'''
+            else:
+                comparison_rows += f'''
+                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价信息</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
             # 市场份额行
             if ms:
+                share_display = esc(ms.share_estimate) if ms.share_estimate else no_data_label
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(ms.share_estimate)}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{share_display}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">—</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
                     <td style="padding:8px 14px;text-align:center;">{trend_icon(ms.trend)}</td>
+                </tr>'''
+            else:
+                comparison_rows += f'''
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
             # ── 优劣势分析 ──
@@ -733,13 +757,14 @@ class StrategyAgent(BaseAgent):
         pricing_html = ""
         if pricing_analysis and pricing_analysis.pricing_comparison:
             price_rows = ""
+            no_data_cell = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
             for pc in pricing_analysis.pricing_comparison:
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}{cite_sup(pc.citations)}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else '<span style="color:#94a3b8;">—</span>'}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else '<span style="color:#94a3b8;">—</span>'}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else '<span style="color:#94a3b8;">—</span>'}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else no_data_cell}</td>
                 </tr>'''
 
             ranking_html = ""
