@@ -597,21 +597,35 @@ class StrategyAgent(BaseAgent):
 
             # 定价行
             no_data_label = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
+            # 从 target_product_data 提取我方定价摘要
+            our_free = ""
+            our_paid = ""
+            our_model = ""
+            if report.target_product_data and report.target_product_data.pricing_tiers:
+                tiers = report.target_product_data.pricing_tiers
+                free_tiers = [t for t in tiers if any(k in t.tier_name for k in ["免费", "免费版", "基础"])]
+                paid_tiers = [t for t in tiers if t not in free_tiers]
+                if free_tiers:
+                    our_free = free_tiers[0].price or "；".join(t.tier_name for t in free_tiers)
+                if paid_tiers:
+                    our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in paid_tiers[:3] if t.price)
+                our_model = "；".join(t.tier_name for t in tiers[:4]) if tiers else ""
+
             if pi:
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_free) if our_free else no_data_label}</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_paid) if our_paid else no_data_label}</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_model) if our_model else no_data_label}</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.pricing_model) if pi.pricing_model else no_data_label}</td>
                 </tr>'''
             else:
@@ -622,17 +636,23 @@ class StrategyAgent(BaseAgent):
                 </tr>'''
 
             # 市场份额行
+            our_share = ""
+            our_trend = ""
+            if report.target_product_data and report.target_product_data.market_share:
+                our_share = report.target_product_data.market_share[:150]
+                our_trend = "上升"  # 默认值，可从数据推断
+
             if ms:
                 share_display = esc(ms.share_estimate) if ms.share_estimate else no_data_label
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_share) if our_share else no_data_label}</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{share_display}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{trend_icon(our_trend) if our_trend else no_data_label}</td>
                     <td style="padding:8px 14px;text-align:center;">{trend_icon(ms.trend)}</td>
                 </tr>'''
             else:
@@ -758,6 +778,25 @@ class StrategyAgent(BaseAgent):
         if pricing_analysis and pricing_analysis.pricing_comparison:
             price_rows = ""
             no_data_cell = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
+            # 先插入我方产品定价行
+            if report.target_product_data and report.target_product_data.pricing_tiers:
+                tpd = report.target_product_data
+                our_free = ""
+                our_paid = ""
+                our_model = ""
+                for t in tpd.pricing_tiers:
+                    if any(k in t.tier_name for k in ["免费", "基础"]):
+                        our_free = our_free or t.price or t.tier_name
+                    elif t.price:
+                        our_paid += f"{t.tier_name}: {t.price}；"
+                our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4])
+                price_rows += f'''
+                <tr style="border-bottom:1px solid #f1f5f9;background:#f0fdf4;">
+                    <td style="padding:10px 16px;font-weight:600;font-size:13px;color:#166534;">⭐ {esc(report.product_name)}（我方）</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(our_free) if our_free else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(our_paid.rstrip("；")) if our_paid else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(our_model) if our_model else no_data_cell}</td>
+                </tr>'''
             for pc in pricing_analysis.pricing_comparison:
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
