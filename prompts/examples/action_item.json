@@ -1,0 +1,9 @@
+{
+  "priority": "P0",
+  "action": "行动描述",
+  "timeline": "时间线",
+  "expected_impact": "预期效果",
+  "citations": [
+    "citations示例1"
+  ]
+}
