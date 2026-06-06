@@ -43,6 +43,9 @@ class CollectionAgent(BaseAgent):
             f"{product_name} 定价 价格 收费标准",
             f"{product_name} 市场份额 用户量 评测",
             f"{product_name} 用户评价 使用场景",
+            f"{product_name} 竞争优势 核心优势 行业地位",
+            f"{product_name} 劣势 不足 用户吐槽 差评",
+            f"{product_name} 渠道策略 推广方式 合作伙伴 生态",
         ]
         return self._collect_entity(
             product_name=product_name,
@@ -92,6 +95,9 @@ class CollectionAgent(BaseAgent):
             f"{competitor_name} 定价 价格 收费标准",
             f"{competitor_name} 市场份额 用户量 评测",
             f"{competitor_name} vs {product_name} 对比",
+            f"{competitor_name} 竞争优势 核心优势 行业地位",
+            f"{competitor_name} 劣势 不足 用户吐槽",
+            f"{competitor_name} 渠道策略 推广方式 生态布局",
         ]
         return self._collect_entity(
             product_name=product_name,
