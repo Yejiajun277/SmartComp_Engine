@@ -331,3 +331,97 @@ class CollectionAgent(BaseAgent):
                 market_share = result["market_share"]
 
         return market_share, extra_cites
+
+    def supplement_missing_fields(self, product_name: str,
+                                   competitors_data: dict[str, 'CompetitorData'],
+                                   missing_fields: dict[str, list[str]]) -> dict[str, 'CompetitorData']:
+        """根据质检反馈的缺失字段，对特定竞品做针对性补充搜索。
+
+        Args:
+            product_name: 我方产品名
+            competitors_data: 当前采集数据
+            missing_fields: {竞品名: [缺失字段名列表]}
+
+        Returns:
+            更新后的 competitors_data
+        """
+        field_queries = {
+            "strengths": ["竞争优势 核心优势 行业地位", "优势 领先 竞争力"],
+            "weaknesses": ["劣势 不足 用户吐槽 差评", "问题 缺点 改进"],
+            "channels": ["渠道策略 推广方式 合作伙伴 生态", "分发 合作 生态布局"],
+            "market_share": ["市场份额 用户量 DAU MAU 市占率", "行业排名 市场占有率"],
+            "pricing_tiers": ["定价 价格 收费标准 会员 套餐", "免费版 付费版 premium"],
+            "user_reviews": ["用户评价 口碑 评分 好评 差评", "用户反馈 评测"],
+        }
+
+        for comp_name, fields in missing_fields.items():
+            if comp_name not in competitors_data:
+                continue
+
+            data = competitors_data[comp_name]
+            all_extra_text = ""
+            extra_cites = []
+            cite_counter = len(data.citations)
+
+            # 为每个缺失字段执行针对性搜索
+            for field_name in fields:
+                # 检查是否真的需要补充（避免重复搜索已有数据）
+                current_val = getattr(data, field_name, "")
+                if current_val and len(str(current_val).strip()) > 20:
+                    continue
+
+                queries = field_queries.get(field_name, [field_name])
+                actual_queries = [f"{comp_name} {q}" for q in queries]
+
+                self._log(f"   🔍 补充搜索: {comp_name} 的 {field_name}")
+                extra_results = self.search_client.batch_search(actual_queries)
+
+                for i, sr in enumerate(extra_results):
+                    result = sr.get("result")
+                    text = SearchClient.extract_text(result) if result else ""
+                    if text:
+                        all_extra_text += f"\n--- 补充搜索({field_name}): {sr.get('query', '')} ---\n{text[:1000]}\n"
+                    for ref in sr.get("references", []):
+                        ref_url = ref.get("url", "")
+                        ref_title = ref.get("title", "")
+                        if not ref_url and not ref_title:
+                            continue
+                        extra_cites.append(Citation(
+                            id=f"{comp_name}:sup_{field_name}_{i}:r{cite_counter}",
+                            title=ref_title,
+                            url=ref_url,
+                            snippet=ref.get("content", "") or ref.get("summary", ""),
+                            site_name=ref.get("site_name", ""),
+                            query=sr.get("query", ""),
+                            competitor=comp_name,
+                        ))
+                        cite_counter += 1
+
+            # 用 LLM 从补充搜索结果中提取缺失字段
+            if all_extra_text and config.ENABLE_LLM:
+                prompts = load_prompts("collection_agent")
+                prompt = prompts["prompt_collect"].format(
+                    product_name=product_name,
+                    product_description="",
+                    competitor_name=comp_name,
+                    search_results=all_extra_text[:6000],
+                )
+                result = self.ask_llm_json(prompt, max_tokens=2048)
+                if result:
+                    # 更新缺失字段
+                    for field_name in fields:
+                        current_val = getattr(data, field_name, "")
+                        if current_val and len(str(current_val).strip()) > 20:
+                            continue
+                        new_val = result.get(field_name, "")
+                        if new_val:
+                            if isinstance(new_val, list):
+                                setattr(data, field_name, new_val)
+                            elif isinstance(new_val, str) and len(new_val.strip()) > 5:
+                                setattr(data, field_name, new_val)
+                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
+
+                    # 补充引用
+                    data.citations.extend(extra_cites)
+
+        return competitors_data

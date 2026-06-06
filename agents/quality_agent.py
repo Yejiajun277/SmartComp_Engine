@@ -234,17 +234,27 @@ class QualityAgent(BaseAgent):
                     suggestion="补充该竞品的实际市场份额数据",
                 ))
 
-            # 文本字段长度检查
-            for field_name, display_name in [
-                ("strengths", "优势"), ("weaknesses", "劣势"), ("user_reviews", "用户评价")
+            # 文本字段检查（空或过短）
+            for field_name, display_name, search_hint in [
+                ("strengths", "优势", "竞争优势 核心优势 行业地位"),
+                ("weaknesses", "劣势", "劣势 不足 用户吐槽"),
+                ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态"),
+                ("user_reviews", "用户评价", "用户评价 口碑 评分"),
             ]:
                 text = getattr(data, field_name)
-                if text and len(text.strip()) < 20:
+                if not text or not text.strip():
+                    issues.append(QualityIssue(
+                        severity="warning", category="completeness",
+                        field=f"{name}.{field_name}",
+                        description=f"{display_name}信息为空，需要补充搜索",
+                        suggestion=f"搜索 '{name} {search_hint}' 补充{display_name}数据",
+                    ))
+                elif len(text.strip()) < 20:
                     issues.append(QualityIssue(
                         severity="warning", category="completeness",
                         field=f"{name}.{field_name}",
                         description=f"{display_name}内容过短（{len(text.strip())} 字符），可能为无效填充",
-                        suggestion=f"补充该竞品的{display_name}信息",
+                        suggestion=f"搜索 '{name} {search_hint}' 补充{display_name}数据",
                     ))
 
             # 引用来源检查
@@ -746,6 +756,65 @@ class QualityAgent(BaseAgent):
             descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
             return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
         return "质检未通过，请检查输出完整性。"
+
+    def extract_missing_fields(self, result: QualityCheckResult) -> dict[str, list[str]]:
+        """从质检结果中提取每个竞品的缺失字段，供 CollectionAgent 做针对性补充搜索。
+
+        Returns:
+            dict[str, list[str]]: {竞品名: [缺失字段名列表]}
+            字段名包括: strengths, weaknesses, channels, market_share, pricing_tiers, user_reviews
+        """
+        missing: dict[str, list[str]] = {}
+        # 可补充搜索的字段
+        supplementable = {"strengths", "weaknesses", "channels", "market_share", "pricing_tiers", "user_reviews"}
+
+        for issue in result.issues:
+            if issue.category != "completeness":
+                continue
+            field = issue.field
+            if not field or "." not in field:
+                continue
+            # 格式: "竞品名.field_name" 或 "竞品名.field_name[x].subfield"
+            parts = field.split(".")
+            if len(parts) < 2:
+                continue
+            comp_name = parts[0]
+            field_name = parts[1].split("[")[0]  # 去掉索引
+            if field_name in supplementable:
+                if comp_name not in missing:
+                    missing[comp_name] = []
+                if field_name not in missing[comp_name]:
+                    missing[comp_name].append(field_name)
+
+        return missing
+
+    def build_supplement_feedback(self, missing_fields: dict[str, list[str]]) -> str:
+        """根据缺失字段构造给 CollectionAgent 的补充搜索反馈。
+
+        Args:
+            missing_fields: extract_missing_fields 的返回值
+
+        Returns:
+            结构化的反馈文本，CollectionAgent 可解析
+        """
+        if not missing_fields:
+            return ""
+
+        lines = ["[补充搜索指令] 以下竞品的特定字段数据缺失，请针对性搜索补充："]
+        field_queries = {
+            "strengths": "竞争优势 核心优势 行业地位",
+            "weaknesses": "劣势 不足 用户吐槽 差评",
+            "channels": "渠道策略 推广方式 合作伙伴 生态",
+            "market_share": "市场份额 用户量 DAU MAU 市占率",
+            "pricing_tiers": "定价 价格 收费标准 会员 套餐",
+            "user_reviews": "用户评价 口碑 评分 好评 差评",
+        }
+        for comp_name, fields in missing_fields.items():
+            for f in fields:
+                query = field_queries.get(f, f)
+                lines.append(f"- 竞品「{comp_name}」缺少 {f}，请搜索: {comp_name} {query}")
+
+        return "\n".join(lines)
 
     def _check_citation_validity(
         self,

@@ -155,7 +155,7 @@ class Orchestrator:
         print(f"\n  ⏱️ 采集耗时: {self.timings['collection']:.2f}s")
         print(f"  📊 采集完成: {len(competitors_data)}个竞品")
 
-        # ── Phase 2 QA: 采集数据质检 ──
+        # ── Phase 2 QA: 采集数据质检（精细化补充搜索）──
         qa_start = time.time()
         original_search_texts = self.collection_agent.get_search_texts()
         qa_attempt = 1
@@ -170,12 +170,25 @@ class Orchestrator:
                 break
 
             if qa_attempt <= QualityAgent.MAX_RETRIES:
-                print(f"  ⚠️ 采集数据质检未通过（第{qa_attempt}次），打回 CollectionAgent 重做")
-                feedback = self.quality_agent.build_feedback(qa_collection)
-                competitors_data = await self.collection_agent.run(
-                    product_description, competitor_list, feedback=feedback
-                )
-                original_search_texts = self.collection_agent.get_search_texts()
+                # 提取缺失字段，做针对性补充搜索
+                missing_fields = self.quality_agent.extract_missing_fields(qa_collection)
+
+                if missing_fields:
+                    total_missing = sum(len(fs) for fs in missing_fields.values())
+                    affected = len(missing_fields)
+                    print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），{affected}个竞品共{total_missing}个字段缺失，执行针对性补充搜索")
+                    competitors_data = self.collection_agent.supplement_missing_fields(
+                        product_name, competitors_data, missing_fields
+                    )
+                    original_search_texts = self.collection_agent.get_search_texts()
+                else:
+                    # 没有可补充的字段（可能是幻觉问题），用 LLM 反馈整体重做
+                    print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），存在非字段缺失问题，整体重做")
+                    feedback = self.quality_agent.build_feedback(qa_collection)
+                    competitors_data = await self.collection_agent.run(
+                        product_description, competitor_list, feedback=feedback
+                    )
+                    original_search_texts = self.collection_agent.get_search_texts()
             else:
                 print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
                 qa_collection.degraded = True
