@@ -79,6 +79,31 @@ class Orchestrator:
 
     async def analyze(self, product_description: str,
                       max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
+        """执行完整的竞品分析流程，按配置选择 LangGraph 或旧编排。"""
+        if config.USE_LANGGRAPH_WORKFLOW:
+            return await self._analyze_langgraph(product_description, max_competitors)
+        return await self._analyze_legacy(product_description, max_competitors)
+
+    async def _analyze_langgraph(self, product_description: str,
+                                 max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
+        """通过 LangGraph StateGraph 执行完整竞品分析。"""
+        from workflow.graph import run_analysis_graph
+
+        state = await run_analysis_graph(
+            self,
+            product_description,
+            max_competitors,
+            fail_on_quality_exhausted=True,
+            node_retries=config.LANGGRAPH_NODE_RETRIES,
+        )
+        report = state.get("report")
+        if report is None:
+            report = StrategyReport(product_name=state.get("product_name", product_description))
+        self._print_completion_summary(report)
+        return report
+
+    async def _analyze_legacy(self, product_description: str,
+                             max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
         """
         执行完整的竞品分析流程
 
@@ -403,6 +428,33 @@ class Orchestrator:
 
         return report
 
+    def _print_completion_summary(self, report: StrategyReport):
+        """打印 LangGraph 路径的完成摘要，保持 CLI 输出可读。"""
+        if not report:
+            return
+        if self.timings:
+            print(f"\n{'═' * 65}")
+            print(
+                f"  🏁 分析完成 | 状态: {self._run_meta.get('status', 'unknown')} | "
+                f"总耗时: {self.timings.get('total', 0):.2f}s"
+            )
+            print(f"  🎯 行动方案: {len(report.action_plan)}项")
+            cite_count = len(report.citation_index.citations) if report.citation_index else 0
+            print(f"  📚 引用来源: {cite_count}条")
+            qa_total = len(report.qa_timeline.checks) if report.qa_timeline else 0
+            qa_retries = report.qa_timeline.total_retries if report.qa_timeline else 0
+            print(f"  🔍 质检次数: {qa_total}次 | 重试: {qa_retries}次")
+            print(f"{'═' * 65}")
+
+        if getattr(self, "_last_product_analysis", None) is not None:
+            formatted = self.strategy_agent.format_report(report)
+            print(formatted)
+            self._print_feature_matrix(
+                report.product_name,
+                self._last_product_analysis,
+                self._last_competitor_list,
+            )
+
     def _start_artifacts(self, product_description: str, max_competitors: int):
         """初始化本次运行的归档目录和元信息。"""
         output_root = os.path.join(
@@ -418,6 +470,8 @@ class Orchestrator:
             "product_description": product_description,
             "max_competitors": max_competitors,
             "enable_llm": config.ENABLE_LLM,
+            "use_langgraph_workflow": config.USE_LANGGRAPH_WORKFLOW,
+            "langgraph_node_retries": config.LANGGRAPH_NODE_RETRIES,
             "llm_provider": config.LLM_PROVIDER,
             "doubao_model": config.DOUBAO_MODEL,
             "started_at": datetime.now().isoformat(timespec="seconds"),
