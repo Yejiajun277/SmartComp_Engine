@@ -155,9 +155,7 @@ class Orchestrator:
         print(f"\n  ⏱️ 采集耗时: {self.timings['collection']:.2f}s")
         print(f"  📊 采集完成: {len(competitors_data)}个竞品")
 
-        product_name = competitor_list.product_name
-
-        # ── Phase 2 QA: 采集数据质检（精细化重做）──
+        # ── Phase 2 QA: 采集数据质检 ──
         qa_start = time.time()
         original_search_texts = self.collection_agent.get_search_texts()
         qa_attempt = 1
@@ -172,30 +170,12 @@ class Orchestrator:
                 break
 
             if qa_attempt <= QualityAgent.MAX_RETRIES:
-                # 精细化：定位有问题的竞品，只重做它们
-                failed_competitors = self.quality_agent.extract_failed_competitors(qa_collection)
-                feedbacks = self.quality_agent.build_targeted_feedback(qa_collection, failed_competitors)
-
-                if failed_competitors and len(failed_competitors) < len(competitors_data):
-                    # 精细化修复：只重做出问题的竞品
-                    print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），精细化修复 {len(failed_competitors)} 个竞品: {', '.join(failed_competitors)}")
-                    qa_collection.repair_mode = "targeted"
-                    qa_collection.repaired_competitors = list(failed_competitors)
-                    for comp_name in failed_competitors:
-                        competitors_data[comp_name] = self.collection_agent.collect_single(
-                            product_name, product_description, comp_name,
-                            feedback=feedbacks.get(comp_name, ""),
-                        )
-                    original_search_texts = self.collection_agent.get_search_texts()
-                else:
-                    # 大部分竞品都有问题，整体重做
-                    print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），整体重做采集")
-                    qa_collection.repair_mode = "full"
-                    feedback = self.quality_agent.build_feedback(qa_collection)
-                    competitors_data = await self.collection_agent.run(
-                        product_description, competitor_list, feedback=feedback
-                    )
-                    original_search_texts = self.collection_agent.get_search_texts()
+                print(f"  ⚠️ 采集数据质检未通过（第{qa_attempt}次），打回 CollectionAgent 重做")
+                feedback = self.quality_agent.build_feedback(qa_collection)
+                competitors_data = await self.collection_agent.run(
+                    product_description, competitor_list, feedback=feedback
+                )
+                original_search_texts = self.collection_agent.get_search_texts()
             else:
                 print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
                 qa_collection.degraded = True
@@ -233,6 +213,8 @@ class Orchestrator:
         print(f"{'█' * 65}")
 
         phase3_start = time.time()
+
+        product_name = competitor_list.product_name
 
         # ── 构造降级警告（如有）──
         degradation_warning = ""

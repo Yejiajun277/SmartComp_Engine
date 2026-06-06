@@ -255,8 +255,6 @@ class QualityCheckResult:
     feedback_to_agent: str = ""         # 给被打回 Agent 的反馈消息
     hallucination_status: str = "skipped"       # HallucinationCheckStatus 的值
     hallucination_score: float = 100.0          # 幻觉检测独立分数
-    repair_mode: str = "full"           # "full"=整体重做 / "targeted"=精细化修复
-    repaired_competitors: list[str] = field(default_factory=list)  # 被修复的竞品列表
 
 
 @dataclass

@@ -76,6 +76,7 @@
     "user_reviews": "用户评价描述",
     "strengths": "竞争优势描述",
     "weaknesses": "竞争劣势描述",
-    "channels": "渠道策略描述"
+    "channels": "渠道策略描述",
+    "notes": "缺失数据说明（如：定价信息未在搜索结果中找到）"
 }}
 ```
