@@ -451,25 +451,70 @@ class StrategyAgent(BaseAgent):
 
             feature_cards = ""
             for fi in data.product_features[:4]:
+                if not fi.name and not fi.description:
+                    continue
                 feature_cards += f'''
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;flex:1;min-width:220px;">
                     <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:6px;">{esc(fi.name) if fi.name else '核心能力'}{cite_sup(fi.citations, competitor=report.product_name)}</div>
-                    <div style="font-size:12px;color:#64748b;line-height:1.6;">{esc(fi.description) if fi.description else '暂无描述'}</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.6;">{esc(fi.description) if fi.description else ''}</div>
                 </div>'''
 
             pricing_items = ""
             for pt in data.pricing_tiers[:3]:
+                if not pt.tier_name and not pt.price:
+                    continue
                 feature_text = "；".join(pt.features[:2]) if pt.features else ""
                 pricing_items += f'''
                 <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
                     <div style="font-size:13px;font-weight:600;color:#1e293b;">{esc(pt.tier_name) if pt.tier_name else '定价档位'}{cite_sup(pt.citations, competitor=report.product_name)}</div>
-                    <div style="font-size:12px;color:#475569;line-height:1.6;">{esc(pt.price) if pt.price else '暂无价格信息'}</div>
+                    <div style="font-size:12px;color:#475569;line-height:1.6;">{esc(pt.price) if pt.price else ''}</div>
                     {f'<div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:4px;">{esc(feature_text)}</div>' if feature_text else ''}
                 </div>'''
 
-            market_intro = data.market_share or "暂无公开市场信息"
-            market_intro += cite_sup([c.id for c in data.citations], competitor=report.product_name)
-            reviews_html = f'<div style="font-size:13px;color:#64748b;line-height:1.7;margin-top:8px;">{esc(data.user_reviews)}</div>' if data.user_reviews else ""
+            # 市场与用户反馈区块
+            market_section = ""
+            if data.market_share or data.user_reviews:
+                market_intro = data.market_share or ""
+                market_intro += cite_sup([c.id for c in data.citations], competitor=report.product_name)
+                reviews_html = f'<div style="font-size:13px;color:#64748b;line-height:1.7;margin-top:8px;">{esc(data.user_reviews)}</div>' if data.user_reviews else ""
+                market_section = f'''
+                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
+                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">📈 市场与用户反馈</div>
+                        <div style="font-size:13px;color:#475569;line-height:1.7;">{market_intro}</div>
+                        {reviews_html}
+                    </div>'''
+
+            # 渠道区块
+            channels_section = ""
+            if data.channels:
+                channels_section = f'''
+                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
+                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">🛣️ 渠道</div>
+                        <div style="font-size:13px;color:#475569;line-height:1.7;">{esc(data.channels)}</div>
+                    </div>'''
+
+            # 优势/劣势区块
+            swot_html = ""
+            swot_parts = []
+            if data.strengths:
+                swot_parts.append(f'''
+                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:6px;">💪 优势</div>
+                        <div style="font-size:13px;color:#15803d;line-height:1.6;">{esc(data.strengths)}</div>
+                    </div>''')
+            if data.weaknesses:
+                swot_parts.append(f'''
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
+                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:6px;">🎯 劣势</div>
+                        <div style="font-size:13px;color:#b45309;line-height:1.6;">{esc(data.weaknesses)}</div>
+                    </div>''')
+            if swot_parts:
+                swot_html = f'<div style="display:flex;gap:16px;flex-wrap:wrap;">{"".join(swot_parts)}</div>'
+
+            # 市场+渠道行
+            market_channels_row = ""
+            if market_section or channels_section:
+                market_channels_row = f'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;">{market_section}{channels_section}</div>'
 
             return f'''
             <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
@@ -477,31 +522,12 @@ class StrategyAgent(BaseAgent):
                 <div style="background:linear-gradient(135deg,#0f172a,#334155);border-radius:12px;padding:20px;color:#fff;margin-bottom:18px;">
                     <div style="font-size:12px;opacity:0.75;margin-bottom:6px;">目标产品</div>
                     <div style="font-size:22px;font-weight:700;margin-bottom:8px;">{esc(data.name or report.product_name)}</div>
-                    <div style="font-size:14px;line-height:1.7;opacity:0.92;">{esc(data.strengths) if data.strengths else '基于公开资料整理目标产品的核心能力、定价、市场和渠道信息。'}</div>
+                    <div style="font-size:14px;line-height:1.7;opacity:0.92;">{esc(data.strengths[:200]) if data.strengths else '基于公开资料整理目标产品的核心能力、定价、市场和渠道信息。'}</div>
                 </div>
                 {f"<div style='display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;'>{feature_cards}</div>" if feature_cards else ''}
                 {f"<div style='background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:18px;'><div style='font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;'>💰 定价概览</div>{pricing_items}</div>" if pricing_items else ''}
-                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
-                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
-                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">📈 市场与用户反馈</div>
-                        <div style="font-size:13px;color:#475569;line-height:1.7;">{market_intro}</div>
-                        {reviews_html}
-                    </div>
-                    <div style="flex:1;min-width:260px;background:#f8fafc;border-radius:12px;padding:16px;">
-                        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px;">🛣️ 渠道</div>
-                        <div style="font-size:13px;color:#475569;line-height:1.7;">{esc(data.channels) if data.channels else '暂无公开渠道信息'}</div>
-                    </div>
-                </div>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;">
-                    <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
-                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:6px;">💪 优势</div>
-                        <div style="font-size:13px;color:#15803d;line-height:1.6;">{esc(data.strengths) if data.strengths else '暂无'}</div>
-                    </div>
-                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:0 8px 8px 0;flex:1;min-width:240px;">
-                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:6px;">🎯 劣势</div>
-                        <div style="font-size:13px;color:#b45309;line-height:1.6;">{esc(data.weaknesses) if data.weaknesses else '暂无'}</div>
-                    </div>
-                </div>
+                {market_channels_row}
+                {swot_html}
             </div>'''
 
         # 构建全局引用编号映射（cid → 1-based 序号）
@@ -595,53 +621,66 @@ class StrategyAgent(BaseAgent):
                         <td style="padding:8px 14px;text-align:center;">{feature_icon(tv)}</td>
                     </tr>'''
 
-            # 定价行
-            no_data_label = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
-            if pi:
-                comparison_rows += f'''
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else no_data_label}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else no_data_label}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.pricing_model) if pi.pricing_model else no_data_label}</td>
-                </tr>'''
-            else:
-                # 竞品无定价数据时，显示提示行
-                comparison_rows += f'''
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价信息</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
-                </tr>'''
+            # 定价行（从 target_product_data 提取我方数据）
+            our_free = ""
+            our_paid = ""
+            our_model = ""
+            if report.target_product_data and report.target_product_data.pricing_tiers:
+                tiers = report.target_product_data.pricing_tiers
+                free_tiers = [t for t in tiers if any(k in t.tier_name for k in ["免费", "免费版", "基础"])]
+                paid_tiers = [t for t in tiers if t not in free_tiers]
+                if free_tiers:
+                    our_free = free_tiers[0].price or "；".join(t.tier_name for t in free_tiers)
+                if paid_tiers:
+                    our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in paid_tiers[:3] if t.price)
+                our_model = "；".join(t.tier_name for t in tiers[:4]) if tiers else ""
 
-            # 市场份额行
+            if pi:
+                # 只显示有数据的行
+                if our_free or pi.free_tier:
+                    comparison_rows += f'''
+                    <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_free) if our_free else ''}</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else ''}</td>
+                    </tr>'''
+                if our_paid or pi.paid_tier:
+                    comparison_rows += f'''
+                    <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_paid) if our_paid else ''}</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else ''}</td>
+                    </tr>'''
+                if our_model or pi.pricing_model:
+                    comparison_rows += f'''
+                    <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_model) if our_model else ''}</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.pricing_model) if pi.pricing_model else ''}</td>
+                    </tr>'''
+
+            # 市场份额行（从 target_product_data 提取我方数据）
+            our_share = ""
+            our_trend = ""
+            if report.target_product_data and report.target_product_data.market_share:
+                our_share = report.target_product_data.market_share[:150]
+                our_trend = "上升"
+
             if ms:
-                share_display = esc(ms.share_estimate) if ms.share_estimate else no_data_label
-                comparison_rows += f'''
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{share_display}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{no_data_label}</td>
-                    <td style="padding:8px 14px;text-align:center;">{trend_icon(ms.trend)}</td>
-                </tr>'''
-            else:
-                comparison_rows += f'''
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
-                </tr>'''
+                if our_share or ms.share_estimate:
+                    comparison_rows += f'''
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;">市场份额</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_share) if our_share else ''}</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(ms.share_estimate) if ms.share_estimate else ''}</td>
+                    </tr>'''
+                if our_trend or ms.trend:
+                    comparison_rows += f'''
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 14px;font-size:13px;color:#64748b;">趋势</td>
+                        <td style="padding:8px 14px;font-size:13px;text-align:center;">{trend_icon(our_trend) if our_trend else ''}</td>
+                        <td style="padding:8px 14px;text-align:center;">{trend_icon(ms.trend) if ms.trend else ''}</td>
+                    </tr>'''
 
             # ── 优劣势分析 ──
             strengths_text = ""
@@ -758,14 +797,16 @@ class StrategyAgent(BaseAgent):
         pricing_html = ""
         if pricing_analysis and pricing_analysis.pricing_comparison:
             price_rows = ""
-            no_data_cell = '<span style="color:#94a3b8;font-size:12px;">暂无公开信息</span>'
             for pc in pricing_analysis.pricing_comparison:
+                # 跳过完全无数据的行
+                if not pc.free_tier and not pc.paid_tier and not pc.pricing_model:
+                    continue
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}{cite_sup(pc.citations)}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else no_data_cell}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else no_data_cell}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else ''}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else ''}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else ''}</td>
                 </tr>'''
 
             ranking_html = ""
@@ -979,7 +1020,7 @@ class StrategyAgent(BaseAgent):
             <!-- 定位声明 -->
             <div style="background:linear-gradient(135deg,#1e293b,#334155);border-radius:12px;padding:20px;margin-bottom:20px;color:#fff;">
                 <div style="font-size:12px;opacity:0.7;margin-bottom:6px;">定位声明</div>
-                <div style="font-size:16px;font-weight:600;line-height:1.6;">{esc(report.overall_positioning) if report.overall_positioning else '暂无'}</div>
+                <div style="font-size:16px;font-weight:600;line-height:1.6;">{esc(report.overall_positioning) if report.overall_positioning else ''}</div>
             </div>
 
             {unique_features_html}
@@ -1033,7 +1074,7 @@ class StrategyAgent(BaseAgent):
         risk_html = f'''
         <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
             <h2 style="margin:0 0 12px 0;font-size:20px;color:#1e293b;">⚠️ 风险评估</h2>
-            <p style="font-size:15px;line-height:1.8;color:#475569;margin:0;">{esc(report.risk_assessment) if report.risk_assessment else '暂无'}</p>
+            <p style="font-size:15px;line-height:1.8;color:#475569;margin:0;">{esc(report.risk_assessment) if report.risk_assessment else ''}</p>
         </div>'''
 
         # 三维摘要
