@@ -419,14 +419,18 @@ class CollectionAgent(BaseAgent):
             # 用 LLM 从补充搜索结果中提取缺失字段
             if all_extra_text and config.ENABLE_LLM:
                 prompts = load_prompts("collection_agent")
-                prompt = prompts["prompt_collect"].format(
+                # 在 prompt 末尾追加完整性要求，避免 LLM 再次截断
+                extract_prompt = prompts["prompt_collect"].format(
                     product_name=product_name,
                     product_description="",
                     competitor_name=comp_name,
                     search_results=all_extra_text[:6000],
                 )
-                result = self.ask_llm_json(prompt, max_tokens=4096)
+                extract_prompt += "\n\n### 重要：完整性要求\n每条文本字段必须以完整句子结尾（以句号、感叹号或问号结尾），禁止在句子中间截断。如果信息较多，请精简表述而非截断。"
+
+                result = self.ask_llm_json(extract_prompt, max_tokens=8192)
                 if result:
+                    still_truncated = []
                     for field_name in fields:
                         current_val = getattr(data, field_name, "")
                         is_empty = not current_val or not str(current_val).strip()
@@ -441,9 +445,25 @@ class CollectionAgent(BaseAgent):
                                 setattr(data, field_name, new_val)
                                 self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
                             elif isinstance(new_val, str) and len(new_val.strip()) > 5:
-                                # 截断字段：用新值替换旧值（新值来自新搜索，更完整）
+                                # 验证新值是否仍然截断
+                                if _is_truncated(new_val):
+                                    still_truncated.append(field_name)
+                                    self._log(f"   ⚠️ {comp_name}.{field_name} 补充后仍截断，保留新值")
                                 setattr(data, field_name, new_val)
                                 self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
+
+                    # 如果仍有截断，再尝试一次（只处理截断字段）
+                    if still_truncated:
+                        self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
+                        retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
+                        retry_result = self.ask_llm_json(retry_prompt, max_tokens=8192)
+                        if retry_result:
+                            for field_name in still_truncated:
+                                retry_val = retry_result.get(field_name, "")
+                                if retry_val and isinstance(retry_val, str) and len(retry_val.strip()) > 5:
+                                    setattr(data, field_name, retry_val)
+                                    status = "仍截断" if _is_truncated(retry_val) else "已修复"
+                                    self._log(f"   ✅ {comp_name}.{field_name} 二次补充{status}")
 
                     # 补充引用
                     data.citations.extend(extra_cites)
