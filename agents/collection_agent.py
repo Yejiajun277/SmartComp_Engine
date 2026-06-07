@@ -335,7 +335,7 @@ class CollectionAgent(BaseAgent):
     def supplement_missing_fields(self, product_name: str,
                                    competitors_data: dict[str, 'CompetitorData'],
                                    missing_fields: dict[str, list[str]]) -> dict[str, 'CompetitorData']:
-        """根据质检反馈的缺失字段，对特定竞品做针对性补充搜索。
+        """根据质检反馈的缺失/截断字段，对特定竞品做针对性补充搜索。
 
         Args:
             product_name: 我方产品名
@@ -354,6 +354,18 @@ class CollectionAgent(BaseAgent):
             "user_reviews": ["用户评价 口碑 评分 好评 差评", "用户反馈 评测"],
         }
 
+        def _is_truncated(text: str) -> bool:
+            """判断文本是否被截断"""
+            if not text or len(text.strip()) < 10:
+                return False
+            text = text.strip()
+            normal_endings = {"。", "！", "？", ".", "!", "?", "；", "」", "）", "》", "\"", "'", "…"}
+            if text[-1] in normal_endings:
+                return False
+            if len(text) > 50:
+                return True
+            return False
+
         for comp_name, fields in missing_fields.items():
             if comp_name not in competitors_data:
                 continue
@@ -363,17 +375,24 @@ class CollectionAgent(BaseAgent):
             extra_cites = []
             cite_counter = len(data.citations)
 
-            # 为每个缺失字段执行针对性搜索
+            # 为每个缺失/截断字段执行针对性搜索
             for field_name in fields:
-                # 检查是否真的需要补充（避免重复搜索已有数据）
+                # 检查是否真的需要补充
                 current_val = getattr(data, field_name, "")
-                if current_val and len(str(current_val).strip()) > 20:
-                    continue
+                is_empty = not current_val or not str(current_val).strip()
+                is_truncated = _is_truncated(str(current_val))
+
+                if not is_empty and not is_truncated:
+                    continue  # 字段有完整数据，跳过
+
+                if is_truncated:
+                    self._log(f"   🔍 补充搜索(截断): {comp_name} 的 {field_name}")
+                else:
+                    self._log(f"   🔍 补充搜索(缺失): {comp_name} 的 {field_name}")
 
                 queries = field_queries.get(field_name, [field_name])
                 actual_queries = [f"{comp_name} {q}" for q in queries]
 
-                self._log(f"   🔍 补充搜索: {comp_name} 的 {field_name}")
                 extra_results = self.search_client.batch_search(actual_queries)
 
                 for i, sr in enumerate(extra_results):
@@ -406,18 +425,23 @@ class CollectionAgent(BaseAgent):
                     competitor_name=comp_name,
                     search_results=all_extra_text[:6000],
                 )
-                result = self.ask_llm_json(prompt, max_tokens=2048)
+                result = self.ask_llm_json(prompt, max_tokens=4096)
                 if result:
-                    # 更新缺失字段
                     for field_name in fields:
                         current_val = getattr(data, field_name, "")
-                        if current_val and len(str(current_val).strip()) > 20:
+                        is_empty = not current_val or not str(current_val).strip()
+                        is_truncated = _is_truncated(str(current_val))
+
+                        if not is_empty and not is_truncated:
                             continue
+
                         new_val = result.get(field_name, "")
                         if new_val:
                             if isinstance(new_val, list):
                                 setattr(data, field_name, new_val)
+                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
                             elif isinstance(new_val, str) and len(new_val.strip()) > 5:
+                                # 截断字段：用新值替换旧值（新值来自新搜索，更完整）
                                 setattr(data, field_name, new_val)
                                 self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
 
