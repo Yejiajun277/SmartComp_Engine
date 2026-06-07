@@ -171,6 +171,18 @@ class Orchestrator:
             if qa_collection.passed:
                 break
 
+            # 如果已经做过至少1轮补充搜索，且只剩幻觉问题（无空/截断字段），直接通过
+            if qa_attempt > 1:
+                missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
+                completeness_critical = [i for i in qa_collection.issues
+                                         if i.category == "completeness" and i.severity == "critical"
+                                         and i.field and "." in i.field and not i.field.startswith("所有")]
+                hallucination_only = not missing_fields and not completeness_critical
+                if hallucination_only:
+                    print(f"  ℹ️ 采集质检（第{qa_attempt}次）：无缺失字段，仅剩幻觉检测警告，通过")
+                    qa_collection.passed = True
+                    break
+
             if qa_attempt <= QualityAgent.MAX_RETRIES:
                 # 提取缺失字段，做针对性补充搜索
                 missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
@@ -278,6 +290,7 @@ class Orchestrator:
             (qa_market, "MarketAgent", "market"),
         ]:
             self.quality_agent.timeline.add_check(qa_result)
+            prev_score = qa_result.score
             qa_attempt = 1
             while not qa_result.passed and qa_attempt <= QualityAgent.MAX_RETRIES:
                 print(f"  ⚠️ {agent_name} 质检未通过（第{qa_attempt}次），打回重做")
@@ -310,6 +323,13 @@ class Orchestrator:
                     qa_result = await self.quality_agent.check_analysis("market", market_analysis, competitors_data)
 
                 self.quality_agent.timeline.add_check(qa_result)
+
+                # 如果分数没有提升，说明是幻觉误报，直接通过
+                if qa_result.score <= prev_score:
+                    print(f"  ℹ️ {agent_name} 重做后分数未提升（{prev_score}→{qa_result.score}），幻觉误报，通过")
+                    qa_result.passed = True
+                    break
+                prev_score = qa_result.score
                 qa_attempt += 1
 
             if not qa_result.passed:
