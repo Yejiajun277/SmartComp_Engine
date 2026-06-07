@@ -757,34 +757,67 @@ class QualityAgent(BaseAgent):
             return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
         return "质检未通过，请检查输出完整性。"
 
-    def extract_missing_fields(self, result: QualityCheckResult) -> dict[str, list[str]]:
-        """从质检结果中提取每个竞品的缺失字段，供 CollectionAgent 做针对性补充搜索。
+    def extract_missing_fields(self, result: QualityCheckResult,
+                               competitors_data: dict[str, 'CompetitorData'] | None = None) -> dict[str, list[str]]:
+        """从质检结果和实际数据中提取每个竞品的缺失字段。
+
+        优先从 competitors_data 直接检测空字段（更可靠），
+        同时解析 issue field 格式作为补充。
 
         Returns:
             dict[str, list[str]]: {竞品名: [缺失字段名列表]}
-            字段名包括: strengths, weaknesses, channels, market_share, pricing_tiers, user_reviews
         """
         missing: dict[str, list[str]] = {}
-        # 可补充搜索的字段
-        supplementable = {"strengths", "weaknesses", "channels", "market_share", "pricing_tiers", "user_reviews"}
+        supplementable = {"strengths", "weaknesses", "channels", "market_share", "user_reviews"}
+        # pricing_tiers 单独处理（空列表 vs 空字符串）
+        pricing_check = {"pricing_tiers"}
 
+        # 方式1：直接检查数据（最可靠）
+        if competitors_data:
+            for name, data in competitors_data.items():
+                fields_to_supplement = []
+                for field_name in supplementable:
+                    val = getattr(data, field_name, "")
+                    if not val or not str(val).strip():
+                        fields_to_supplement.append(field_name)
+                # pricing_tiers 检查
+                if not data.pricing_tiers:
+                    fields_to_supplement.append("pricing_tiers")
+                if fields_to_supplement:
+                    missing[name] = fields_to_supplement
+
+        # 方式2：从 issue field 格式补充（处理幻觉检测标记的字段）
         for issue in result.issues:
-            if issue.category != "completeness":
+            if issue.severity != "critical":
                 continue
             field = issue.field
-            if not field or "." not in field:
+            if not field:
                 continue
-            # 格式: "竞品名.field_name" 或 "竞品名.field_name[x].subfield"
-            parts = field.split(".")
-            if len(parts) < 2:
-                continue
-            comp_name = parts[0]
-            field_name = parts[1].split("[")[0]  # 去掉索引
-            if field_name in supplementable:
-                if comp_name not in missing:
-                    missing[comp_name] = []
-                if field_name not in missing[comp_name]:
-                    missing[comp_name].append(field_name)
+            # 处理 "竞品名.field_name" 格式
+            if "." in field:
+                parts = field.split(".")
+                if len(parts) >= 2:
+                    comp_name = parts[0]
+                    field_name = parts[1].split("[")[0].split("、")[0]
+                    if field_name in supplementable | pricing_check:
+                        if comp_name not in missing:
+                            missing[comp_name] = []
+                        if field_name not in missing[comp_name]:
+                            missing[comp_name].append(field_name)
+            # 处理 "微信视频号.strengths、微信视频号.weaknesses" 格式
+            if "、" in field:
+                for sub in field.split("、"):
+                    sub = sub.strip()
+                    if "." in sub:
+                        parts = sub.split(".")
+                        if len(parts) >= 2:
+                            comp_name = parts[0]
+                            field_name = parts[1].split("[")[0]
+                            if field_name in supplementable | pricing_check:
+                                if comp_name not in missing:
+                                    missing[comp_name] = []
+                                if field_name not in missing[comp_name]:
+                                    missing[comp_name].append(field_name)
 
         return missing
 
