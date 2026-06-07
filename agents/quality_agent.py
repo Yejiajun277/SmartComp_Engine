@@ -813,7 +813,7 @@ class QualityAgent(BaseAgent):
             desc = issue.description or ""
             is_truncation = "截断" in desc or "未完成" in desc or "语义不完整" in desc
             is_empty = "为空" in desc or "缺失" in desc or "空白" in desc
-            is_hallucination = "幻觉" in desc or "unsupported" in desc.lower() or "虚构" in desc or "无依据" in desc
+            is_hallucination = "幻觉" in desc or "unsupported" in desc.lower() or "虚构" in desc or "无依据" in desc or "编造" in desc
 
             if not (is_truncation or is_empty or is_hallucination):
                 continue
