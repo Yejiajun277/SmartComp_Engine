@@ -759,51 +759,79 @@ class QualityAgent(BaseAgent):
 
     def extract_missing_fields(self, result: QualityCheckResult,
                                competitors_data: dict[str, 'CompetitorData'] | None = None) -> dict[str, list[str]]:
-        """从质检结果和实际数据中提取每个竞品的缺失字段。
+        """从质检结果和实际数据中提取每个竞品的缺失/截断字段。
 
-        优先从 competitors_data 直接检测空字段（更可靠），
-        同时解析 issue field 格式作为补充。
+        检测三种情况：
+        1. 字段为空
+        2. 字段内容被截断（末尾语义不完整）
+        3. 质检 issue 标记的幻觉/缺失字段
 
         Returns:
-            dict[str, list[str]]: {竞品名: [缺失字段名列表]}
+            dict[str, list[str]]: {竞品名: [需要补充的字段名列表]}
         """
         missing: dict[str, list[str]] = {}
         supplementable = {"strengths", "weaknesses", "channels", "market_share", "user_reviews"}
-        # pricing_tiers 单独处理（空列表 vs 空字符串）
         pricing_check = {"pricing_tiers"}
 
-        # 方式1：直接检查数据（最可靠）
+        def _is_truncated(text: str) -> bool:
+            """判断文本是否被截断（末尾语义不完整）"""
+            if not text or len(text.strip()) < 10:
+                return False
+            text = text.strip()
+            # 末尾不是正常标点结尾，且长度较长，大概率被截断
+            normal_endings = {"。", "！", "？", ".", "!", "?", "；", "」", "）", "》", "\"", "'", "…"}
+            if text[-1] in normal_endings:
+                return False
+            # 长文本且末尾无标点 → 截断
+            if len(text) > 50:
+                return True
+            return False
+
+        def _add_missing(comp_name: str, field_name: str):
+            if comp_name not in missing:
+                missing[comp_name] = []
+            if field_name not in missing[comp_name]:
+                missing[comp_name].append(field_name)
+
+        # 方式1：直接检查数据（空字段 + 截断字段）
         if competitors_data:
             for name, data in competitors_data.items():
-                fields_to_supplement = []
                 for field_name in supplementable:
                     val = getattr(data, field_name, "")
                     if not val or not str(val).strip():
-                        fields_to_supplement.append(field_name)
+                        _add_missing(name, field_name)
+                    elif _is_truncated(str(val)):
+                        _add_missing(name, field_name)
                 # pricing_tiers 检查
                 if not data.pricing_tiers:
-                    fields_to_supplement.append("pricing_tiers")
-                if fields_to_supplement:
-                    missing[name] = fields_to_supplement
+                    _add_missing(name, "pricing_tiers")
 
-        # 方式2：从 issue field 格式补充（处理幻觉检测标记的字段）
+        # 方式2：从 issue 中提取（空字段 + 截断字段 + 幻觉字段）
         for issue in result.issues:
             if issue.severity != "critical":
                 continue
+            desc = issue.description or ""
+            is_truncation = "截断" in desc or "未完成" in desc or "语义不完整" in desc
+            is_empty = "为空" in desc or "缺失" in desc or "空白" in desc
+            is_hallucination = "幻觉" in desc or "unsupported" in desc.lower() or "虚构" in desc or "无依据" in desc
+
+            if not (is_truncation or is_empty or is_hallucination):
+                continue
+
             field = issue.field
             if not field:
                 continue
-            # 处理 "竞品名.field_name" 格式
+
+            # 解析 field 中的竞品名和字段名
+            targets = []  # [(comp_name, field_name), ...]
+
             if "." in field:
                 parts = field.split(".")
                 if len(parts) >= 2:
                     comp_name = parts[0]
                     field_name = parts[1].split("[")[0].split("、")[0]
-                    if field_name in supplementable | pricing_check:
-                        if comp_name not in missing:
-                            missing[comp_name] = []
-                        if field_name not in missing[comp_name]:
-                            missing[comp_name].append(field_name)
+                    targets.append((comp_name, field_name))
+
             # 处理 "微信视频号.strengths、微信视频号.weaknesses" 格式
             if "、" in field:
                 for sub in field.split("、"):
@@ -811,13 +839,12 @@ class QualityAgent(BaseAgent):
                     if "." in sub:
                         parts = sub.split(".")
                         if len(parts) >= 2:
-                            comp_name = parts[0]
-                            field_name = parts[1].split("[")[0]
-                            if field_name in supplementable | pricing_check:
-                                if comp_name not in missing:
-                                    missing[comp_name] = []
-                                if field_name not in missing[comp_name]:
-                                    missing[comp_name].append(field_name)
+                            targets.append((parts[0], parts[1].split("[")[0]))
+
+            supplementable_all = supplementable | pricing_check
+            for comp_name, field_name in targets:
+                if field_name in supplementable_all:
+                    _add_missing(comp_name, field_name)
 
         return missing
 
