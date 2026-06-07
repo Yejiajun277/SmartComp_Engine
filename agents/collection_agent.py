@@ -260,7 +260,6 @@ class CollectionAgent(BaseAgent):
                 cite_counter += 1
 
         if extra_text and config.ENABLE_LLM:
-            from prompts.collection_agent import __file__ as _
             prompts = load_prompts("collection_agent")
             prompt = prompts["prompt_collect"].format(
                 product_name=product_name,

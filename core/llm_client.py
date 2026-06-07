@@ -219,6 +219,17 @@ def parse_llm_json(text: str) -> dict:
             return parsed
         parse_errors.append(error)
 
+    # Extra data修复：LLM有时在JSON后追加多余内容，找到最后一个]截断后重试
+    last_bracket = text.rfind("]")
+    if last_bracket > 0:
+        truncated = text[:last_bracket + 1]
+        first_bracket = truncated.find("[")
+        if first_bracket >= 0:
+            candidate = truncated[first_bracket:]
+            parsed, error = _try_parse_json(candidate, "last_array_fix", len(text))
+            if not error:
+                return parsed
+
     _last_call_error = parse_errors[-1] if parse_errors else f"json_parse_error(文本长度={len(text)})"
     print(f"  [LLM] ⚠️ JSON解析失败: {_last_call_error}")
     print(f"  [LLM] ⚠️ 原始文本前200字: {text[:200]}...")
