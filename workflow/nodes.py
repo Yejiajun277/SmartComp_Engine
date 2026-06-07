@@ -195,6 +195,10 @@ class AnalysisGraphNodes:
         timings = self._merge_timing(state, "collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
         search_texts = self.orchestrator.collection_agent.get_search_texts()
+        if not data and state.get("competitors_data"):
+            data = state["competitors_data"]
+        if not search_texts and state.get("original_search_texts"):
+            search_texts = state["original_search_texts"]
         return {
             "competitors_data": data,
             "original_search_texts": search_texts,

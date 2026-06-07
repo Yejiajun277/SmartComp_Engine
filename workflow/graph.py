@@ -27,6 +27,15 @@ def route_collection_quality(state: AnalysisState) -> str:
     return "exhausted"
 
 
+def route_after_collection_degraded(state: AnalysisState) -> str:
+    competitors = state.get("competitor_list")
+    competitors_data = state.get("competitors_data") or {}
+    target_data = state.get("target_product_data")
+    if competitors and competitors.competitors and competitors_data and target_data:
+        return "continue_degraded"
+    return "hard_failure"
+
+
 def route_analysis_quality(state: AnalysisState) -> str:
     for analysis_type in ("product", "pricing", "market"):
         result = state.get(f"qa_{analysis_type}")
@@ -113,7 +122,14 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2):
         },
     )
     graph.add_edge("prepare_collection_retry", "collect_competitors")
-    graph.add_edge("mark_collection_degraded", "fail_run")
+    graph.add_conditional_edges(
+        "mark_collection_degraded",
+        route_after_collection_degraded,
+        {
+            "continue_degraded": "generate_dimensions",
+            "hard_failure": "fail_run",
+        },
+    )
 
     graph.add_edge("generate_dimensions", "build_degradation_warning")
     graph.add_edge("build_degradation_warning", "run_product_analysis")
@@ -142,14 +158,11 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2):
     )
     graph.add_edge("prepare_product_retry", "rerun_product_analysis")
     graph.add_edge("rerun_product_analysis", "check_product_quality")
-    graph.add_edge("check_product_quality", "join_analysis_quality")
     graph.add_edge("prepare_pricing_retry", "rerun_pricing_analysis")
     graph.add_edge("rerun_pricing_analysis", "check_pricing_quality")
-    graph.add_edge("check_pricing_quality", "join_analysis_quality")
     graph.add_edge("prepare_market_retry", "rerun_market_analysis")
     graph.add_edge("rerun_market_analysis", "check_market_quality")
-    graph.add_edge("check_market_quality", "join_analysis_quality")
-    graph.add_edge("mark_analysis_degraded", "fail_run")
+    graph.add_edge("mark_analysis_degraded", "generate_strategy")
 
     graph.add_edge("generate_strategy", "check_strategy_quality")
     graph.add_conditional_edges(
@@ -162,7 +175,7 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2):
         },
     )
     graph.add_edge("prepare_strategy_retry", "generate_strategy")
-    graph.add_edge("mark_strategy_degraded", "fail_run")
+    graph.add_edge("mark_strategy_degraded", "finalize_report")
     graph.add_edge("finalize_report", END)
     graph.add_edge("fail_run", END)
 

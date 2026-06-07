@@ -66,6 +66,13 @@ async def run_analysis(product_description: str,
     # 打印统计
     orchestrator.print_stats()
 
+    if getattr(orchestrator, "_last_status", "") == "failed":
+        if orchestrator.artifact_store:
+            orchestrator.update_artifact_meta()
+            print("\nLangGraph workflow failed; no success HTML/JSON report was exported.")
+            print(f"Run archive: {orchestrator.run_dir}")
+        return report
+
     # 保存报告
     report_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),

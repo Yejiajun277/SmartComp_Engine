@@ -752,3 +752,231 @@ tests/
 ```
 
 最终迁移后，业务 Agent 仍保持“类 + Prompt + 数据模型”的定义方式；LangGraph 只替换编排层，把固定流程、条件分支、并发 fan-out 和 QA 回路从隐式 Python 控制流变成显式状态图。
+
+---
+
+# LangGraph 编排回归问题修复计划（2026-06-07）
+
+## 1. 问题现象摘要
+
+本次对比同一目标产品“飞书”的两次真实运行产物：
+
+- 旧版 Orchestrator 报告：`output/runs/20260606_101802_飞书/report.html`
+- LangGraph 报告：`output/runs/20260607_022320_飞书/report.html`
+
+已确认差异：
+
+- 旧版报告完整执行，`run_meta.json` 状态为 `completed`，`competitor_count=5`，timings 包含 `discovery`、`target_collection`、`collection`、`qa_collection`、`dimension`、`parallel_analysis`、`qa_analysis`、`strategy`、`qa_strategy`、`total`。
+- LangGraph 报告 `run_meta.json` 状态为 `failed`，`competitor_count=0`，timings 只包含 `discovery`、`target_collection`、`collection`、`qa_collection`。
+- LangGraph 运行目录已生成 `00_target_product_data.json`、`01_competitor_list.json`、`02_competitors_data.json`、`02_search_texts.json`，说明竞品发现和采集阶段已经产出有效数据。
+- LangGraph 运行目录没有 `03_dimension_config.json`、`04_product_analysis.json`、`05_pricing_analysis.json`、`06_market_analysis.json`、`07_strategy_report.json`，说明流程在 collection QA 后没有继续进入 dimension 和后续分析。
+- LangGraph 运行目录存在 `failed_state.json`，其中 `phase=collection`、`attempt=3`、`score=52.8`；`qa_timeline.json` 第三次 collection 检查 `degraded=true`。
+- `main.py` 仍然在 graph 失败后无条件渲染并保存 `report.html` 和 `report.json`，导致用户看到一个“看似成功但内容为空”的 HTML 报告。
+
+结论：这不是 HTML 模板问题，核心是 LangGraph collection QA 耗尽后的路由语义与旧版 Orchestrator 不等价，并且失败状态被外层报告导出逻辑伪装成普通报告。
+
+## 2. 初步根因假设
+
+已通过代码和运行产物确认的高可信根因：
+
+1. `workflow/graph.py` 中 `check_collection_quality -> exhausted -> mark_collection_degraded -> fail_run`，而旧版 `core/orchestrator.py::_analyze_legacy()` 在 collection QA 耗尽后设置 `qa_collection.degraded=True`，随后继续执行 `dimension`、三类并行分析、analysis QA、strategy 和 strategy QA。
+2. `workflow/nodes.py::mark_collection_degraded()` 只写入 `qa_collection`、`latest_feedback`、`quality_exhausted`，没有清空 `competitors_data`；竞品数据不是在该节点被覆盖，而是在 `fail_run` 生成空 `StrategyReport` 后没有进入后续节点。
+3. `workflow/nodes.py::fail_run()` 使用 `state.get("report") or StrategyReport(product_name=...)`；collection 阶段失败时 state 中尚无 strategy report，因此创建了 `competitor_count=0`、无分析模块、无 citation index 的空报告。
+4. `core/orchestrator.py::_analyze_langgraph()` 不检查 `state["status"] == "failed"`，直接返回 `state["report"]`。
+5. `main.py::run_analysis()` 不检查 orchestrator 的 run status，始终调用 `strategy_agent.format_html_report(...)` 并保存 run 目录和兼容路径下的 HTML/JSON。
+6. 现有 `tests/test_workflow_graph.py::test_quality_exhaustion_routes_to_structured_failure_exit` 把 collection QA 耗尽后失败退出作为预期，测试固化了与旧版不等价的行为。
+
+需要进一步验证的假设：
+
+- `AnalysisState` 中字段命名为 `competitor_list`、`competitors_data`、`dimension_config`、`report`，与用户描述中的 `competitors`、`competitor_data`、`dimensions`、`strategy_report` 存在命名映射差异；需要避免测试和诊断日志误读字段。
+- 现有 reducer 对 `timings` 和 `quality_exhausted` 使用 dict merge，对三类分析结果使用 `keep_latest`；没有发现 collection 路径上空 dict 覆盖已有 `competitors_data` 的直接证据，但应增加 state 完整性测试防止未来回归。
+
+## 3. 新旧流程差异
+
+实际命名映射：
+
+| 用户描述 | 当前真实代码字段/节点 |
+|---|---|
+| competitors | `competitor_list.competitors` |
+| competitor_data | `competitors_data` |
+| target_product_data | `target_product_data` |
+| citations | `target_product_data.citations`、`CompetitorData.citations`、`report.citation_index` |
+| dimensions | `dimension_config`、`product_sub_dims_text`、`pricing_sub_dims_text` |
+| strategy_report | `report` |
+| qa_feedback | `collection_feedback`、`product_feedback`、`pricing_feedback`、`market_feedback`、`strategy_feedback`、`latest_feedback` |
+| retry_counts | `collection_retry_count`、`product_retry_count`、`pricing_retry_count`、`market_retry_count`、`strategy_retry_count` |
+| degraded | `QualityCheckResult.degraded`、`quality_exhausted` |
+| execution_logs | 当前没有统一字段；已有 `timings`、`qa_checks`、`raw_llm_logs`、artifact files |
+| collect_competitor_data 节点 | `collect_competitors` |
+| qa_collection 节点 | `check_collection_quality` |
+| dimension 节点 | `generate_dimensions` |
+| strategy 节点 | `generate_strategy` |
+| export_report 节点 | `finalize_report` |
+| failure 节点 | `fail_run` |
+
+旧版 collection QA 语义：
+
+```text
+collection QA passed
+  -> dimension
+collection QA failed and retry remaining
+  -> build feedback -> rerun CollectionAgent -> collection QA
+collection QA failed and retry exhausted
+  -> mark qa_collection.degraded = True
+  -> dimension
+```
+
+当前 LangGraph collection QA 语义：
+
+```text
+check_collection_quality passed
+  -> generate_dimensions
+check_collection_quality failed and retry remaining
+  -> prepare_collection_retry -> collect_competitors -> check_collection_quality
+check_collection_quality failed and retry exhausted
+  -> mark_collection_degraded -> fail_run -> END
+```
+
+必须修正为旧版等价语义：collection QA 耗尽后若仍有有效 `competitor_list`、`competitors_data`、`target_product_data`，应降级继续进入 `generate_dimensions`，而不是直接失败。
+
+## 4. State 流转表
+
+| 节点 | 读取字段 | 写入字段 | 正常下一步 | 失败/重试下一步 | 重试耗尽下一步 | 是否允许覆盖已有竞品数据 | 是否允许导出 HTML |
+|---|---|---|---|---|---|---|---|
+| `discover_competitors` | `product_description`, `max_competitors` | `competitor_list`, `product_name`, `timings.discovery` | `collect_target_product` | 无竞品 -> `finalize_no_competitors` | 不适用 | 否 | 仅无竞品终止时允许导出空竞品报告 |
+| `collect_target_product` | `product_description`, `product_name` | `target_product_data`, `timings.target_collection` | `collect_competitors` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `collect_competitors` | `product_description`, `competitor_list`, `collection_feedback` | `competitors_data`, `original_search_texts`, `timings.collection` | `check_collection_quality` | 节点级 transient retry | 节点异常按 graph 失败处理 | 仅 CollectionAgent 重跑结果允许替换；不得以空 dict 覆盖已有有效数据，除非确认为业务硬失败 | 否 |
+| `check_collection_quality` | `competitors_data`, `original_search_texts`, `competitor_list`, `collection_retry_count` | `qa_collection`, `qa_checks`, `timings.qa_collection` | 通过 -> `generate_dimensions` | 未通过且未耗尽 -> `prepare_collection_retry` | 未通过且耗尽 -> `mark_collection_degraded` | 否 | 否 |
+| `mark_collection_degraded` | `qa_collection`, `quality_exhausted`, `competitors_data`, `competitor_list` | `qa_collection.degraded`, `latest_feedback`, `quality_exhausted.collection` | 修复后 -> `generate_dimensions` | 如缺少有效采集数据 -> `fail_run` | 修复后同正常降级继续 | 否 | 否 |
+| `generate_dimensions` | `product_description`, `competitor_list` | `dimension_config`, `product_sub_dims_text`, `pricing_sub_dims_text`, `timings.dimension` | `build_degradation_warning` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `analyze_product` / `run_product_analysis` | `product_name`, `competitors_data`, `target_product_data`, `product_sub_dims_text`, `product_feedback`, `degradation_warning` | `product_analysis`, `timings.product_analysis` | `join_parallel_analysis` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `analyze_pricing` / `run_pricing_analysis` | `product_name`, `competitors_data`, `target_product_data`, `pricing_sub_dims_text`, `pricing_feedback`, `degradation_warning` | `pricing_analysis`, `timings.pricing_analysis` | `join_parallel_analysis` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `analyze_market` / `run_market_analysis` | `product_name`, `competitors_data`, `target_product_data`, `market_feedback`, `degradation_warning` | `market_analysis`, `timings.market_analysis` | `join_parallel_analysis` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `join_parallel_analysis` | `product_analysis`, `pricing_analysis`, `market_analysis`, `parallel_started_perf_counter` | `timings.parallel_analysis`, `qa_started_perf_counter` | `check_product_quality`、`check_pricing_quality`、`check_market_quality` 并发 fan-out | 不适用 | 不适用 | 否 | 否 |
+| `qa_analysis` / `join_analysis_quality` | `qa_product`, `qa_pricing`, `qa_market`, `qa_checks` | `qa_checks`, `timings.qa_analysis` | 全通过 -> `generate_strategy` | 单项未通过且未耗尽 -> 对应 `prepare_*_retry` | 当前实现 -> `mark_analysis_degraded`；建议按旧版语义降级继续 `generate_strategy`，除非定义硬失败 | 否 | 否 |
+| `strategy` / `generate_strategy` | `product_name`, `competitor_list`, `product_analysis`, `pricing_analysis`, `market_analysis`, `target_product_data`, `competitors_data`, `strategy_feedback` | `report`, `timings.strategy` | `check_strategy_quality` | 节点级 transient retry | 节点异常按 graph 失败处理 | 否 | 否 |
+| `qa_strategy` / `check_strategy_quality` | `report`, `product_analysis`, `pricing_analysis`, `market_analysis`, `strategy_retry_count` | `qa_strategy`, `qa_checks`, `timings.qa_strategy` | 通过 -> `finalize_report` | 未通过且未耗尽 -> `prepare_strategy_retry` | 当前实现 -> `mark_strategy_degraded`；建议按旧版语义降级继续 `finalize_report`，除非定义硬失败 | 否 | 否 |
+| `export_report` / `finalize_report` | `report`, `quality_exhausted`, `qa_timeline`, `raw_llm_logs`, `timings` | `status`, `report.qa_timeline`, `report.raw_llm_logs`, `timings.total`, `_last_*`, artifacts | `END` | 不适用 | 不适用 | 否 | 是；仅当 `report` 来自 `generate_strategy` 且包含完整模块时允许普通成功报告 |
+| `failure` / `fail_run` | `qa_*`, `latest_feedback`, `quality_exhausted`, `report` | `status=failed`, `error`, `failure`, `failed_state.json` | `END` | 不适用 | 不适用 | 否 | 不允许生成普通成功 HTML；只允许失败摘要或不导出兼容报告 |
+| `END` | 最终 state | 无 | 无 | 无 | 无 | 否 | 取决于 `status`；`failed` 不允许伪成功报告 |
+
+## 5. qa_collection 条件路由表
+
+| 条件 | 当前路由 | 旧版等价路由 | 修复目标 |
+|---|---|---|---|
+| `qa_collection.passed is True` | `generate_dimensions` | `dimension` | 保持不变 |
+| `qa_collection.passed is False` 且 `collection_retry_count < QualityAgent.MAX_RETRIES` | `prepare_collection_retry` | 构造反馈后重跑 CollectionAgent | 保持不变 |
+| `qa_collection.passed is False` 且 retry 耗尽，且 state 中仍有有效 `competitor_list`、`competitors_data`、`target_product_data` | `mark_collection_degraded -> fail_run` | `qa_collection.degraded=True` 后继续 `dimension` | 改为 `mark_collection_degraded -> generate_dimensions` |
+| retry 耗尽且缺少有效采集数据，例如 `competitors_data` 为空或 `competitor_list.competitors` 为空 | `mark_collection_degraded -> fail_run` | 旧版没有显式硬失败分支 | 可保留 `fail_run`，但必须记录原因，且不生成普通成功报告 |
+
+## 6. 需要增加的诊断日志
+
+新增轻量级图诊断日志，建议放在 `workflow/nodes.py` 或独立 `workflow/diagnostics.py`，由环境变量控制，例如 `LANGGRAPH_DIAGNOSTICS=1`。日志不得输出 API Key、完整 Prompt、原始搜索大段文本或完整 LLM 响应。
+
+每个关键节点执行后记录一行结构化摘要：
+
+```json
+{
+  "node": "check_collection_quality",
+  "next_route": "mark_collection_degraded",
+  "competitors": 5,
+  "competitor_data": 5,
+  "citations": 84,
+  "dimensions": 0,
+  "product_analysis": false,
+  "pricing_analysis": false,
+  "market_analysis": false,
+  "strategy_report": false,
+  "retry_counts": {
+    "collection": 2,
+    "product": 0,
+    "pricing": 0,
+    "market": 0,
+    "strategy": 0
+  },
+  "status": "running",
+  "degraded": {
+    "collection": true
+  },
+  "qa_feedback_summary": "CollectionAgent score=52.8, issues=12, first_issue=WPS 365..."
+}
+```
+
+实现要求：
+
+- `next_route` 只在 route 函数或节点边界记录路由名，不记录 prompt。
+- `citations` 统计 `target_product_data.citations + sum(competitors_data[*].citations)`，不输出 URL 列表。
+- `dimensions` 统计 `len(product_sub_dimensions) + len(pricing_sub_dimensions)`。
+- `qa_feedback_summary` 截断到 200 字以内，只保留 phase、score、issue 数量和第一条 issue 的字段名/类别。
+- 写入位置优先使用 run artifact，例如 `langgraph_diagnostics.jsonl`；CLI 只在 verbose/diagnostics 开启时打印。
+
+## 7. 需要新增或修改的测试
+
+1. 正常路径 mock 测试：collection QA 一次通过；断言 `generate_dimensions`、三类分析、analysis QA、strategy、strategy QA 均执行；最终报告包含至少一个竞品；HTML 包含目标产品介绍、竞品发现、逐竞品对比、功能矩阵、定价分析、市场分析、策略建议和数据来源。
+2. collection QA 失败一次后通过：断言重新执行采集，第二次 CollectionAgent 收到 `collection_feedback`，`competitors_data` 和 citations 未被清空，后续节点完整执行。
+3. collection QA 达到最大重试次数后部分降级通过：mock `[False, False, False]`；断言 `qa_collection.degraded is True`、`quality_exhausted.collection is True`、竞品数量仍大于 0、继续执行 dimension 和三类并行分析、不提前进入 `fail_run` 或 END，最终报告不是空壳 HTML。
+4. collection QA 耗尽后的硬失败出口：构造 collection 输出为空或缺少有效 `competitors_data` 的不可继续场景；断言进入 `fail_run`，`status=failed`，不写普通成功 HTML/兼容报告。
+5. State 字段完整性：每个关键节点后检查 `competitor_list`、`competitors_data`、`target_product_data`、citations 数量不因局部 state 更新丢失；空 list/dict 不得意外覆盖有效数据。
+6. HTML 结构回归：给定有效 report 和分析对象，头部不允许显示“分析竞品 0 个”，必须生成竞品发现列表、逐竞品比较表、功能矩阵、数据来源附录。
+7. 并发验证：mock 三类分析节点各 sleep 固定时间并记录 start/end；断言时间区间重叠，总耗时接近单个节点耗时，不接近三者之和。
+8. 同输入新旧对照：使用固定 fixture/fake agents 分别运行 `USE_LANGGRAPH_WORKFLOW=0` 和默认 LangGraph；不要求 LLM 文本逐字一致，但要求竞品数量、target intro、三类分析对象、citation index、QA timeline 阶段集合基本一致。
+9. 真实 API 验证：使用 `smartcomp-engine-dev` 环境和当前 `.env` 跑一次 `conda run -n smartcomp-engine-dev --no-capture-output python main.py "飞书"`；不得输出 API Key；若真实 API 不可用，必须记录具体错误，不得声称验证成功。
+
+## 8. 建议修复顺序与验收标准
+
+1. 先补诊断日志，不改变业务路由。
+   - 验收：复现 LangGraph “飞书”问题时能在 `langgraph_diagnostics.jsonl` 中看到 `check_collection_quality -> mark_collection_degraded -> fail_run`，且 competitors/competitors_data/citations 在进入 `fail_run` 前仍大于 0。
+2. 修改 collection QA 耗尽后的降级路由。
+   - 将有效采集数据存在时的 `mark_collection_degraded` 后继从 `fail_run` 改为 `generate_dimensions`。
+   - 验收：mock `[False, False, False]` 下继续执行 dimension、三类分析、strategy，最终不是空壳报告。
+3. 审核并统一 analysis QA、strategy QA 的耗尽语义。
+   - 旧版对 Product/Pricing/Market 和 Strategy 的 QA 耗尽也是降级继续，不是失败终止。
+   - 若目标是“尽可能保持旧行为不变”，应把 `mark_analysis_degraded` 路由到 `generate_strategy`，把 `mark_strategy_degraded` 路由到 `finalize_report`。
+   - 验收：对应耗尽测试证明不会无限循环，且不会跳过必要报告生成。
+4. 修复失败状态下的伪成功导出。
+   - `_analyze_langgraph()` 或 `main.run_analysis()` 必须识别 `status=failed`。
+   - 失败时不允许保存普通成功 HTML/JSON 到 run 目录或兼容路径；如要输出，必须是明确失败报告或只保存 `failed_state.json`。
+   - 验收：硬失败测试中没有“分析竞品 0 个”的伪成功 HTML。
+5. 强化 HTML 模块完整性测试。
+   - 验收：当 state 中有有效竞品和分析结果时，HTML 必须包含核心模块；当 graph 未完成时，测试必须失败而不是只检查 `<!DOCTYPE html>`。
+6. 真实 API 回归。
+   - 使用更新后的 API Key 跑“飞书”。
+   - 验收：`run_meta.status` 为 `completed` 或 `completed_degraded`；`competitor_count > 0`；timings 包含 dimension、parallel_analysis、qa_analysis、strategy、qa_strategy、total；HTML 不为空壳。
+
+## 9. Mock、真实 API 与回滚策略
+
+使用 mock 的步骤：
+
+- 路由语义测试。
+- State 字段完整性测试。
+- HTML 结构回归测试。
+- 并发重叠测试。
+- 同输入新旧对照 fixture 测试。
+
+必须真实 API 的步骤：
+
+- 最终 “飞书” LangGraph LLM 模式 smoke。
+- 如需要对照旧版，也使用 `USE_LANGGRAPH_WORKFLOW=0` 跑一次旧版 LLM 模式。
+- 不在日志、PLAN 或测试输出中打印 `.env`、`DOUBAO_API_KEY`、Authorization header。
+
+旧版 Orchestrator 回滚路径：
+
+- 保留 `Orchestrator._analyze_legacy()`。
+- 保留 `USE_LANGGRAPH_WORKFLOW=0`/`false`/`no`/`off` feature flag。
+- 修复期间若真实 API LangGraph 仍失败，可用旧版路径生成生产报告，但必须在 run_meta 中明确 `use_langgraph_workflow=false`。
+
+## 10. 防止错误修复方向
+
+禁止的修复方式：
+
+- 不要只修改 HTML 模板隐藏“分析竞品 0 个”。
+- 不要硬编码默认竞品、默认目标产品介绍或默认策略建议。
+- 不要删除 QualityAgent 或取消最大重试次数。
+- 不要通过忽略 QA 结果来绕过路由问题。
+- 不要更换 Doubao LLM 或修改 prompts 的业务语义。
+
+必须解决的根因：
+
+- collection QA 耗尽后的 LangGraph 路由必须与旧版“降级继续”语义一致，除非明确检测到不可继续的硬失败。
+- failed state 不能被 `main.py` 当作普通成功报告导出。
+- 测试必须覆盖模块完整性和 state 完整性，而不是只验证 graph 能结束。

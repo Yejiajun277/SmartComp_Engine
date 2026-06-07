@@ -18,6 +18,7 @@ from core.artifact_store import to_jsonable
 from core.orchestrator import Orchestrator
 from models.domain import (
     ActionItem,
+    Citation,
     CompetitorData,
     CompetitorInfo,
     CompetitorList,
@@ -64,6 +65,14 @@ def competitor_data(name):
         strengths="Strong workflow coverage.",
         weaknesses="Setup is complex.",
         channels="Direct sales and partners.",
+        citations=[
+            Citation(
+                id=f"{name}:source:1",
+                title=f"{name} source",
+                url=f"https://example.com/{name.lower()}",
+                competitor=name,
+            )
+        ],
     )
 
 
@@ -280,6 +289,12 @@ class FakeStrategyAgent:
         report = strategy_report()
         report.competitor_count = args[1]
         report.target_product_data = kwargs.get("target_product_data")
+        if report.target_product_data:
+            for citation in report.target_product_data.citations:
+                report.citation_index.add(citation)
+        for data in (kwargs.get("competitors_data") or {}).values():
+            for citation in data.citations:
+                report.citation_index.add(citation)
         return report
 
     def format_report(self, report):

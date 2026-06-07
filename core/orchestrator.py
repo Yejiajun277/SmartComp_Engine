@@ -96,6 +96,8 @@ class Orchestrator:
             fail_on_quality_exhausted=True,
             node_retries=config.LANGGRAPH_NODE_RETRIES,
         )
+        self._last_graph_state = state
+        self._last_status = state.get("status", "")
         report = state.get("report")
         if report is None:
             report = StrategyReport(product_name=state.get("product_name", product_description))

@@ -4,8 +4,11 @@
 import contextlib
 import io
 import unittest
+from unittest.mock import patch
 
 import config
+import main
+from models.domain import StrategyReport
 from tests.test_orchestrator_baseline import make_orchestrator
 
 
@@ -49,6 +52,51 @@ class OrchestratorFacadeTests(unittest.IsolatedAsyncioTestCase):
             ["collection", "product", "pricing", "market", "strategy"],
         )
         self.assertEqual(orch._last_competitor_list.product_name, "Target")
+
+    async def test_main_does_not_export_success_report_when_graph_failed(self):
+        class FailedArtifactStore:
+            def __init__(self):
+                self.saved = []
+
+            def save_text(self, name, text):
+                self.saved.append(("text", name))
+                raise AssertionError("failed workflow must not save success HTML")
+
+            def save_json(self, name, data):
+                self.saved.append(("json", name))
+                raise AssertionError("failed workflow must not save success JSON")
+
+        class FailedOrchestrator:
+            last_instance = None
+
+            def __init__(self):
+                FailedOrchestrator.last_instance = self
+                self.strategy_agent = make_orchestrator().strategy_agent
+                self.artifact_store = FailedArtifactStore()
+                self.run_dir = "failed-run"
+                self._last_status = "failed"
+                self.meta_updated = False
+
+            async def analyze(self, product_description, max_competitors):
+                return StrategyReport(product_name="Target")
+
+            def print_stats(self):
+                pass
+
+            def get_timings(self):
+                return {}
+
+            def update_artifact_meta(self):
+                self.meta_updated = True
+
+        stdout = io.StringIO()
+        with patch.object(main, "Orchestrator", FailedOrchestrator):
+            with contextlib.redirect_stdout(stdout):
+                report = await main.run_analysis("Target product", use_llm=False, max_competitors=2)
+
+        self.assertEqual(report.product_name, "Target")
+        self.assertTrue(FailedOrchestrator.last_instance.meta_updated)
+        self.assertEqual(FailedOrchestrator.last_instance.artifact_store.saved, [])
 
 
 if __name__ == "__main__":
