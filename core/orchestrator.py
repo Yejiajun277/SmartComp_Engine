@@ -155,6 +155,8 @@ class Orchestrator:
         print(f"\n  ⏱️ 采集耗时: {self.timings['collection']:.2f}s")
         print(f"  📊 采集完成: {len(competitors_data)}个竞品")
 
+        product_name = competitor_list.product_name
+
         # ── Phase 2 QA: 采集数据质检（精细化补充搜索）──
         qa_start = time.time()
         original_search_texts = self.collection_agent.get_search_texts()
@@ -171,7 +173,7 @@ class Orchestrator:
 
             if qa_attempt <= QualityAgent.MAX_RETRIES:
                 # 提取缺失字段，做针对性补充搜索
-                missing_fields = self.quality_agent.extract_missing_fields(qa_collection)
+                missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
 
                 if missing_fields:
                     total_missing = sum(len(fs) for fs in missing_fields.values())
@@ -226,8 +228,6 @@ class Orchestrator:
         print(f"{'█' * 65}")
 
         phase3_start = time.time()
-
-        product_name = competitor_list.product_name
 
         # ── 构造降级警告（如有）──
         degradation_warning = ""
