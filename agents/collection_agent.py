@@ -375,17 +375,20 @@ class CollectionAgent(BaseAgent):
             extra_cites = []
             cite_counter = len(data.citations)
 
-            # 为每个缺失/截断字段执行针对性搜索
+            # 为每个缺失/截断/幻觉字段执行针对性搜索
             for field_name in fields:
-                # 检查是否真的需要补充
                 current_val = getattr(data, field_name, "")
                 is_empty = not current_val or not str(current_val).strip()
                 is_truncated = _is_truncated(str(current_val))
 
+                # 幻觉字段：有内容但被QA标记为编造，需要清空后重新提取
                 if not is_empty and not is_truncated:
-                    continue  # 字段有完整数据，跳过
-
-                if is_truncated:
+                    self._log(f"   🔍 补充搜索(幻觉): {comp_name} 的 {field_name}，清空编造内容后重新提取")
+                    if field_name == "pricing_tiers":
+                        setattr(data, field_name, [])
+                    else:
+                        setattr(data, field_name, "")
+                elif is_truncated:
                     self._log(f"   🔍 补充搜索(截断): {comp_name} 的 {field_name}")
                 else:
                     self._log(f"   🔍 补充搜索(缺失): {comp_name} 的 {field_name}")
@@ -426,7 +429,7 @@ class CollectionAgent(BaseAgent):
                     competitor_name=comp_name,
                     search_results=all_extra_text[:6000],
                 )
-                extract_prompt += "\n\n### 重要：完整性要求\n每条文本字段必须以完整句子结尾（以句号、感叹号或问号结尾），禁止在句子中间截断。如果信息较多，请精简表述而非截断。"
+                extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
 
                 result = self.ask_llm_json(extract_prompt, max_tokens=8192)
                 if result:
