@@ -59,6 +59,7 @@ class QualityAgent(BaseAgent):
         self._prompt_check_strategy = prompts["prompt_check_strategy"]
         self._prompt_build_feedback = prompts["prompt_build_feedback"]
         self.timeline = QATimeline(max_retries=self.MAX_RETRIES)
+        self._passed_fields: set[str] = set()  # 已通过质检的字段，避免重复标记
 
     async def run(self, *args, **kwargs):
         """不直接调用，请使用 check_collection / check_analysis / check_strategy"""
@@ -86,7 +87,14 @@ class QualityAgent(BaseAgent):
             hallucination_issues, hallucination_status, fail_reason = await self._check_collection_hallucination(
                 competitors_data, original_search_texts
             )
-            issues.extend(hallucination_issues)
+            # 过滤掉已通过的字段（避免重复标记同一字段为幻觉）
+            new_hallucination = []
+            for hi in hallucination_issues:
+                if hi.field and hi.field not in self._passed_fields:
+                    new_hallucination.append(hi)
+                elif not hi.field:
+                    new_hallucination.append(hi)
+            issues.extend(new_hallucination)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
                     severity="warning", category="hallucination",
@@ -133,6 +141,24 @@ class QualityAgent(BaseAgent):
             hallucination_status=hallucination_status,
             hallucination_score=h_score,
         )
+
+        # 记录已通过的字段（避免下一轮重复标记为幻觉）
+        if passed:
+            for name, data in competitors_data.items():
+                for field_name in ["strengths", "weaknesses", "channels", "market_share", "user_reviews"]:
+                    val = getattr(data, field_name, "")
+                    if val and len(str(val).strip()) > 10:
+                        self._passed_fields.add(f"{name}.{field_name}")
+        else:
+            # 未通过时，记录本轮没有幻觉问题的字段为"已通过"
+            halluc_fields = {i.field for i in issues if i.category == "hallucination" and i.field}
+            for name, data in competitors_data.items():
+                for field_name in ["strengths", "weaknesses", "channels", "market_share", "user_reviews"]:
+                    field_key = f"{name}.{field_name}"
+                    if field_key not in halluc_fields:
+                        val = getattr(data, field_name, "")
+                        if val and len(str(val).strip()) > 10:
+                            self._passed_fields.add(field_key)
 
         status = "✅ 通过" if passed else "❌ 未通过"
         self._log(f"   采集数据质检: {status} (分数: {score}, 问题: {len(issues)})")
