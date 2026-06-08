@@ -40,17 +40,13 @@ def print_banner():
 
 async def run_analysis(product_description: str,
                        use_llm: bool = True,
-                       max_competitors: int = config.DEFAULT_COMPETITOR_COUNT,
-                       skip_qa: bool = False):
+                       max_competitors: int = config.DEFAULT_COMPETITOR_COUNT):
     """运行竞品分析"""
     config.ENABLE_LLM = use_llm
-    config.SKIP_QA = skip_qa
 
     print_banner()
     decision_mode = "🧠 LLM智能分析" if use_llm else "📋 规则引擎分析"
     print(f"  决策模式: {decision_mode}")
-    if skip_qa:
-        print(f"  🐛 调试模式: 已启用（跳过质检）")
     if use_llm:
         from core.llm_client import check_llm_backend
         backend = check_llm_backend()
@@ -69,6 +65,13 @@ async def run_analysis(product_description: str,
 
     # 打印统计
     orchestrator.print_stats()
+
+    if getattr(orchestrator, "_last_status", "") == "failed":
+        if orchestrator.artifact_store:
+            orchestrator.update_artifact_meta()
+            print("\nLangGraph workflow failed; no success HTML/JSON report was exported.")
+            print(f"Run archive: {orchestrator.run_dir}")
+        return report
 
     # 保存报告
     report_dir = os.path.join(
@@ -119,11 +122,6 @@ if __name__ == "__main__":
         args.remove("--rule")
     use_llm = not use_rule
 
-    # 解析 --debug 标志（跳过质检）
-    use_debug = "--debug" in args
-    if use_debug:
-        args.remove("--debug")
-
     # 解析 --count 标志
     max_competitors = config.DEFAULT_COMPETITOR_COUNT
     if "--count" in args:
@@ -153,7 +151,6 @@ if __name__ == "__main__":
 ║  python3 main.py "产品名"       默认：豆包LLM智能分析        ║
 ║  python3 main.py --rule "产品名"  规则引擎模式（零依赖）     ║
 ║  python3 main.py --count 5 "产品名" 指定竞品数量(3~8)       ║
-║  python3 main.py --debug "产品名" 调试模式（跳过质检）       ║
 ║  python3 main.py --verbose "产品名" 详细模式                 ║
 ║  python3 main.py help           显示帮助                     ║
 ║                                                              ║
@@ -196,5 +193,4 @@ if __name__ == "__main__":
 
     # 运行分析
     asyncio.run(run_analysis(product_description, use_llm=use_llm,
-                              max_competitors=max_competitors,
-                              skip_qa=use_debug))
+                              max_competitors=max_competitors))
