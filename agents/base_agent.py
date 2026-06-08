@@ -90,7 +90,7 @@ class BaseAgent(ABC):
         return {}, reason
 
     @staticmethod
-    def build_citations_text(citations: list) -> str:
+    def build_citations_text(citations: list, with_snippet: bool = True, max_snippet: int = 200) -> str:
         """将引用列表格式化为 LLM 可读的来源编号文本"""
         if not citations:
             return ""
@@ -101,6 +101,10 @@ class BaseAgent(ABC):
                 line += f" ({c.site_name})"
             if c.url:
                 line += f" — {c.url}"
+            if with_snippet and c.snippet:
+                snippet = c.snippet[:max_snippet].replace("\n", " ").strip()
+                if snippet:
+                    line += f"\n    内容摘要: {snippet}"
             lines.append(line)
         return "\n".join(lines)
 
