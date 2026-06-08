@@ -52,7 +52,13 @@ SEARCH_MAX_OUTPUT_TOKENS = int(os.environ.get("SEARCH_MAX_OUTPUT_TOKENS", "2048"
 # 系统模式配置
 # ========================
 ENABLE_LLM = True
-SKIP_QA = False  # --debug 模式下跳过所有质检
+USE_LANGGRAPH_WORKFLOW = os.environ.get("USE_LANGGRAPH_WORKFLOW", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+LANGGRAPH_NODE_RETRIES = int(os.environ.get("LANGGRAPH_NODE_RETRIES", "2"))
 
 
 # ========================

@@ -274,32 +274,11 @@ class QATimeline:
 
 
 @dataclass
-class IntroItem:
-    """目标产品介绍中的单个摘要项"""
-    title: str = ""
-    summary: str = ""
-    citations: list[str] = field(default_factory=list)
-
-
-@dataclass
-class TargetProductIntro:
-    """目标产品介绍的结构化摘要"""
-    hero_summary: str = ""
-    core_capabilities: list[IntroItem] = field(default_factory=list)
-    monetization: list[IntroItem] = field(default_factory=list)
-    market_user: list[IntroItem] = field(default_factory=list)
-    strengths: list[IntroItem] = field(default_factory=list)
-    weaknesses: list[IntroItem] = field(default_factory=list)
-    channel: IntroItem | None = None
-
-
-@dataclass
 class StrategyReport:
     """策略建议报告（最终输出）"""
     product_name: str                       # 产品名称
     competitor_count: int = 0               # 竞品数量
     target_product_data: CompetitorData | None = None  # 目标产品自身采集数据
-    target_product_intro: TargetProductIntro | None = None  # 目标产品介绍摘要
     overall_positioning: str = ""           # 整体定位
     differentiation_strategy: dict = field(default_factory=dict)
     action_plan: list[ActionItem] = field(default_factory=list)
