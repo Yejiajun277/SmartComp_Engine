@@ -1069,13 +1069,23 @@ class StrategyAgent(BaseAgent):
             our_model = ""
             if report.target_product_data and report.target_product_data.pricing_tiers:
                 tiers = report.target_product_data.pricing_tiers
-                free_tiers = [t for t in tiers if any(k in t.tier_name for k in ["免费", "免费版", "基础"])]
-                paid_tiers = [t for t in tiers if t not in free_tiers]
-                if free_tiers:
-                    our_free = free_tiers[0].price or "；".join(t.tier_name for t in free_tiers)
-                if paid_tiers:
-                    our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in paid_tiers[:3] if t.price)
-                our_model = "；".join(t.tier_name for t in tiers[:4]) if tiers else ""
+                # 从所有定价层级中提取信息
+                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
+                for t in tiers:
+                    tn = t.tier_name or ""
+                    tp = t.price or ""
+                    combined = tn + tp
+                    if any(k in combined for k in free_keywords) and not our_free:
+                        our_free = tp or tn
+                    elif tp and not our_paid:
+                        our_paid = tp
+                # 如果没有明确的免费/付费区分，用第一个tier的价格作为付费信息
+                if not our_paid and tiers:
+                    for t in tiers:
+                        if t.price:
+                            our_paid = t.price
+                            break
+                our_model = "；".join(t.tier_name for t in tiers[:4] if t.tier_name) if tiers else ""
 
             if pi:
                 comparison_rows += f'''
@@ -1250,12 +1260,21 @@ class StrategyAgent(BaseAgent):
                 our_free = ""
                 our_paid = ""
                 our_model = ""
+                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
                 for t in tpd.pricing_tiers:
-                    if any(k in t.tier_name for k in ["免费", "基础"]):
-                        our_free = our_free or t.price or t.tier_name
-                    elif t.price:
-                        our_paid += f"{t.tier_name}: {t.price}；"
-                our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4])
+                    tn = t.tier_name or ""
+                    tp = t.price or ""
+                    combined = tn + tp
+                    if any(k in combined for k in free_keywords) and not our_free:
+                        our_free = tp or tn
+                    elif tp and not our_paid:
+                        our_paid = tp
+                if not our_paid and tpd.pricing_tiers:
+                    for t in tpd.pricing_tiers:
+                        if t.price:
+                            our_paid = t.price
+                            break
+                our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4] if t.tier_name)
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#f0fdf4;">
                     <td style="padding:10px 16px;font-weight:600;font-size:13px;color:#166534;">⭐ {esc(report.product_name)}（我方）</td>
