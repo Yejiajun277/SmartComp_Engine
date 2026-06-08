@@ -162,6 +162,7 @@ class StrategyAgent(BaseAgent):
                 result.append(cid)
         return result
 
+
     @staticmethod
     def _find_feature_value(values_dict: dict, target_name: str) -> str:
         """从 feature_matrix.values 中查找我方产品状态，兼容模糊键名。"""
@@ -444,7 +445,7 @@ class StrategyAgent(BaseAgent):
         diff_points = product_analysis.differentiation_points[:3] if product_analysis.differentiation_points else []
         diff_text = "、".join(diff_points) if diff_points else "需进一步分析"
 
-        return StrategyReport(
+        report = StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
             target_product_data=target_product_data,
@@ -468,6 +469,7 @@ class StrategyAgent(BaseAgent):
             summary="基于SWOT模板的简单策略建议（建议启用LLM获得深度分析）",
             citation_index=citation_index or CitationIndex(),
         )
+        return report
 
     def format_report(self, report: StrategyReport) -> str:
         """格式化策略报告为可读文本"""
@@ -635,6 +637,8 @@ class StrategyAgent(BaseAgent):
                 return '<span style="color:#ef4444;font-size:18px;">❌</span>'
             elif v in ("🔶", "△", "部分", "部分支持"):
                 return '<span style="color:#f59e0b;font-size:18px;">🔶</span>'
+            elif v in ("⚪", "数据不足"):
+                return '<span style="color:#94a3b8;font-size:18px;">⚪</span>'
             else:
                 return f'<span style="color:#64748b;">{esc(v)}</span>'
 
@@ -707,6 +711,7 @@ class StrategyAgent(BaseAgent):
                 if num:
                     cite = report.citation_index.get(cid)
                     if cite:
+                        used_cite_ids.add(cid)
                         parts.append(
                             f'<sup><a href="#cite-{cid}" title="{esc(cite.title)} - {esc(cite.url)}" '
                             f'style="color:#3b82f6;text-decoration:none;font-size:11px;">[{num}]</a></sup>'
@@ -845,14 +850,22 @@ class StrategyAgent(BaseAgent):
                     return clean
                 return clean[:limit].rstrip("，。；;、 ") + "..."
 
-            def pick_citation_ids(keywords: list[str], limit: int = 2) -> list[str]:
+            def pick_citation_ids(keywords: list[str], limit: int = 3) -> list[str]:
                 ids = []
+                # 优先按关键词匹配
                 for cite in data.citations:
                     query = cite.query or ""
                     if any(k in query for k in keywords):
                         ids.append(cite.id)
                     if len(ids) >= limit:
                         break
+                # 匹配不足时，用该竞品的前几条兜底
+                if len(ids) < limit:
+                    for cite in data.citations:
+                        if cite.id not in ids:
+                            ids.append(cite.id)
+                        if len(ids) >= limit:
+                            break
                 return ids
 
             def cite_near(field_ids: list[str], keywords: list[str], limit: int = 2) -> str:
@@ -973,6 +986,7 @@ class StrategyAgent(BaseAgent):
 
         # 构建全局引用编号映射（cid → 1-based 序号）
         global_cite_num: dict[str, int] = {}
+        used_cite_ids: set[str] = set()
         if report.citation_index and report.citation_index.citations:
             for idx, cid in enumerate(report.citation_index.citations.keys(), 1):
                 global_cite_num[cid] = idx
@@ -1138,22 +1152,15 @@ class StrategyAgent(BaseAgent):
                     <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
-            # ── 优劣势分析 ──
-            strengths_text = ""
-            weaknesses_text = ""
+            # ── 优劣势分析（只用 ProductAgent 的对比结论）──
             our_adv_text = ""
             their_adv_text = ""
 
-            if cd:
-                if cd.strengths:
-                    strengths_text = strip_source_text(cd.strengths)
-                if cd.weaknesses:
-                    weaknesses_text = strip_source_text(cd.weaknesses)
             if adv:
                 our_adv_text = strip_source_text(adv.our_advantage)
                 their_adv_text = strip_source_text(adv.their_advantage)
 
-            # 优劣势区块
+            # 优劣势区块（只保留 ProductAgent 分析的对比结论，去除原始采集的重复数据）
             swot_section = ""
             swot_parts = []
 
@@ -1161,7 +1168,7 @@ class StrategyAgent(BaseAgent):
                 swot_parts.append(f'''
                 <div style="flex:1;min-width:200px;">
                     <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方优势</div>
+                        <div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:4px;">🛡️ 我方长处</div>
                         <div style="font-size:13px;color:#15803d;line-height:1.6;">{esc(our_adv_text)}</div>
                     </div>
                 </div>''')
@@ -1169,24 +1176,8 @@ class StrategyAgent(BaseAgent):
                 swot_parts.append(f'''
                 <div style="flex:1;min-width:200px;">
                     <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
+                        <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方长处</div>
                         <div style="font-size:13px;color:#b91c1c;line-height:1.6;">{esc(their_adv_text)}</div>
-                    </div>
-                </div>''')
-            if strengths_text:
-                swot_parts.append(f'''
-                <div style="flex:1;min-width:200px;">
-                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
-                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">{esc(strengths_text)}</div>
-                    </div>
-                </div>''')
-            if weaknesses_text:
-                swot_parts.append(f'''
-                <div style="flex:1;min-width:200px;">
-                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
-                        <div style="font-size:13px;color:#b45309;line-height:1.6;">{esc(weaknesses_text)}</div>
                     </div>
                 </div>''')
 
@@ -1243,7 +1234,7 @@ class StrategyAgent(BaseAgent):
                     </table>
                 </div>
                 <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:#94a3b8;">
-                    <span>✅ 支持</span><span>🔶 部分支持</span><span>❌ 不支持</span><span>❓ 未知</span>
+                    <span>✅ 支持</span><span>🔶 部分支持</span><span>⚪ 数据不足</span><span>❌ 不支持</span>
                 </div>
             </div>'''
 
@@ -1677,12 +1668,16 @@ class StrategyAgent(BaseAgent):
                 {qa_checks_html}
             </div>'''
 
-        # 数据来源附录
+        # 数据来源附录（只保留正文实际引用的条目）
         references_html = ""
         if report.citation_index and report.citation_index.citations:
             ref_items = ""
             seen_urls = set()
-            for cid, cite in report.citation_index.citations.items():
+            used_count = 0
+            for cid in used_cite_ids:
+                cite = report.citation_index.get(cid)
+                if not cite:
+                    continue
                 if cite.url and cite.url in seen_urls:
                     continue
                 if cite.url:
@@ -1696,9 +1691,10 @@ class StrategyAgent(BaseAgent):
                 <div id="cite-{cid}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
                     {num_label}{url_link}{site_label}{query_label}
                 </div>'''
+                used_count += 1
             references_html = f'''
             <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                <h2 style="font-size:20px;color:#1e293b;margin-bottom:16px;">📚 数据来源（共 {len(report.citation_index.citations)} 条）</h2>
+                <h2 style="font-size:20px;color:#1e293b;margin-bottom:16px;">📚 数据来源（共 {used_count} 条）</h2>
                 <div style="max-height:400px;overflow-y:auto;">{ref_items}</div>
             </div>'''
 

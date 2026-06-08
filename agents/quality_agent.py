@@ -317,12 +317,13 @@ class QualityAgent(BaseAgent):
                 "user_reviews": data.user_reviews[:200],
                 "strengths": data.strengths[:200],
                 "weaknesses": data.weaknesses[:200],
+                "citations": [{"id": c.id, "title": c.title[:80], "query": c.query} for c in data.citations[:30]],
             }
 
         # 截断原始搜索文本
         search_texts_limited = {}
         for name, text in original_search_texts.items():
-            search_texts_limited[name] = text[:3000]
+            search_texts_limited[name] = text[:8000]
 
         prompt = self._prompt_check_collection.format(
             original_search_texts=json.dumps(search_texts_limited, ensure_ascii=False, indent=2),
