@@ -244,10 +244,18 @@ class TaskManager:
 
                 from core.orchestrator import Orchestrator
                 orchestrator = Orchestrator()
-                report = await orchestrator.analyze(
-                    product_description, max_competitors,
-                    event_bus=self._event_bus, task_id=task_id,
-                )
+                log_sync_task = asyncio.create_task(self._sync_llm_logs_live(task, orchestrator))
+                try:
+                    report = await orchestrator.analyze(
+                        product_description, max_competitors,
+                        event_bus=self._event_bus, task_id=task_id,
+                    )
+                finally:
+                    log_sync_task.cancel()
+                    try:
+                        await log_sync_task
+                    except asyncio.CancelledError:
+                        pass
 
                 task.status = "completed"
                 task.finished_at = datetime.now()
@@ -316,6 +324,31 @@ class TaskManager:
                 ))
             finally:
                 self._event_bus.remove_listener(self._on_workflow_event)
+
+    async def _sync_llm_logs_live(self, task: TaskState, orchestrator) -> None:
+        """Periodically persist LLM/search logs and notify the frontend while a task is running."""
+        last_count = 0
+        while True:
+            await asyncio.sleep(1)
+            try:
+                logs = _collect_llm_logs(orchestrator)
+            except Exception:
+                continue
+            if len(logs) == last_count:
+                continue
+            last_count = len(logs)
+            task.llm_logs = logs
+            self._save_task(task)
+            await self._event_bus.emit(task.id, WorkflowEvent(
+                type=EventType.LLM_LOGS_UPDATED,
+                task_id=task.id,
+                agent="Orchestrator",
+                phase="llm_logs",
+                status="running",
+                progress=task.progress,
+                message=f"LLM 调用日志已更新（{last_count} 条）",
+                data={"total": last_count},
+            ))
 
 
 def _collect_llm_logs(orchestrator) -> list[dict]:

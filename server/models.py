@@ -22,6 +22,7 @@ class EventType(str, Enum):
     QA_CHECK_FAILED = "qa_check_failed"
     QA_RETRYING = "qa_retrying"
     PROGRESS_UPDATE = "progress_update"
+    LLM_LOGS_UPDATED = "llm_logs_updated"
 
 
 class WorkflowEvent(BaseModel):

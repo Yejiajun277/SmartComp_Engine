@@ -38,6 +38,18 @@ function summarizeQaResults(results) {
     if (!nodeKey) return;
 
     const current = summaries[nodeKey] || { retryCount: 0, checks: [] };
+    if (result.running) {
+      summaries[nodeKey] = {
+        phase,
+        label: '质检中',
+        status: 'running',
+        score: result.score,
+        retryCount: current.retryCount,
+        checks: [...current.checks, result],
+      };
+      return;
+    }
+
     const failedCount = current.retryCount + (result.passed ? 0 : 1);
     const label = result.degraded
       ? `降级通过，打回 ${failedCount} 次`
@@ -56,6 +68,29 @@ function summarizeQaResults(results) {
   });
 
   return summaries;
+}
+
+function normalizeQaResult(event) {
+  const fromPayload = event.data?.qa_result;
+  if (fromPayload) {
+    return {
+      ...fromPayload,
+      message: event.message,
+    };
+  }
+  return {
+    phase: event.phase,
+    target_agent: event.data?.target_agent,
+    passed: event.type === 'qa_check_passed',
+    score: event.data?.score,
+    attempt: event.data?.attempt,
+    degraded: event.data?.degraded,
+    issues: event.data?.issues || [],
+    feedback_to_agent: event.data?.feedback_to_agent,
+    hallucination_status: event.data?.hallucination_status,
+    hallucination_score: event.data?.hallucination_score,
+    message: event.message,
+  };
 }
 
 export function useTask() {
@@ -87,18 +122,29 @@ export function useTask() {
 
     // Handle QA events
     if (event.type === 'qa_check_started') {
+      setQaResults(prev => [...prev, {
+        phase: event.phase,
+        target_agent: event.data?.target_agent,
+        attempt: event.data?.attempt,
+        running: true,
+        message: event.message,
+      }]);
       return;
     } else if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
       const nodeKey = QA_PHASE_TO_NODE[event.phase];
-      setQaResults(prev => [...prev, {
-        phase: event.phase,
-        passed: event.type === 'qa_check_passed',
-        score: event.data?.score,
-        degraded: event.data?.degraded,
-        message: event.message,
-      }]);
+      const result = normalizeQaResult(event);
+      setQaResults(prev => [
+        ...prev.filter(item => !(
+          item.running
+          && item.phase === result.phase
+          && (item.attempt == null || result.attempt == null || item.attempt === result.attempt)
+        )),
+        result,
+      ]);
       if (event.type === 'qa_check_failed' && nodeKey) {
         setNodeStates(prev => ({ ...prev, [nodeKey]: 'retrying' }));
+      } else if (event.type === 'qa_check_passed' && nodeKey) {
+        setNodeStates(prev => ({ ...prev, [nodeKey]: 'completed' }));
       }
     } else if (event.type === 'qa_retrying') {
       const nodeKey = QA_PHASE_TO_NODE[event.phase];
@@ -133,7 +179,7 @@ export function useTask() {
     progress,
     currentMessage,
     qaResults,
-    qaSummaries: summarizeQaResults(qaResults.filter(result => !result.running)),
+    qaSummaries: summarizeQaResults(qaResults),
     taskStatus,
     handleEvent,
     reset,

@@ -70,6 +70,7 @@ export default function TaskDetail() {
   const [artifactCache, setArtifactCache] = useState({});
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
+  const [llmLogsRefreshKey, setLlmLogsRefreshKey] = useState(0);
 
   const {
     events, nodeStates, progress, currentMessage,
@@ -131,6 +132,33 @@ export default function TaskDetail() {
       refreshArtifact(event.phase);
     }
     if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
+      const qaResult = event.data?.qa_result;
+      if (qaResult) {
+        setArtifactCache(prev => {
+          const previousChecks = prev.qa?.checks || [];
+          const checks = [
+            ...previousChecks.filter(check => !(
+              check.phase === qaResult.phase
+              && (check.attempt == null || qaResult.attempt == null || check.attempt === qaResult.attempt)
+            )),
+            qaResult,
+          ];
+          return {
+            ...prev,
+            qa: {
+              ...(prev.qa || {}),
+              checks,
+            },
+          };
+        });
+      } else {
+        refreshQa();
+      }
+    }
+    if (event.type === 'llm_logs_updated' || event.type === 'task_completed') {
+      setLlmLogsRefreshKey(prev => prev + 1);
+    }
+    if (event.type === 'task_completed') {
       refreshQa();
     }
   }, [events, refreshArtifact, refreshQa]);
@@ -261,7 +289,7 @@ export default function TaskDetail() {
 
       {/* LLM Logs */}
       <Card title="LLM 调用日志" style={{ marginBottom: 16 }}>
-        <LlmLogs taskId={taskId} />
+        <LlmLogs taskId={taskId} refreshKey={llmLogsRefreshKey} />
       </Card>
 
       {/* Agent Detail Drawer */}

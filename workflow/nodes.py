@@ -106,6 +106,16 @@ class AnalysisGraphNodes:
         return exhausted
 
     @staticmethod
+    def _qa_event_payload(result: QualityCheckResult) -> dict:
+        """把 QA 结果压成前端可直接展示的轻量 dict。"""
+        payload = asdict(result) if is_dataclass(result) else dict(result)
+        payload["issues"] = [
+            asdict(issue) if is_dataclass(issue) else issue
+            for issue in getattr(result, "issues", payload.get("issues", []))
+        ]
+        return payload
+
+    @staticmethod
     def _failure_payload(
         state: AnalysisState,
         phase: str,
@@ -273,7 +283,12 @@ class AnalysisGraphNodes:
 
     async def check_collection_quality(self, state: AnalysisState) -> AnalysisState:
         await self._emit(state, EventType.QA_CHECK_STARTED, "QualityAgent", "collection",
-                         progress=0.37, message="正在检查采集数据质量...")
+                         progress=0.37, message="正在检查采集数据质量...",
+                         data={
+                             "phase": "collection",
+                             "target_agent": "CollectionAgent",
+                             "attempt": state.get("collection_retry_count", 0) + 1,
+                         })
         attempt = state.get("collection_retry_count", 0) + 1
 
         # Always save collection artifacts regardless of QA mode
@@ -287,6 +302,15 @@ class AnalysisGraphNodes:
             )
             self.orchestrator.quality_agent.timeline.add_check(result)
             self.orchestrator._save_artifact_json("qa_timeline.json", self.orchestrator.quality_agent.timeline)
+            await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", "collection",
+                             progress=0.38,
+                             message="采集质检通过 (分数: 100)",
+                             data={
+                                 "score": result.score,
+                                 "passed": result.passed,
+                                 "degraded": result.degraded,
+                                 "qa_result": self._qa_event_payload(result),
+                             })
             return {
                 "qa_collection": result,
                 "qa_checks": self._append_qa(state, result),
@@ -323,7 +347,12 @@ class AnalysisGraphNodes:
         await self._emit(state, qa_type, "QualityAgent", "collection",
                          progress=0.38,
                          message=f"采集质检{'通过' if result.passed else '未通过'} (分数: {result.score:.0f})",
-                         data={"score": result.score, "passed": result.passed, "degraded": result.degraded})
+                         data={
+                             "score": result.score,
+                             "passed": result.passed,
+                             "degraded": result.degraded,
+                             "qa_result": self._qa_event_payload(result),
+                         })
         return {
             "qa_collection": result,
             "qa_checks": self._append_qa(state, result),
@@ -369,6 +398,15 @@ class AnalysisGraphNodes:
         result = state["qa_collection"]
         result.degraded = True
         feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
+        await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", "collection",
+                         progress=0.39,
+                         message=f"采集质检降级通过 (分数: {result.score:.0f})",
+                         data={
+                             "score": result.score,
+                             "passed": result.passed,
+                             "degraded": result.degraded,
+                             "qa_result": self._qa_event_payload(result),
+                         })
         return {
             "qa_collection": result,
             "latest_feedback": feedback,
@@ -515,13 +553,31 @@ class AnalysisGraphNodes:
     ) -> AnalysisState:
         retry_key = f"{analysis_type}_retry_count"
         attempt = state.get(retry_key, 0) + 1
+        agent_name = {"product": "ProductAgent", "pricing": "PricingAgent", "market": "MarketAgent"}[analysis_type]
+
+        await self._emit(state, EventType.QA_CHECK_STARTED, "QualityAgent", analysis_type,
+                         progress=state.get("progress", 0.75),
+                         message=f"正在检查{analysis_type}分析质量...",
+                         data={
+                             "phase": analysis_type,
+                             "target_agent": agent_name,
+                             "attempt": attempt,
+                         })
 
         if config.SKIP_QA:
-            agent_name = {"product": "ProductAgent", "pricing": "PricingAgent", "market": "MarketAgent"}[analysis_type]
             result = QualityCheckResult(
                 phase=analysis_type, target_agent=agent_name,
                 passed=True, score=100.0, hallucination_status="skipped",
             )
+            await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", analysis_type,
+                             progress=state.get("progress", 0.75),
+                             message=f"{analysis_type}分析质检通过 (分数: 100)",
+                             data={
+                                 "score": result.score,
+                                 "passed": result.passed,
+                                 "degraded": result.degraded,
+                                 "qa_result": self._qa_event_payload(result),
+                             })
             return {f"qa_{analysis_type}": result}
 
         async def call():
@@ -540,6 +596,16 @@ class AnalysisGraphNodes:
             and result.score <= state.get(f"{analysis_type}_prev_score", 0)
         ):
             result.passed = True
+        qa_type = EventType.QA_CHECK_PASSED if result.passed else EventType.QA_CHECK_FAILED
+        await self._emit(state, qa_type, "QualityAgent", analysis_type,
+                         progress=state.get("progress", 0.75),
+                         message=f"{analysis_type}分析质检{'通过' if result.passed else '未通过'} (分数: {result.score:.0f})",
+                         data={
+                             "score": result.score,
+                             "passed": result.passed,
+                             "degraded": result.degraded,
+                             "qa_result": self._qa_event_payload(result),
+                         })
         return {f"qa_{analysis_type}": result}
 
     async def join_analysis_quality(self, state: AnalysisState) -> AnalysisState:
@@ -591,6 +657,15 @@ class AnalysisGraphNodes:
                 result.degraded = True
                 updates[key] = result
                 updates["quality_exhausted"][analysis_type] = True
+                await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", analysis_type,
+                                 progress=0.75,
+                                 message=f"{analysis_type}分析质检降级通过 (分数: {result.score:.0f})",
+                                 data={
+                                     "score": result.score,
+                                     "passed": result.passed,
+                                     "degraded": result.degraded,
+                                     "qa_result": self._qa_event_payload(result),
+                                 })
                 if not latest_feedback:
                     latest_feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
                     updates[f"{analysis_type}_feedback"] = latest_feedback
@@ -626,6 +701,14 @@ class AnalysisGraphNodes:
 
     async def check_strategy_quality(self, state: AnalysisState) -> AnalysisState:
         attempt = state.get("strategy_retry_count", 0) + 1
+        await self._emit(state, EventType.QA_CHECK_STARTED, "QualityAgent", "strategy",
+                         progress=0.92,
+                         message="正在检查战略建议报告质量...",
+                         data={
+                             "phase": "strategy",
+                             "target_agent": "StrategyAgent",
+                             "attempt": attempt,
+                         })
 
         if config.SKIP_QA:
             result = QualityCheckResult(
@@ -633,6 +716,15 @@ class AnalysisGraphNodes:
                 passed=True, score=100.0, hallucination_status="skipped",
             )
             self.orchestrator.quality_agent.timeline.add_check(result)
+            await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", "strategy",
+                             progress=0.93,
+                             message="策略报告质检通过 (分数: 100)",
+                             data={
+                                 "score": result.score,
+                                 "passed": result.passed,
+                                 "degraded": result.degraded,
+                                 "qa_result": self._qa_event_payload(result),
+                             })
             return {
                 "qa_strategy": result,
                 "qa_checks": self._append_qa(state, result),
@@ -653,6 +745,17 @@ class AnalysisGraphNodes:
         self.orchestrator.quality_agent.timeline.add_check(result)
         timings = self._merge_timing(state, "qa_strategy", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        self.orchestrator._save_artifact_json("qa_timeline.json", self.orchestrator.quality_agent.timeline)
+        qa_type = EventType.QA_CHECK_PASSED if result.passed else EventType.QA_CHECK_FAILED
+        await self._emit(state, qa_type, "QualityAgent", "strategy",
+                         progress=0.93,
+                         message=f"策略报告质检{'通过' if result.passed else '未通过'} (分数: {result.score:.0f})",
+                         data={
+                             "score": result.score,
+                             "passed": result.passed,
+                             "degraded": result.degraded,
+                             "qa_result": self._qa_event_payload(result),
+                         })
         return {
             "qa_strategy": result,
             "qa_checks": self._append_qa(state, result),
@@ -671,6 +774,15 @@ class AnalysisGraphNodes:
         result = state["qa_strategy"]
         result.degraded = True
         feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
+        await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", "strategy",
+                         progress=0.94,
+                         message=f"策略报告质检降级通过 (分数: {result.score:.0f})",
+                         data={
+                             "score": result.score,
+                             "passed": result.passed,
+                             "degraded": result.degraded,
+                             "qa_result": self._qa_event_payload(result),
+                         })
         return {
             "qa_strategy": result,
             "strategy_feedback": feedback,

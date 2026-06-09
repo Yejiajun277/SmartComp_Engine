@@ -53,6 +53,7 @@ const QA_TAG_COLOR = {
   passed: 'success',
   failed: 'error',
   degraded: 'warning',
+  running: 'processing',
   none: 'default',
 };
 

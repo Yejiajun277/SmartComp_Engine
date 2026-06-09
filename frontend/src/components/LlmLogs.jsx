@@ -4,7 +4,7 @@ import { getLlmLogs } from '../api/client';
 
 const { Text, Paragraph } = Typography;
 
-export default function LlmLogs({ taskId }) {
+export default function LlmLogs({ taskId, refreshKey = 0 }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,7 +15,7 @@ export default function LlmLogs({ taskId }) {
       .then((data) => setLogs(data.logs || []))
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [taskId, refreshKey]);
 
   if (loading) return <Spin style={{ display: 'block', textAlign: 'center', padding: 20 }} />;
   if (!logs.length) return <Empty description="暂无调用日志" />;
