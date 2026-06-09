@@ -159,7 +159,7 @@ if __name__ == "__main__":
 ║                                                              ║
 ║  python3 main.py "产品名"       默认：豆包LLM智能分析        ║
 ║  python3 main.py --rule "产品名"  规则引擎模式（零依赖）     ║
-║  python3 main.py --count 5 "产品名" 指定竞品数量(3~8)       ║
+║  python3 main.py --count 5 "产品名" 指定竞品数量(1~8)       ║
 ║  python3 main.py --debug "产品名" 调试模式（跳过质检）       ║
 ║  python3 main.py --verbose "产品名" 详细模式                 ║
 ║  python3 main.py help           显示帮助                     ║

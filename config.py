@@ -65,7 +65,7 @@ LANGGRAPH_NODE_RETRIES = int(os.environ.get("LANGGRAPH_NODE_RETRIES", "2"))
 # ========================
 # 竞品分析参数
 # ========================
-MIN_COMPETITORS = 3
+MIN_COMPETITORS = 1
 MAX_COMPETITORS = 8
 DEFAULT_COMPETITOR_COUNT = 5
 

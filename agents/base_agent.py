@@ -11,6 +11,8 @@ import config
 import json
 import re
 
+_LOG_TEXT_MAX = 2000  # 日志中 prompt/output 截断长度
+
 
 class BaseAgent(ABC):
     """
@@ -45,16 +47,27 @@ class BaseAgent(ABC):
                           temperature=temp, max_tokens=tokens,
                           agent_id=self.agent_id)
 
+        content = result.get("content", "") if isinstance(result, dict) else (result or "")
+
         self.llm_logs.append({
             "agent_id": self.agent_id,
-            "system_prompt_len": len(self.system_prompt),
-            "user_message_len": len(user_message),
-            "result_len": len(result) if result else 0,
-            "success": bool(result),
+            "timestamp": result.get("timestamp", "") if isinstance(result, dict) else "",
+            "system_prompt": (self.system_prompt or "")[:_LOG_TEXT_MAX],
+            "user_message": (user_message or "")[:_LOG_TEXT_MAX],
+            "result": content[:_LOG_TEXT_MAX] if content else "",
+            "prompt_tokens": result.get("prompt_tokens", 0) if isinstance(result, dict) else 0,
+            "completion_tokens": result.get("completion_tokens", 0) if isinstance(result, dict) else 0,
+            "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
+            "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
+            "model": result.get("model", "") if isinstance(result, dict) else "",
+            "finish_reason": result.get("finish_reason", "") if isinstance(result, dict) else "",
+            "temperature": temp,
+            "max_tokens": tokens,
+            "success": bool(content),
             "parse_error": "",
         })
 
-        return result
+        return content
 
     def ask_llm_json(self, user_message: str,
                      temperature: float = None,

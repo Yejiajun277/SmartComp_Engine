@@ -25,6 +25,15 @@ from models.domain import (
 )
 from workflow.state import AnalysisState
 
+# Event system imports (optional, for web UI)
+try:
+    from server.models import EventType, WorkflowEvent
+    from server.services.event_bus import EventBus
+except ImportError:
+    EventType = None
+    WorkflowEvent = None
+    EventBus = None
+
 
 T = TypeVar("T")
 
@@ -39,9 +48,11 @@ class AnalysisGraphNodes:
             This is separate from QualityAgent semantic retries.
     """
 
-    def __init__(self, orchestrator, node_retries: int = 2):
+    def __init__(self, orchestrator, node_retries: int = 2, event_bus=None, task_id: str = ""):
         self.orchestrator = orchestrator
         self.node_retries = node_retries
+        self.event_bus = event_bus
+        self.task_id = task_id
 
     async def _retry_node(self, name: str, fn: Callable[[], Awaitable[T]]) -> T:
         last_error: Exception | None = None
@@ -55,6 +66,26 @@ class AnalysisGraphNodes:
                 await asyncio.sleep(min(0.2 * (attempt + 1), 1.0))
         assert last_error is not None
         raise RuntimeError(f"node '{name}' failed after {self.node_retries + 1} attempts") from last_error
+
+    async def _emit(self, state: AnalysisState, event_type, agent: str, phase: str,
+                    progress: float = 0.0, message: str = "", data: dict = None) -> None:
+        """Emit a workflow event to the event bus (no-op if event_bus is None)."""
+        if not self.event_bus or not WorkflowEvent:
+            return
+        try:
+            event = WorkflowEvent(
+                type=event_type,
+                task_id=self.task_id,
+                agent=agent,
+                phase=phase,
+                status="running" if "started" in event_type.value else "completed",
+                progress=progress,
+                message=message,
+                data=data,
+            )
+            await self.event_bus.emit(self.task_id, event)
+        except Exception:
+            pass  # never let event emission break the pipeline
 
     @staticmethod
     def _merge_timing(state: AnalysisState, name: str, duration: float) -> dict[str, float]:
@@ -135,6 +166,9 @@ class AnalysisGraphNodes:
         }
 
     async def discover_competitors(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "DiscoveryAgent", "discovery",
+                         progress=0.05, message="正在生成搜索关键词...")
+
         async def call():
             return await self.orchestrator.discovery_agent.run(
                 state["product_description"], state["max_competitors"]
@@ -145,6 +179,10 @@ class AnalysisGraphNodes:
         timings = self._merge_timing(state, "discovery", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("01_competitor_list.json", competitors)
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "DiscoveryAgent", "discovery",
+                         progress=0.15, message=f"发现 {len(competitors.competitors)} 个竞品",
+                         data={"competitors": [c.name for c in competitors.competitors]})
         return {
             "competitor_list": competitors,
             "product_name": competitors.product_name,
@@ -175,6 +213,9 @@ class AnalysisGraphNodes:
         }
 
     async def collect_target_product(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "CollectionAgent", "collection",
+                         progress=0.15, message="正在采集目标产品数据...")
+
         async def call():
             return self.orchestrator.collection_agent.collect_target_product(
                 state["product_description"], state["product_name"]
@@ -185,9 +226,16 @@ class AnalysisGraphNodes:
         timings = self._merge_timing(state, "target_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("00_target_product_data.json", data)
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
+                         progress=0.20, message="目标产品数据采集完成")
         return {"target_product_data": data, "timings": timings}
 
     async def collect_competitors(self, state: AnalysisState) -> AnalysisState:
+        n = len(state["competitor_list"].competitors)
+        await self._emit(state, EventType.AGENT_STARTED, "CollectionAgent", "collection",
+                         progress=0.20, message=f"正在采集 {n} 个竞品数据...")
+
         async def call():
             return await self.orchestrator.collection_agent.run(
                 state["product_description"],
@@ -204,6 +252,8 @@ class AnalysisGraphNodes:
             data = state["competitors_data"]
         if not search_texts and state.get("original_search_texts"):
             search_texts = state["original_search_texts"]
+        await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
+                         progress=0.35, message=f"竞品数据采集完成，共 {len(data)} 个")
         return {
             "competitors_data": data,
             "original_search_texts": search_texts,
@@ -211,7 +261,13 @@ class AnalysisGraphNodes:
         }
 
     async def check_collection_quality(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.QA_CHECK_STARTED, "QualityAgent", "collection",
+                         progress=0.37, message="正在检查采集数据质量...")
         attempt = state.get("collection_retry_count", 0) + 1
+
+        # Always save collection artifacts regardless of QA mode
+        self.orchestrator._save_artifact_json("02_competitors_data.json", state["competitors_data"])
+        self.orchestrator._save_artifact_json("02_search_texts.json", state["original_search_texts"])
 
         if config.SKIP_QA:
             result = QualityCheckResult(
@@ -219,6 +275,7 @@ class AnalysisGraphNodes:
                 passed=True, score=100.0, hallucination_status="skipped",
             )
             self.orchestrator.quality_agent.timeline.add_check(result)
+            self.orchestrator._save_artifact_json("qa_timeline.json", self.orchestrator.quality_agent.timeline)
             return {
                 "qa_collection": result,
                 "qa_checks": self._append_qa(state, result),
@@ -249,9 +306,13 @@ class AnalysisGraphNodes:
         self.orchestrator.quality_agent.timeline.add_check(result)
         timings = self._merge_timing(state, "qa_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
-        self.orchestrator._save_artifact_json("02_competitors_data.json", state["competitors_data"])
-        self.orchestrator._save_artifact_json("02_search_texts.json", state["original_search_texts"])
         self.orchestrator._save_artifact_json("qa_timeline.json", self.orchestrator.quality_agent.timeline)
+
+        qa_type = EventType.QA_CHECK_PASSED if result.passed else EventType.QA_CHECK_FAILED
+        await self._emit(state, qa_type, "QualityAgent", "collection",
+                         progress=0.38,
+                         message=f"采集质检{'通过' if result.passed else '未通过'} (分数: {result.score:.0f})",
+                         data={"score": result.score, "passed": result.passed, "degraded": result.degraded})
         return {
             "qa_collection": result,
             "qa_checks": self._append_qa(state, result),
@@ -304,6 +365,9 @@ class AnalysisGraphNodes:
         }
 
     async def generate_dimensions(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "DimensionAgent", "dimension",
+                         progress=0.40, message="正在生成分析维度配置...")
+
         async def call():
             return await self.orchestrator.dimension_agent.run(
                 state["product_description"], state["competitor_list"]
@@ -316,6 +380,9 @@ class AnalysisGraphNodes:
         product_dims = self.orchestrator._format_sub_dimensions(config.product_sub_dimensions)
         pricing_dims = self.orchestrator._format_sub_dimensions(config.pricing_sub_dimensions)
         self.orchestrator._save_artifact_json("03_dimension_config.json", config)
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "DimensionAgent", "dimension",
+                         progress=0.45, message="维度配置生成完成")
         return {
             "dimension_config": config,
             "product_sub_dims_text": product_dims,
@@ -341,6 +408,9 @@ class AnalysisGraphNodes:
         }
 
     async def run_product_analysis(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "ProductAgent", "product_analysis",
+                         progress=0.45, message="正在进行功能对比分析...")
+
         async def call():
             return await self.orchestrator.product_agent.run(
                 state["product_name"],
@@ -354,9 +424,15 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_product_analysis", call)
         timings = self._merge_timing(state, "product_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "ProductAgent", "product_analysis",
+                         progress=0.55, message="功能对比分析完成")
         return {"product_analysis": analysis, "timings": timings}
 
     async def run_pricing_analysis(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "PricingAgent", "pricing_analysis",
+                         progress=0.55, message="正在进行定价分析...")
+
         async def call():
             return await self.orchestrator.pricing_agent.run(
                 state["product_name"],
@@ -370,9 +446,15 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_pricing_analysis", call)
         timings = self._merge_timing(state, "pricing_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "PricingAgent", "pricing_analysis",
+                         progress=0.65, message="定价分析完成")
         return {"pricing_analysis": analysis, "timings": timings}
 
     async def run_market_analysis(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "MarketAgent", "market_analysis",
+                         progress=0.65, message="正在进行市场分析...")
+
         async def call():
             return await self.orchestrator.market_agent.run(
                 state["product_name"],
@@ -385,6 +467,9 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_market_analysis", call)
         timings = self._merge_timing(state, "market_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "MarketAgent", "market_analysis",
+                         progress=0.75, message="市场分析完成")
         return {"market_analysis": analysis, "timings": timings}
 
     async def join_parallel_analysis(self, state: AnalysisState) -> AnalysisState:
@@ -500,6 +585,9 @@ class AnalysisGraphNodes:
         return updates
 
     async def generate_strategy(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.AGENT_STARTED, "StrategyAgent", "strategy",
+                         progress=0.75, message="正在生成战略建议报告...")
+
         async def call():
             return await self.orchestrator.strategy_agent.run(
                 state["product_name"],
@@ -516,6 +604,9 @@ class AnalysisGraphNodes:
         report = await self._retry_node("generate_strategy", call)
         timings = self._merge_timing(state, "strategy", time.perf_counter() - start)
         self.orchestrator.timings = timings
+
+        await self._emit(state, EventType.AGENT_COMPLETED, "StrategyAgent", "strategy",
+                         progress=0.90, message="战略建议报告生成完成")
         return {"report": report, "timings": timings}
 
     async def check_strategy_quality(self, state: AnalysisState) -> AnalysisState:
@@ -573,6 +664,9 @@ class AnalysisGraphNodes:
         }
 
     async def finalize_report(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.PROGRESS_UPDATE, "Orchestrator", "finalize",
+                         progress=0.95, message="正在整理最终报告...")
+
         report = state["report"]
         report.qa_timeline = self.orchestrator.quality_agent.timeline
         report.raw_llm_logs = self.orchestrator._collect_llm_logs()

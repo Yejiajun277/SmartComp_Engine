@@ -78,14 +78,17 @@ class Orchestrator:
         self._last_target_product_data: CompetitorData | None = None
 
     async def analyze(self, product_description: str,
-                      max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
+                      max_competitors: int = config.DEFAULT_COMPETITOR_COUNT,
+                      event_bus=None, task_id: str = "") -> StrategyReport:
         """执行完整的竞品分析流程，按配置选择 LangGraph 或旧编排。"""
         if config.USE_LANGGRAPH_WORKFLOW:
-            return await self._analyze_langgraph(product_description, max_competitors)
+            return await self._analyze_langgraph(product_description, max_competitors,
+                                                 event_bus=event_bus, task_id=task_id)
         return await self._analyze_legacy(product_description, max_competitors)
 
     async def _analyze_langgraph(self, product_description: str,
-                                 max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
+                                 max_competitors: int = config.DEFAULT_COMPETITOR_COUNT,
+                                 event_bus=None, task_id: str = "") -> StrategyReport:
         """通过 LangGraph StateGraph 执行完整竞品分析。"""
         from workflow.graph import run_analysis_graph
 
@@ -95,12 +98,20 @@ class Orchestrator:
             max_competitors,
             fail_on_quality_exhausted=True,
             node_retries=config.LANGGRAPH_NODE_RETRIES,
+            event_bus=event_bus,
+            task_id=task_id,
         )
         self._last_graph_state = state
         self._last_status = state.get("status", "")
         report = state.get("report")
         if report is None:
             report = StrategyReport(product_name=state.get("product_name", product_description))
+        # Populate _last_* for HTML report generation (same as legacy path)
+        self._last_product_analysis = state.get("product_analysis")
+        self._last_pricing_analysis = state.get("pricing_analysis")
+        self._last_market_analysis = state.get("market_analysis")
+        self._last_competitor_list = state.get("competitor_list")
+        self._last_competitors_data = state.get("competitors_data", {})
         self._print_completion_summary(report)
         return report
 

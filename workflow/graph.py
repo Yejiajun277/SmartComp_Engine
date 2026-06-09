@@ -63,13 +63,13 @@ def route_strategy_quality(state: AnalysisState) -> str:
     return "exhausted"
 
 
-def build_analysis_graph(orchestrator, *, node_retries: int = 2):
+def build_analysis_graph(orchestrator, *, node_retries: int = 2, event_bus=None, task_id: str = ""):
     """Build and compile the LangGraph workflow.
 
     The graph uses fixed edges for the happy path and conditional edges for
     QA pass/retry/exhausted routing.
     """
-    nodes = AnalysisGraphNodes(orchestrator, node_retries=node_retries)
+    nodes = AnalysisGraphNodes(orchestrator, node_retries=node_retries, event_bus=event_bus, task_id=task_id)
     graph = StateGraph(AnalysisState)
 
     graph.add_node("initialize_run", nodes.initialize_run)
@@ -202,9 +202,11 @@ async def run_analysis_graph(
     *,
     fail_on_quality_exhausted: bool = True,
     node_retries: int = 2,
+    event_bus=None,
+    task_id: str = "",
 ) -> AnalysisState:
     """Run the compiled analysis graph and return the final state."""
-    graph = build_analysis_graph(orchestrator, node_retries=node_retries)
+    graph = build_analysis_graph(orchestrator, node_retries=node_retries, event_bus=event_bus, task_id=task_id)
     state = initial_analysis_state(
         product_description,
         max_competitors,

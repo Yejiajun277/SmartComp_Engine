@@ -22,6 +22,7 @@ class SearchClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.recency = recency
+        self.search_logs: list[dict] = []
 
     def search(self, query: str, recency: str | None = None) -> dict:
         """
@@ -31,6 +32,7 @@ class SearchClient:
             raise RuntimeError("DOUBAO_API_KEY 未配置，无法执行联网搜索")
 
         import requests
+        from datetime import datetime
 
         api_url = f"{self.base_url}/responses"
         headers = {
@@ -54,10 +56,41 @@ class SearchClient:
             "max_output_tokens": config.SEARCH_MAX_OUTPUT_TOKENS,
         }
 
-        resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
-        resp.encoding = "utf-8"
-        resp.raise_for_status()
-        return self._normalize_response(resp.json())
+        t0 = time.time()
+        try:
+            resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            duration_ms = (time.time() - t0) * 1000
+            resp.encoding = "utf-8"
+            resp.raise_for_status()
+            result = self._normalize_response(resp.json())
+            refs = result.get("references", [])
+            result_text = SearchClient.extract_text(result)
+            self.search_logs.append({
+                "type": "search",
+                "agent_id": "",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "query": query,
+                "duration_ms": round(duration_ms, 1),
+                "success": True,
+                "result_count": len(refs),
+                "result_text_len": len(result_text),
+                "error": "",
+            })
+            return result
+        except Exception as e:
+            duration_ms = (time.time() - t0) * 1000
+            self.search_logs.append({
+                "type": "search",
+                "agent_id": "",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "query": query,
+                "duration_ms": round(duration_ms, 1),
+                "success": False,
+                "result_count": 0,
+                "result_text_len": 0,
+                "error": str(e)[:200],
+            })
+            raise
 
     def batch_search(
         self,

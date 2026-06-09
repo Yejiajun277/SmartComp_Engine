@@ -6,12 +6,24 @@ core/llm_client.py — 豆包 LLM 调用封装
 import json
 import re
 import time
+from datetime import datetime
 
 import config
 
 
 _call_stats = {"total": 0, "success": 0, "fallback": 0, "errors": []}
 _last_call_error = ""  # 最近一次调用的失败原因
+
+_EMPTY_RESULT = {
+    "content": "",
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "model": "",
+    "finish_reason": "",
+    "duration_ms": 0.0,
+    "timestamp": "",
+}
 
 
 def _normalize_provider(provider: str) -> str:
@@ -22,15 +34,15 @@ def _normalize_provider(provider: str) -> str:
 
 def _call_doubao(system_prompt: str, user_message: str,
                  temperature: float, max_tokens: int,
-                 agent_id: str) -> str:
-    """调用豆包 OpenAI 兼容接口。"""
+                 agent_id: str) -> dict:
+    """调用豆包 OpenAI 兼容接口，返回结构化结果。"""
     import requests
     global _last_call_error
 
     if not config.DOUBAO_API_KEY:
         _last_call_error = "api_key_missing"
         print(f"  [豆包] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
-        return ""
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     api_url = f"{config.DOUBAO_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
@@ -50,9 +62,11 @@ def _call_doubao(system_prompt: str, user_message: str,
     }
 
     for attempt in range(2):
+        t0 = time.time()
         try:
             print(f"  [豆包] [{agent_id}] 🔄 调用豆包 (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
             resp = requests.post(api_url, headers=headers, json=payload, timeout=300)
+            duration_ms = (time.time() - t0) * 1000
             result = resp.json()
 
             if resp.status_code >= 400 or "error" in result:
@@ -65,7 +79,7 @@ def _call_doubao(system_prompt: str, user_message: str,
                 if attempt == 0:
                     time.sleep(1)
                     continue
-                return ""
+                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
             message = result.get("choices", [{}])[0].get("message", {})
             content = message.get("content", "") or message.get("reasoning", "")
@@ -74,38 +88,49 @@ def _call_doubao(system_prompt: str, user_message: str,
                 finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
                 _last_call_error = f"empty_response(finish_reason={finish_reason})"
                 print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
-                return ""
+                return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
             usage = result.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", "?")
-            completion_tokens = usage.get("completion_tokens", "?")
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
             _last_call_error = ""
             print(
                 f"  [豆包] [{agent_id}] ✅ 调用成功 "
                 f"(tokens: {prompt_tokens}+{completion_tokens}, 输出长度: {len(content)}字)"
             )
-            return content
+            return {
+                "content": content,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+                "model": result.get("model", config.DOUBAO_MODEL),
+                "finish_reason": result.get("choices", [{}])[0].get("finish_reason", ""),
+                "duration_ms": duration_ms,
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+            }
         except requests.exceptions.Timeout:
+            duration_ms = (time.time() - t0) * 1000
             _last_call_error = f"timeout(300s, attempt {attempt + 1})"
             print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
             if attempt == 0:
                 continue
-            return ""
+            return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
         except requests.exceptions.ConnectionError as e:
+            duration_ms = (time.time() - t0) * 1000
             _last_call_error = f"connection_error({str(e)[:200]})"
             print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
             if attempt == 0:
                 time.sleep(2)
                 continue
-            return ""
+            return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-    return ""
+    return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
 
 def llm_call(system_prompt: str, user_message: str,
              temperature: float = 0.3, max_tokens: int = 4096,
-             agent_id: str = "") -> str:
-    """统一 LLM 调用入口。"""
+             agent_id: str = "") -> dict:
+    """统一 LLM 调用入口。返回 dict，包含 content 和元数据。"""
     global _last_call_error
     _call_stats["total"] += 1
     call_label = f"[{agent_id}]" if agent_id else ""
@@ -114,34 +139,34 @@ def llm_call(system_prompt: str, user_message: str,
         _last_call_error = "llm_disabled"
         _call_stats["fallback"] += 1
         print(f"  [LLM] {call_label} ⏭️ LLM未启用，使用规则引擎")
-        return ""
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     provider = _normalize_provider(config.LLM_PROVIDER)
     if provider != "doubao":
         _last_call_error = f"unknown_provider({config.LLM_PROVIDER})"
         _call_stats["fallback"] += 1
         print(f"  [LLM] {call_label} ❌ 未知的LLM_PROVIDER: {config.LLM_PROVIDER}")
-        return ""
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     try:
         result = _call_doubao(system_prompt, user_message, temperature, max_tokens, agent_id)
-        if result:
+        if result["content"]:
             _call_stats["success"] += 1
             return result
 
         _call_stats["fallback"] += 1
-        return ""
+        return result
     except ImportError:
         _last_call_error = "requests_not_installed"
         print(f"  [豆包] {call_label} ❌ requests未安装 (pip install requests)")
         _call_stats["fallback"] += 1
-        return ""
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
     except Exception as e:
         _last_call_error = f"exception({type(e).__name__}: {str(e)[:200]})"
         print(f"  [豆包] {call_label} ❌ 异常: {e}")
         _call_stats["errors"].append(str(e))
         _call_stats["fallback"] += 1
-        return ""
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
 
 def check_llm_backend() -> dict:
