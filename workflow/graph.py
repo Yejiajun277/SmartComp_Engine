@@ -195,6 +195,96 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2):
     return graph.compile()
 
 
+def export_graph_mermaid(node_retries: int = 2) -> str:
+    """导出 LangGraph DAG 为 Mermaid 格式（可嵌入 Markdown 或渲染为图片）。
+
+    使用方式：
+      1. 直接嵌入 README.md: ```mermaid\\n{output}\\n```
+      2. 用 mermaid-cli 渲染: mmdc -i graph.mmd -o graph.png
+    """
+    # 构建一个轻量 graph 只用于导出（不执行）
+    from unittest.mock import MagicMock
+    mock_orch = MagicMock()
+    graph = build_analysis_graph(mock_orch, node_retries=node_retries)
+    compiled = graph
+
+    # LangGraph 内置 Mermaid 导出
+    try:
+        mermaid_str = compiled.get_graph().draw_mermaid()
+        return mermaid_str
+    except Exception:
+        # 降级：手动生成 Mermaid
+        return _manual_mermaid_fallback()
+
+
+def _manual_mermaid_fallback() -> str:
+    """手动生成 DAG 的 Mermaid 表示（降级方案）。"""
+    lines = [
+        "graph TD",
+        "    START([START]) --> initialize_run",
+        "    initialize_run --> discover_competitors",
+        "    discover_competitors -->|有竞品| collect_target_product",
+        "    discover_competitors -->|无竞品| finalize_no_competitors --> END2([END])",
+        "    collect_target_product --> collect_competitors",
+        "    collect_competitors --> check_collection_quality",
+        "    check_collection_quality -->|通过| generate_dimensions",
+        "    check_collection_quality -->|重试| prepare_collection_retry",
+        "    check_collection_quality -->|耗尽| mark_collection_degraded",
+        "    prepare_collection_retry -->|补充数据| check_collection_quality",
+        "    prepare_collection_retry -->|重新采集| collect_competitors",
+        "    mark_collection_degraded -->|继续降级| generate_dimensions",
+        "    mark_collection_degraded -->|严重失败| fail_run --> END3([END])",
+        "    generate_dimensions --> build_degradation_warning",
+        "    build_degradation_warning --> run_product_analysis",
+        "    build_degradation_warning --> run_pricing_analysis",
+        "    build_degradation_warning --> run_market_analysis",
+        "    run_product_analysis --> join_parallel_analysis",
+        "    run_pricing_analysis --> join_parallel_analysis",
+        "    run_market_analysis --> join_parallel_analysis",
+        "    join_parallel_analysis --> check_product_quality",
+        "    join_parallel_analysis --> check_pricing_quality",
+        "    join_parallel_analysis --> check_market_quality",
+        "    check_product_quality --> join_analysis_quality",
+        "    check_pricing_quality --> join_analysis_quality",
+        "    check_market_quality --> join_analysis_quality",
+        "    join_analysis_quality -->|通过| generate_strategy",
+        "    join_analysis_quality -->|产品重试| prepare_product_retry",
+        "    join_analysis_quality -->|定价重试| prepare_pricing_retry",
+        "    join_analysis_quality -->|市场重试| prepare_market_retry",
+        "    join_analysis_quality -->|耗尽| mark_analysis_degraded",
+        "    prepare_product_retry --> rerun_product_analysis --> check_product_quality",
+        "    prepare_pricing_retry --> rerun_pricing_analysis --> check_pricing_quality",
+        "    prepare_market_retry --> rerun_market_analysis --> check_market_quality",
+        "    mark_analysis_degraded --> generate_strategy",
+        "    generate_strategy --> check_strategy_quality",
+        "    check_strategy_quality -->|通过| finalize_report --> END4([END])",
+        "    check_strategy_quality -->|重试| prepare_strategy_retry",
+        "    check_strategy_quality -->|耗尽| mark_strategy_degraded",
+        "    prepare_strategy_retry --> generate_strategy",
+        "    mark_strategy_degraded --> finalize_report",
+    ]
+    return "\n".join(lines)
+
+
+def save_graph_visualization(artifact_store, node_retries: int = 2):
+    """将 DAG 可视化保存到 artifact_store。
+
+    保存文件：
+      - workflow_dag.mmd: Mermaid 源文件
+      - workflow_dag.md: 可直接嵌入 README 的 Mermaid 代码块
+    """
+    mermaid_str = export_graph_mermaid(node_retries=node_retries)
+
+    # 保存原始 Mermaid 文件
+    artifact_store.save_text("workflow_dag.mmd", mermaid_str)
+
+    # 保存为可嵌入 README 的格式
+    md_content = f"## 工作流 DAG\n\n```mermaid\n{mermaid_str}\n```\n"
+    artifact_store.save_text("workflow_dag.md", md_content)
+
+    return mermaid_str
+
+
 async def run_analysis_graph(
     orchestrator,
     product_description: str,

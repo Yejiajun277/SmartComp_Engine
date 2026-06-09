@@ -255,6 +255,11 @@ class QualityCheckResult:
     feedback_to_agent: str = ""         # 给被打回 Agent 的反馈消息
     hallucination_status: str = "skipped"       # HallucinationCheckStatus 的值
     hallucination_score: float = 100.0          # 幻觉检测独立分数
+    # ── 业务闭环指标 ──
+    accuracy_rate: float = 100.0        # 准确率 0-100（无幻觉断言占比）
+    coverage_rate: float = 100.0        # 覆盖率 0-100（已填充字段占比）
+    correction_count: int = 0           # 本轮被修正/补充的字段数
+    total_fields: int = 0               # 本轮检查的总字段数
 
 
 @dataclass
@@ -271,6 +276,40 @@ class QATimeline:
 
     def all_passed(self) -> bool:
         return all(c.passed or c.degraded for c in self.checks)
+
+    def get_accuracy_rate(self) -> float:
+        """全局准确率：各阶段最后一轮检查的 accuracy_rate 加权平均"""
+        last_checks = self._last_attempt_per_phase()
+        if not last_checks:
+            return 100.0
+        total_fields = sum(c.total_fields for c in last_checks) or 1
+        weighted = sum(c.accuracy_rate * c.total_fields for c in last_checks)
+        return round(weighted / total_fields, 1)
+
+    def get_coverage_rate(self) -> float:
+        """全局覆盖率：各阶段最后一轮检查的 coverage_rate 加权平均"""
+        last_checks = self._last_attempt_per_phase()
+        if not last_checks:
+            return 100.0
+        total_fields = sum(c.total_fields for c in last_checks) or 1
+        weighted = sum(c.coverage_rate * c.total_fields for c in last_checks)
+        return round(weighted / total_fields, 1)
+
+    def get_correction_rate(self) -> float:
+        """人工修正率：经重试补充的字段数 / 总字段数"""
+        last_checks = self._last_attempt_per_phase()
+        if not last_checks:
+            return 0.0
+        total_fields = sum(c.total_fields for c in last_checks) or 1
+        corrected = sum(c.correction_count for c in last_checks)
+        return round(corrected / total_fields * 100, 1)
+
+    def _last_attempt_per_phase(self) -> list[QualityCheckResult]:
+        """获取每个阶段最后一轮的检查结果"""
+        by_phase: dict[str, QualityCheckResult] = {}
+        for c in self.checks:
+            by_phase[c.phase] = c  # 最后一次覆盖前面的
+        return list(by_phase.values())
 
 
 @dataclass

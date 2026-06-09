@@ -130,6 +130,11 @@ class QualityAgent(BaseAgent):
         if hallucination_status == HallucinationCheckStatus.FAILED.value:
             h_score = 60.0
 
+        # ── 业务闭环指标 ──
+        total_fields = len(competitors_data) * self._COLLECTION_FIELDS_PER_COMPETITOR
+        completeness_issues = [i for i in issues if i.category in ("completeness", "schema")]
+        coverage_rate = self._compute_coverage_rate(completeness_issues, total_fields)
+
         result = QualityCheckResult(
             phase="collection",
             target_agent="CollectionAgent",
@@ -140,6 +145,10 @@ class QualityAgent(BaseAgent):
             attempt=attempt,
             hallucination_status=hallucination_status,
             hallucination_score=h_score,
+            accuracy_rate=h_score,
+            coverage_rate=coverage_rate,
+            correction_count=0,  # 首次检查无修正，由 graph node 在重试后设置
+            total_fields=total_fields,
         )
 
         # 记录已通过的字段（避免下一轮重复标记为幻觉）
@@ -386,6 +395,16 @@ class QualityAgent(BaseAgent):
         if hallucination_status == HallucinationCheckStatus.FAILED.value:
             h_score = 60.0
 
+        # ── 业务闭环指标 ──
+        base_fields = self._ANALYSIS_FIELDS.get(analysis_type, 4)
+        # pricing 的 pricing_comparison 有竞品覆盖维度
+        if analysis_type == "pricing":
+            total_fields = base_fields + len(competitors_data)
+        else:
+            total_fields = base_fields
+        completeness_issues = [i for i in issues if i.category in ("completeness", "schema")]
+        coverage_rate = self._compute_coverage_rate(completeness_issues, total_fields)
+
         agent_id_map = {
             "product": "ProductAgent",
             "pricing": "PricingAgent",
@@ -402,6 +421,10 @@ class QualityAgent(BaseAgent):
             attempt=attempt,
             hallucination_status=hallucination_status,
             hallucination_score=h_score,
+            accuracy_rate=h_score,
+            coverage_rate=coverage_rate,
+            correction_count=0,
+            total_fields=total_fields,
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -631,6 +654,11 @@ class QualityAgent(BaseAgent):
         if hallucination_status == HallucinationCheckStatus.FAILED.value:
             h_score = 60.0
 
+        # ── 业务闭环指标 ──
+        total_fields = self._STRATEGY_FIELDS
+        completeness_issues = [i for i in issues if i.category in ("completeness", "schema")]
+        coverage_rate = self._compute_coverage_rate(completeness_issues, total_fields)
+
         result = QualityCheckResult(
             phase="strategy",
             target_agent="StrategyAgent",
@@ -641,6 +669,10 @@ class QualityAgent(BaseAgent):
             attempt=attempt,
             hallucination_status=hallucination_status,
             hallucination_score=h_score,
+            accuracy_rate=h_score,
+            coverage_rate=coverage_rate,
+            correction_count=0,
+            total_fields=total_fields,
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -968,6 +1000,33 @@ class QualityAgent(BaseAgent):
                 suggestion=item.get("suggestion", ""),
             ))
         return issues
+
+    # ── 业务闭环指标计算 ──
+
+    # 每个阶段的必填字段数（用于覆盖率计算）
+    _COLLECTION_FIELDS_PER_COMPETITOR = 8   # name, features, pricing, market_share, strengths, weaknesses, channels, user_reviews
+    _ANALYSIS_FIELDS = {
+        "product": 4,   # feature_matrix, competitive_advantages, differentiation_points, summary
+        "pricing": 3,   # pricing_comparison, value_ranking, summary
+        "market": 5,    # market_share_data, user_reputation, user_profiles, channel_analysis, summary
+    }
+    _STRATEGY_FIELDS = 6  # overall_positioning, differentiation_strategy, action_plan, risk_assessment, citation_index, summary
+
+    def _compute_coverage_rate(
+        self,
+        completeness_issues: list[QualityIssue],
+        total_fields: int,
+    ) -> float:
+        """根据完整性问题计算覆盖率"""
+        if total_fields <= 0:
+            return 100.0
+        # critical 问题算完全缺失，warning 算半缺失
+        missing_weight = sum(
+            1.0 if i.severity == "critical" else 0.5
+            for i in completeness_issues
+        )
+        coverage = max(0.0, (total_fields - missing_weight) / total_fields * 100)
+        return round(coverage, 1)
 
     def _calculate_score(
         self,

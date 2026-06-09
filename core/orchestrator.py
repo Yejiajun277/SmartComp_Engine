@@ -459,6 +459,19 @@ class Orchestrator:
         self._save_artifact_json("07_strategy_report.json", report)
         self._save_artifact_json("qa_timeline.json", report.qa_timeline)
         self._save_artifact_json("llm_logs.json", report.raw_llm_logs)
+
+        # 保存 Token 用量汇总
+        token_summary = self._build_token_summary(report.raw_llm_logs)
+        self._save_artifact_json("token_summary.json", token_summary)
+
+        # 保存 DAG 可视化
+        if self.artifact_store:
+            try:
+                from workflow.graph import save_graph_visualization
+                save_graph_visualization(self.artifact_store)
+            except Exception as e:
+                print(f"  ⚠️ DAG可视化导出失败: {e}")
+
         self._finalize_artifacts(
             status="completed",
             product_name=report.product_name,
@@ -589,6 +602,44 @@ class Orchestrator:
             self.strategy_agent.llm_logs +
             self.quality_agent.llm_logs
         )
+
+    @staticmethod
+    def _build_token_summary(llm_logs: list[dict]) -> dict:
+        """从 LLM 日志中构建 Token 用量汇总。"""
+        per_agent = {}
+        total_prompt = 0
+        total_completion = 0
+        total_calls = 0
+
+        for entry in llm_logs:
+            agent_id = entry.get("agent_id", "unknown")
+            prompt_tok = entry.get("prompt_tokens", 0)
+            completion_tok = entry.get("completion_tokens", 0)
+
+            if agent_id not in per_agent:
+                per_agent[agent_id] = {
+                    "call_count": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+
+            per_agent[agent_id]["call_count"] += 1
+            per_agent[agent_id]["prompt_tokens"] += prompt_tok
+            per_agent[agent_id]["completion_tokens"] += completion_tok
+            per_agent[agent_id]["total_tokens"] += prompt_tok + completion_tok
+
+            total_prompt += prompt_tok
+            total_completion += completion_tok
+            total_calls += 1
+
+        return {
+            "total_calls": total_calls,
+            "total_prompt_tokens": total_prompt,
+            "total_completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+            "per_agent": per_agent,
+        }
 
     def _print_feature_matrix(self, product_name: str,
                                product_analysis: ProductAnalysis,

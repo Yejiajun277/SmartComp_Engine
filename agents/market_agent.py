@@ -53,15 +53,92 @@ class MarketAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if result:
+                if truncated and len(competitors_data) >= 2:
+                    self._log(f"⚠️ 检测到输出截断，启动分片重试...")
+                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
+                    if chunked:
+                        return chunked
                 analysis = self._parse_market_analysis(result)
                 self._log(f"✅ 市场分析完成: {len(analysis.market_share_data)}个竞品市场数据")
                 return analysis
             else:
+                if truncated and len(competitors_data) >= 2:
+                    self._log(f"⚠️ JSON解析失败+截断，尝试分片重试...")
+                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
+                    if chunked:
+                        return chunked
                 self._log("⚠️ LLM市场分析失败，降级到规则引擎")
 
         return self._rule_analyze(product_name, competitors_data)
+
+    async def _run_chunked(self, product_name: str,
+                           competitors_data: dict[str, CompetitorData],
+                           target_product_data: CompetitorData | None,
+                           feedback: str) -> MarketAnalysis | None:
+        """分片重试：将竞品拆成多批分别调用LLM，再合并结果。"""
+        all_names = list(competitors_data.keys())
+        if len(all_names) < 2:
+            return None
+
+        mid = len(all_names) // 2
+        chunks = [
+            {name: competitors_data[name] for name in all_names[:mid]},
+            {name: competitors_data[name] for name in all_names[mid:]},
+        ]
+
+        all_share = []
+        all_reputation = {}
+        all_profiles = {}
+        analyses = []
+        all_citations = []
+
+        for i, chunk in enumerate(chunks):
+            self._log(f"  📦 分片 {i+1}/{len(chunks)}: {list(chunk.keys())}")
+            chunk_text = self._build_competitors_text(product_name, chunk, target_product_data)
+            if feedback:
+                chunk_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
+
+            prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=chunk_text)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            if not result:
+                self._log(f"  ⚠️ 分片 {i+1} 调用失败，跳过")
+                continue
+
+            if truncated and len(chunk) >= 2:
+                self._log(f"  ⚠️ 分片 {i+1} 仍然截断，继续拆分...")
+                sub = await self._run_chunked(product_name, chunk, target_product_data, feedback)
+                if sub:
+                    all_share.extend(sub.market_share_data)
+                    all_reputation.update(sub.user_reputation)
+                    all_profiles.update(sub.user_profiles)
+                    all_citations.extend(sub.citations)
+                    if sub.growth_trends:
+                        analyses.append(sub.growth_trends)
+                continue
+
+            parsed = self._parse_market_analysis(result)
+            all_share.extend(parsed.market_share_data)
+            all_reputation.update(parsed.user_reputation)
+            all_profiles.update(parsed.user_profiles)
+            all_citations.extend(parsed.citations)
+            if parsed.growth_trends:
+                analyses.append(parsed.growth_trends)
+
+        if not all_share and not all_reputation:
+            return None
+
+        self._log(f"✅ 分片合并完成: {len(all_share)}个市场份额, {len(all_reputation)}个口碑, {len(all_profiles)}个画像")
+        return MarketAnalysis(
+            market_share_data=all_share,
+            growth_trends="；".join(analyses) if analyses else "",
+            user_reputation=all_reputation,
+            user_profiles=all_profiles,
+            channel_analysis="",
+            summary="",
+            citations=list(set(all_citations)),
+        )
 
     def _build_competitors_text(self, product_name: str,
                                  competitors_data: dict[str, CompetitorData],

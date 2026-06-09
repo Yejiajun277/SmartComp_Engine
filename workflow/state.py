@@ -90,9 +90,11 @@ class AnalysisState(TypedDict, total=False):
     strategy_retry_count: int
 
     collection_supplemented: bool
+    collection_pending_fields: int      # 上轮质检发现的缺失字段数（用于修正率计算）
     product_prev_score: int
     pricing_prev_score: int
     market_prev_score: int
+    analysis_pending_fields: int        # 上轮分析质检发现的缺失字段数
 
     quality_exhausted: Annotated[dict[str, bool], merge_dicts]
 
@@ -125,8 +127,10 @@ def initial_analysis_state(
         "market_retry_count": 0,
         "strategy_retry_count": 0,
         "collection_supplemented": False,
+        "collection_pending_fields": 0,
         "product_prev_score": 0,
         "pricing_prev_score": 0,
         "market_prev_score": 0,
+        "analysis_pending_fields": 0,
         "quality_exhausted": {},
     }

@@ -12,6 +12,8 @@ import config
 
 _call_stats = {"total": 0, "success": 0, "fallback": 0, "errors": []}
 _last_call_error = ""  # 最近一次调用的失败原因
+_last_finish_reason = ""  # 最近一次调用的 finish_reason（用于截断检测）
+_last_usage = {}  # 最近一次调用的 token 用量
 
 
 def _normalize_provider(provider: str) -> str:
@@ -25,7 +27,7 @@ def _call_doubao(system_prompt: str, user_message: str,
                  agent_id: str) -> str:
     """调用豆包 OpenAI 兼容接口。"""
     import requests
-    global _last_call_error
+    global _last_call_error, _last_finish_reason, _last_usage
 
     if not config.DOUBAO_API_KEY:
         _last_call_error = "api_key_missing"
@@ -61,6 +63,8 @@ def _call_doubao(system_prompt: str, user_message: str,
                 error_type = error.get("type", "unknown")
                 error_code = error.get("code", resp.status_code)
                 _last_call_error = f"api_error({resp.status_code}, {error_type}, {error_code})"
+                _last_finish_reason = ""
+                _last_usage = {}
                 print(f"  [豆包] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
                 if attempt == 0:
                     time.sleep(1)
@@ -69,30 +73,45 @@ def _call_doubao(system_prompt: str, user_message: str,
 
             message = result.get("choices", [{}])[0].get("message", {})
             content = message.get("content", "") or message.get("reasoning", "")
+            finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
 
             if not content:
-                finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
                 _last_call_error = f"empty_response(finish_reason={finish_reason})"
+                _last_finish_reason = finish_reason
+                _last_usage = {}
                 print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
                 return ""
 
             usage = result.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", "?")
-            completion_tokens = usage.get("completion_tokens", "?")
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
             _last_call_error = ""
+            _last_finish_reason = finish_reason
+            _last_usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            }
+            truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
             print(
                 f"  [豆包] [{agent_id}] ✅ 调用成功 "
-                f"(tokens: {prompt_tokens}+{completion_tokens}, 输出长度: {len(content)}字)"
+                f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
+                f"finish={finish_reason}){truncation_warn}"
             )
             return content
         except requests.exceptions.Timeout:
             _last_call_error = f"timeout(300s, attempt {attempt + 1})"
+            _last_finish_reason = ""
+            _last_usage = {}
             print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
             if attempt == 0:
                 continue
             return ""
         except requests.exceptions.ConnectionError as e:
             _last_call_error = f"connection_error({str(e)[:200]})"
+            _last_finish_reason = ""
+            _last_usage = {}
             print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
             if attempt == 0:
                 time.sleep(2)
@@ -240,6 +259,21 @@ def parse_llm_json(text: str) -> dict:
 def get_last_call_error() -> str:
     """获取最近一次 LLM 调用的失败原因"""
     return _last_call_error
+
+
+def get_last_finish_reason() -> str:
+    """获取最近一次 LLM 调用的 finish_reason。'length' 表示输出被截断。"""
+    return _last_finish_reason
+
+
+def is_last_call_truncated() -> bool:
+    """最近一次 LLM 调用是否因 max_tokens 耗尽而被截断。"""
+    return _last_finish_reason == "length"
+
+
+def get_last_usage() -> dict:
+    """获取最近一次 LLM 调用的 token 用量。"""
+    return dict(_last_usage)
 
 
 def get_llm_stats() -> dict:
