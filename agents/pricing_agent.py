@@ -64,15 +64,84 @@ class PricingAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result = await self.async_ask_llm_json(prompt, max_tokens=4096)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if result:
+                if truncated and len(competitors_data) >= 2:
+                    self._log(f"⚠️ 检测到输出截断，启动分片重试...")
+                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
+                    if chunked:
+                        return chunked
                 analysis = self._parse_pricing_analysis(result)
                 self._log(f"✅ 定价分析完成: {len(analysis.pricing_comparison)}个竞品定价对比")
                 return analysis
             else:
+                if truncated and len(competitors_data) >= 2:
+                    self._log(f"⚠️ JSON解析失败+截断，尝试分片重试...")
+                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
+                    if chunked:
+                        return chunked
                 self._log("⚠️ LLM定价分析失败，降级到规则引擎")
 
         return self._rule_analyze(product_name, competitors_data)
+
+    async def _run_chunked(self, product_name: str,
+                           competitors_data: dict[str, CompetitorData],
+                           target_product_data: CompetitorData | None,
+                           feedback: str) -> PricingAnalysis | None:
+        """分片重试：将竞品拆成多批分别调用LLM，再合并结果。"""
+        all_names = list(competitors_data.keys())
+        if len(all_names) < 2:
+            return None
+
+        mid = len(all_names) // 2
+        chunks = [
+            {name: competitors_data[name] for name in all_names[:mid]},
+            {name: competitors_data[name] for name in all_names[mid:]},
+        ]
+
+        all_items = []
+        analyses = []
+        all_citations = []
+
+        for i, chunk in enumerate(chunks):
+            self._log(f"  📦 分片 {i+1}/{len(chunks)}: {list(chunk.keys())}")
+            chunk_text = self._build_competitors_text(product_name, chunk, target_product_data)
+            if feedback:
+                chunk_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
+
+            prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=chunk_text)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            if not result:
+                self._log(f"  ⚠️ 分片 {i+1} 调用失败，跳过")
+                continue
+
+            if truncated and len(chunk) >= 2:
+                self._log(f"  ⚠️ 分片 {i+1} 仍然截断，继续拆分...")
+                sub = await self._run_chunked(product_name, chunk, target_product_data, feedback)
+                if sub:
+                    all_items.extend(sub.pricing_comparison)
+                    all_citations.extend(sub.citations)
+                    if sub.pricing_strategy_analysis:
+                        analyses.append(sub.pricing_strategy_analysis)
+                continue
+
+            parsed = self._parse_pricing_analysis(result)
+            all_items.extend(parsed.pricing_comparison)
+            all_citations.extend(parsed.citations)
+            if parsed.pricing_strategy_analysis:
+                analyses.append(parsed.pricing_strategy_analysis)
+
+        if not all_items:
+            return None
+
+        self._log(f"✅ 分片合并完成: {len(all_items)}个竞品定价对比")
+        return PricingAnalysis(
+            pricing_comparison=all_items,
+            pricing_strategy_analysis="；".join(analyses) if analyses else "",
+            value_ranking=[],
+            summary="",
+            citations=list(set(all_citations)),
+        )
 
     def _build_competitors_text(self, product_name: str,
                                  competitors_data: dict[str, CompetitorData],

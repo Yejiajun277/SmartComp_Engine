@@ -338,6 +338,9 @@ class AnalysisGraphNodes:
             )
             if not missing_fields and not has_critical_completeness:
                 result.passed = True
+        # 重试后设置修正率：上轮缺失字段数即为本轮修正数
+        if state.get("collection_retry_count", 0) > 0:
+            result.correction_count = state.get("collection_pending_fields", 0)
         self.orchestrator.quality_agent.timeline.add_check(result)
         timings = self._merge_timing(state, "qa_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
@@ -365,6 +368,8 @@ class AnalysisGraphNodes:
         missing_fields = quality_agent.extract_missing_fields(
             state["qa_collection"], state.get("competitors_data")
         )
+        # 计算本轮缺失字段总数（用于修正率）
+        pending_count = sum(len(fields) for fields in missing_fields.values())
         if missing_fields:
             # 定向补充搜索：仅针对缺失/截断字段补搜，不整体重跑采集
             supplemented = await collection_agent.async_supplement_missing_fields(
@@ -383,6 +388,7 @@ class AnalysisGraphNodes:
                 "collection_feedback": "",
                 "latest_feedback": feedback,
                 "collection_retry_count": state.get("collection_retry_count", 0) + 1,
+                "collection_pending_fields": pending_count,
             }
 
         # 无缺失字段：保持整体重跑路径
@@ -392,6 +398,7 @@ class AnalysisGraphNodes:
             "collection_feedback": feedback,
             "latest_feedback": feedback,
             "collection_retry_count": state.get("collection_retry_count", 0) + 1,
+            "collection_pending_fields": pending_count,
         }
 
     async def mark_collection_degraded(self, state: AnalysisState) -> AnalysisState:
@@ -596,6 +603,9 @@ class AnalysisGraphNodes:
             and result.score <= state.get(f"{analysis_type}_prev_score", 0)
         ):
             result.passed = True
+        # 重试后设置修正率
+        if state.get(retry_key, 0) > 0:
+            result.correction_count = state.get("analysis_pending_fields", 0)
         qa_type = EventType.QA_CHECK_PASSED if result.passed else EventType.QA_CHECK_FAILED
         await self._emit(state, qa_type, "QualityAgent", analysis_type,
                          progress=state.get("progress", 0.75),
@@ -639,12 +649,15 @@ class AnalysisGraphNodes:
         retry_key = f"{analysis_type}_retry_count"
         feedback_key = f"{analysis_type}_feedback"
         prev_score_key = f"{analysis_type}_prev_score"
+        # 计算本轮缺失字段数（critical completeness issues 数量）
+        pending = sum(1 for i in qa.issues if i.severity == "critical" and i.category == "completeness")
         return {
             feedback_key: feedback,
             "latest_feedback": feedback,
             retry_key: state.get(retry_key, 0) + 1,
             prev_score_key: qa.score,
             "qa_started_perf_counter": time.perf_counter(),
+            "analysis_pending_fields": state.get("analysis_pending_fields", 0) + pending,
         }
 
     async def mark_analysis_degraded(self, state: AnalysisState) -> AnalysisState:
@@ -742,6 +755,9 @@ class AnalysisGraphNodes:
 
         start = time.perf_counter()
         result = await self._retry_node("check_strategy_quality", call)
+        # 重试后设置修正率
+        if state.get("strategy_retry_count", 0) > 0:
+            result.correction_count = state.get("analysis_pending_fields", 0)
         self.orchestrator.quality_agent.timeline.add_check(result)
         timings = self._merge_timing(state, "qa_strategy", time.perf_counter() - start)
         self.orchestrator.timings = timings
@@ -763,11 +779,14 @@ class AnalysisGraphNodes:
         }
 
     async def prepare_strategy_retry(self, state: AnalysisState) -> AnalysisState:
-        feedback = await self.orchestrator.quality_agent.async_build_feedback(state["qa_strategy"])
+        qa = state["qa_strategy"]
+        feedback = await self.orchestrator.quality_agent.async_build_feedback(qa)
+        pending = sum(1 for i in qa.issues if i.severity == "critical" and i.category == "completeness")
         return {
             "strategy_feedback": feedback,
             "latest_feedback": feedback,
             "strategy_retry_count": state.get("strategy_retry_count", 0) + 1,
+            "analysis_pending_fields": state.get("analysis_pending_fields", 0) + pending,
         }
 
     async def mark_strategy_degraded(self, state: AnalysisState) -> AnalysisState:
@@ -808,6 +827,42 @@ class AnalysisGraphNodes:
         self.orchestrator._save_artifact_json("qa_timeline.json", report.qa_timeline)
         self.orchestrator._save_artifact_json("llm_logs.json", report.raw_llm_logs)
 
+        # 保存 Token 用量汇总
+        token_summary = self.orchestrator._build_token_summary(report.raw_llm_logs)
+        self.orchestrator._save_artifact_json("token_summary.json", token_summary)
+
+        # 保存业务闭环指标
+        qa = report.qa_timeline
+        per_phase = {}
+        for c in qa._last_attempt_per_phase():
+            per_phase[c.phase] = {
+                "accuracy_rate": c.accuracy_rate,
+                "coverage_rate": c.coverage_rate,
+                "correction_count": c.correction_count,
+                "total_fields": c.total_fields,
+            }
+        total_fields = sum(c.total_fields for c in qa._last_attempt_per_phase())
+        corrected_fields = sum(c.correction_count for c in qa._last_attempt_per_phase())
+        business_metrics = {
+            "accuracy_rate": qa.get_accuracy_rate(),
+            "coverage_rate": qa.get_coverage_rate(),
+            "correction_rate": qa.get_correction_rate(),
+            "detail": {
+                "per_phase": per_phase,
+                "total_fields": total_fields,
+                "corrected_fields": corrected_fields,
+            },
+        }
+        self.orchestrator._save_artifact_json("business_metrics.json", business_metrics)
+
+        # 保存 DAG 可视化
+        if self.orchestrator.artifact_store:
+            try:
+                from workflow.graph import save_graph_visualization
+                save_graph_visualization(self.orchestrator.artifact_store)
+            except Exception as e:
+                print(f"  ⚠️ DAG可视化导出失败: {e}")
+
         status = "completed_degraded" if state.get("quality_exhausted") else "completed"
         self.orchestrator._finalize_artifacts(
             status=status,
@@ -840,6 +895,11 @@ class AnalysisGraphNodes:
         self.orchestrator._save_artifact_json("failed_state.json", failure)
         self.orchestrator._save_artifact_json("qa_timeline.json", report.qa_timeline)
         self.orchestrator._save_artifact_json("llm_logs.json", report.raw_llm_logs)
+
+        # 保存 Token 用量汇总（即使失败也记录消耗）
+        token_summary = self.orchestrator._build_token_summary(report.raw_llm_logs)
+        self.orchestrator._save_artifact_json("token_summary.json", token_summary)
+
         self.orchestrator._finalize_artifacts(
             status="failed",
             product_name=report.product_name,

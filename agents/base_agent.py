@@ -6,7 +6,7 @@ agents/base_agent.py — Agent基类
 """
 
 from abc import ABC, abstractmethod
-from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error
+from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error, is_last_call_truncated
 import config
 import json
 import re
@@ -65,6 +65,15 @@ class BaseAgent(ABC):
             "max_tokens": tokens,
             "success": bool(content),
             "parse_error": "",
+            # Token 用量（来自 API 响应）
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+            # Prompt 归档（可选，通过 config 控制）
+            "system_prompt": self.system_prompt if config.ARCHIVE_PROMPTS else "",
+            "user_message": user_message if config.ARCHIVE_PROMPTS else "",
+            "max_tokens_requested": tokens,
+            "temperature": temp,
         })
 
         return content
@@ -165,6 +174,36 @@ class BaseAgent(ABC):
             return {}, reason
         reason = get_last_call_error() or "empty_response"
         return {}, reason
+
+    def ask_llm_json_with_truncation_check(self, user_message: str,
+                                            temperature: float = None,
+                                            max_tokens: int = None) -> tuple[dict, bool]:
+        """
+        调用LLM并解析JSON，同时检测输出是否被截断。
+
+        Returns:
+            (parsed_dict, was_truncated):
+            - parsed_dict: 解析成功返回dict，失败返回{}
+            - was_truncated: True 表示 finish_reason=='length'，输出被截断
+        """
+        text = self.ask_llm(user_message, temperature, max_tokens)
+        truncated = is_last_call_truncated()
+
+        if text:
+            parsed = parse_llm_json(text)
+            if parsed:
+                if truncated:
+                    self._log(f"   ⚠️ JSON解析成功但输出被截断(max_tokens耗尽)，部分内容可能缺失")
+                return parsed, truncated
+            else:
+                if self.llm_logs:
+                    self.llm_logs[-1]["parse_error"] = get_last_call_error() or "json_parse_error"
+                if truncated:
+                    self._log(f"   ⚠️ 输出被截断且JSON解析失败，需要分片重试")
+                else:
+                    self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
+                return {}, truncated
+        return {}, truncated
 
     @staticmethod
     def build_citations_text(citations: list, with_snippet: bool = True, max_snippet: int = 200) -> str:

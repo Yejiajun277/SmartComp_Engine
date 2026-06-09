@@ -259,7 +259,13 @@ class CollectionAgent(BaseAgent):
                 competitor_name=entity_name,
                 search_results=all_text[:12000],
             )
-            result = self.ask_llm_json(prompt, max_tokens=6144, temperature=0)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
+            if truncated and result:
+                # 检测到截断：对文本字段进行补充提取
+                self._log(f"   ⚠️ 采集输出被截断，补充提取文本字段...")
+                result = self._supplement_text_fields(
+                    result, product_name, product_description, entity_name, all_text
+                )
             if result:
                 # 解析结构化产品功能
                 product_features = []
@@ -423,6 +429,58 @@ class CollectionAgent(BaseAgent):
             search_sources=sources,
             citations=citations,
         )
+
+    def _supplement_text_fields(self, result: dict,
+                                product_name: str, product_description: str,
+                                entity_name: str, all_text: str) -> dict:
+        """
+        当首次采集被截断时，对文本字段进行补充提取。
+        检查 market_share, user_reviews, strengths, weaknesses, channels 是否被截断，
+        如果是，发起第二次 LLM 调用只提取这些字段。
+        """
+        # 检查哪些文本字段可能被截断（以句号/分号结尾的不算截断）
+        text_fields = ["market_share", "user_reviews", "strengths", "weaknesses", "channels"]
+        truncated_fields = []
+        for field in text_fields:
+            value = result.get(field, "")
+            if value and len(value) > 20:
+                # 如果文本很长但没有正常结尾标点，可能是截断
+                if not value.rstrip().endswith(("。", "；", ".", ";", "！", "!", "）", ")")):
+                    truncated_fields.append(field)
+
+        if not truncated_fields:
+            return result
+
+        self._log(f"   📝 检测到截断字段: {truncated_fields}")
+
+        # 构建补充提取 prompt
+        supplement_prompt = f"""请从以下搜索结果中补充提取竞品 {entity_name} 的以下字段信息。
+
+### 搜索结果
+{all_text[:12000]}
+
+### 需要补充的字段
+{chr(10).join(f'- {field}' for field in truncated_fields)}
+
+### 要求
+- 只提取搜索结果中明确提及的内容
+- 每个字段独立提取，不要遗漏
+- 输出完整句子，不要截断
+
+### 输出格式
+```json
+{{{chr(10)}    {','.join(f'"{field}": "完整内容"' for field in truncated_fields)}{chr(10)}}}
+```"""
+
+        supplement_result = self.ask_llm_json(supplement_prompt, max_tokens=4096, temperature=0)
+        if supplement_result:
+            for field in truncated_fields:
+                new_value = supplement_result.get(field, "")
+                if new_value and len(new_value) > len(result.get(field, "")):
+                    result[field] = new_value
+                    self._log(f"   ✅ {entity_name}.{field} 补充成功")
+
+        return result
 
     def _supplement_pricing(self, entity_name: str, product_name: str,
                             pricing_tiers: list, existing_cites: list) -> tuple:

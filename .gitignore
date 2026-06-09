@@ -18,5 +18,4 @@ CLAUDE.md
 .claude
 .DS_Store
 
-.claude/settings.json
-.DS_Store
+.claude/

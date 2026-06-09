@@ -95,7 +95,16 @@ class StrategyAgent(BaseAgent):
                 target_intro_context=target_intro_context,
                 analysis_text=analysis_text,
             )
-            result = await self.async_ask_llm_json(prompt, max_tokens=6144)
+            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=6144)
+            if result and truncated:
+                # 截断了：提升 max_tokens 重试一次
+                self._log("⚠️ 策略输出被截断，提升 max_tokens 重试...")
+                result2, truncated2 = self.ask_llm_json_with_truncation_check(prompt, max_tokens=8192)
+                if result2:
+                    if truncated2:
+                        self._log("⚠️ 8192 tokens 仍截断，使用已有结果（部分内容可能不完整）")
+                    else:
+                        result = result2  # 用完整结果替换
             if result:
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
@@ -306,66 +315,62 @@ class StrategyAgent(BaseAgent):
                     )
             if target_product_data.market_share:
                 market_refs = self._pick_query_citations(target_citations, ["市场份额", "用户量", "用户规模", "DAU", "MAU"], 3)
-                lines.append(f"- 市场数据：{self._trim_text(target_product_data.market_share, 180)}"
-                             f"{f' [{','.join(market_refs)}]' if market_refs else ''}")
+                ref_tag = f" [{','.join(market_refs)}]" if market_refs else ""
+                lines.append(f"- 市场数据：{self._trim_text(target_product_data.market_share, 180)}{ref_tag}")
             if target_product_data.user_reviews:
                 review_refs = self._pick_query_citations(target_citations, ["用户评价", "用户反馈", "使用场景", "评测"], 3)
-                lines.append(f"- 用户评价：{self._trim_text(target_product_data.user_reviews, 180)}"
-                             f"{f' [{','.join(review_refs)}]' if review_refs else ''}")
+                ref_tag = f" [{','.join(review_refs)}]" if review_refs else ""
+                lines.append(f"- 用户评价：{self._trim_text(target_product_data.user_reviews, 180)}{ref_tag}")
             if target_product_data.strengths:
                 strength_refs = self._pick_query_citations(target_citations, ["竞争优势", "核心优势", "行业地位", "优势"], 3)
-                lines.append(f"- 优势：{self._trim_text(target_product_data.strengths, 180)}"
-                             f"{f' [{','.join(strength_refs)}]' if strength_refs else ''}")
+                ref_tag = f" [{','.join(strength_refs)}]" if strength_refs else ""
+                lines.append(f"- 优势：{self._trim_text(target_product_data.strengths, 180)}{ref_tag}")
             if target_product_data.weaknesses:
                 weakness_refs = self._pick_query_citations(target_citations, ["劣势", "不足", "用户吐槽", "差评"], 3)
-                lines.append(f"- 劣势：{self._trim_text(target_product_data.weaknesses, 180)}"
-                             f"{f' [{','.join(weakness_refs)}]' if weakness_refs else ''}")
+                ref_tag = f" [{','.join(weakness_refs)}]" if weakness_refs else ""
+                lines.append(f"- 劣势：{self._trim_text(target_product_data.weaknesses, 180)}{ref_tag}")
             if target_product_data.channels:
                 channel_refs = self._pick_query_citations(target_citations, ["渠道", "推广", "合作伙伴", "生态"], 3)
-                lines.append(f"- 渠道：{self._trim_text(target_product_data.channels, 180)}"
-                             f"{f' [{','.join(channel_refs)}]' if channel_refs else ''}")
+                ref_tag = f" [{','.join(channel_refs)}]" if channel_refs else ""
+                lines.append(f"- 渠道：{self._trim_text(target_product_data.channels, 180)}{ref_tag}")
 
         lines.append("\n### 三维分析中与我方产品直接相关的结构化结果")
         for fm in product_analysis.feature_matrix[:10]:
             value = self._find_feature_value(fm.values, product_name)
             if value in ("✅", "🔶", "✓", "支持", "部分支持"):
                 own_cites = [cid for cid in fm.citations if cid.startswith(product_name + ":")]
-                lines.append(
-                    f"- 功能矩阵：{fm.feature} = {value}"
-                    f"{f' [{','.join(own_cites)}]' if own_cites else ''}"
-                )
+                cite_tag = f" [{','.join(own_cites)}]" if own_cites else ""
+                lines.append(f"- 功能矩阵：{fm.feature} = {value}{cite_tag}")
 
         for pc in pricing_analysis.pricing_comparison:
             if pc.competitor == product_name:
+                cite_tag = f" [{','.join(pc.citations)}]" if pc.citations else ""
                 lines.append(
                     f"- 定价分析：免费={self._trim_text(pc.free_tier, 90)}；"
                     f"付费={self._trim_text(pc.paid_tier, 130)}；"
-                    f"模式={self._trim_text(pc.pricing_model, 90)}"
-                    f"{f' [{','.join(pc.citations)}]' if pc.citations else ''}"
+                    f"模式={self._trim_text(pc.pricing_model, 90)}{cite_tag}"
                 )
                 break
 
         for ms in market_analysis.market_share_data:
             if ms.competitor == product_name:
+                cite_tag = f" [{','.join(ms.citations)}]" if ms.citations else ""
                 lines.append(
-                    f"- 市场分析：份额/规模={self._trim_text(ms.share_estimate, 120)}；趋势={ms.trend}"
-                    f"{f' [{','.join(ms.citations)}]' if ms.citations else ''}"
+                    f"- 市场分析：份额/规模={self._trim_text(ms.share_estimate, 120)}；趋势={ms.trend}{cite_tag}"
                 )
                 break
 
         rep = market_analysis.user_reputation.get(product_name)
         if rep:
-            lines.append(
-                f"- 用户口碑：评分={rep.score}；关键词={', '.join(rep.keywords[:6])}"
-                f"{f' [{','.join(rep.citations)}]' if rep.citations else ''}"
-            )
+            cite_tag = f" [{','.join(rep.citations)}]" if rep.citations else ""
+            lines.append(f"- 用户口碑：评分={rep.score}；关键词={', '.join(rep.keywords[:6])}{cite_tag}")
 
         profile = market_analysis.user_profiles.get(product_name)
         if profile:
+            cite_tag = f" [{','.join(profile.citations)}]" if profile.citations else ""
             lines.append(
                 f"- 用户画像：目标用户={self._trim_text(profile.target_audience, 80)}；"
-                f"场景={', '.join(profile.use_cases[:4])}；痛点={', '.join(profile.pain_points[:4])}"
-                    f"{f' [{','.join(profile.citations)}]' if profile.citations else ''}"
+                f"场景={', '.join(profile.use_cases[:4])}；痛点={', '.join(profile.pain_points[:4])}{cite_tag}"
             )
 
         if supplemental_citations:
@@ -1563,6 +1568,53 @@ class StrategyAgent(BaseAgent):
             final_status = "全部通过" if all_passed else "部分降级通过"
             final_color = "#16a34a" if all_passed else "#d97706"
 
+            # 业务闭环指标
+            accuracy_rate = report.qa_timeline.get_accuracy_rate()
+            coverage_rate = report.qa_timeline.get_coverage_rate()
+            correction_rate = report.qa_timeline.get_correction_rate()
+
+            def _metric_color(val: float, invert: bool = False) -> str:
+                """指标颜色：>80 绿, >60 黄, <=60 红。invert=True 时越低越好。"""
+                v = 100 - val if invert else val
+                if v >= 80: return "#16a34a"
+                if v >= 60: return "#d97706"
+                return "#dc2626"
+
+            def _metric_bar(val: float, color: str) -> str:
+                return f'''<div style="background:#e5e7eb;border-radius:4px;height:8px;width:100%;margin-top:6px;">
+                    <div style="background:{color};border-radius:4px;height:8px;width:{min(val, 100):.0f}%;transition:width 0.3s;"></div>
+                </div>'''
+
+            acc_color = _metric_color(accuracy_rate)
+            cov_color = _metric_color(coverage_rate)
+            cor_color = _metric_color(correction_rate, invert=True)
+
+            metrics_card_style = "background:#fff;padding:16px 20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);flex:1;min-width:180px;"
+            metrics_html = f'''
+            <div style="background:#f0fdf4;border-radius:16px;padding:32px;margin-bottom:24px;">
+                <h2 style="font-size:20px;color:#1e293b;margin:0 0 20px 0;">📊 业务闭环指标</h2>
+                <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                    <div style="{metrics_card_style}">
+                        <div style="font-size:12px;color:#94a3b8;">准确率</div>
+                        <div style="font-size:28px;font-weight:700;color:{acc_color};">{accuracy_rate:.1f}%</div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">无幻觉断言占比</div>
+                        {_metric_bar(accuracy_rate, acc_color)}
+                    </div>
+                    <div style="{metrics_card_style}">
+                        <div style="font-size:12px;color:#94a3b8;">覆盖率</div>
+                        <div style="font-size:28px;font-weight:700;color:{cov_color};">{coverage_rate:.1f}%</div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">已填充字段占比</div>
+                        {_metric_bar(coverage_rate, cov_color)}
+                    </div>
+                    <div style="{metrics_card_style}">
+                        <div style="font-size:12px;color:#94a3b8;">人工修正率</div>
+                        <div style="font-size:28px;font-weight:700;color:{cor_color};">{correction_rate:.1f}%</div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">经重试补充的字段占比</div>
+                        {_metric_bar(correction_rate, cor_color)}
+                    </div>
+                </div>
+            </div>'''
+
             qa_html = f'''
             <div style="background:#f8fafc;border-radius:16px;padding:32px;margin-bottom:24px;">
                 <h2 style="font-size:20px;color:#1e293b;margin:0 0 16px 0;">🔍 质量检查</h2>
@@ -1581,7 +1633,8 @@ class StrategyAgent(BaseAgent):
                     </div>
                 </div>
                 {qa_checks_html}
-            </div>'''
+            </div>
+            {metrics_html}'''
 
         # 数据来源附录（只展示正文实际引用的来源）
         references_html = ""

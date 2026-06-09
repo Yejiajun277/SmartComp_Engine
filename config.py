@@ -75,3 +75,6 @@ DEFAULT_COMPETITOR_COUNT = 5
 # ========================
 LLM_TEMPERATURE = 0.3
 LLM_MAX_TOKENS = 4096
+
+# 是否在 llm_logs.json 中归档完整 Prompt（用于调试和审计，会增大日志体积）
+ARCHIVE_PROMPTS = os.getenv("ARCHIVE_PROMPTS", "true").lower() in ("true", "1", "yes")
