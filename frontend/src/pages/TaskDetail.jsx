@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Progress, Typography, Row, Col, Statistic, Button, Tag, Space } from 'antd';
 import {
   ArrowLeftOutlined,
   FileTextOutlined,
-  ClockCircleOutlined,
   RobotOutlined,
 } from '@ant-design/icons';
-import { getTask } from '../api/client';
+import { getArtifact, getTask } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTask } from '../hooks/useTask';
 import PipelineGraph from '../components/PipelineGraph';
@@ -17,23 +16,124 @@ import LlmLogs from '../components/LlmLogs';
 
 const { Title, Text } = Typography;
 
+const QA_PHASE_TO_NODE = {
+  collection: 'collection',
+  product: 'product_analysis',
+  pricing: 'pricing_analysis',
+  market: 'market_analysis',
+  strategy: 'strategy',
+};
+
+const AGENT_TO_PHASE = {
+  DiscoveryAgent: 'discovery',
+  CollectionAgent: 'collection',
+  DimensionAgent: 'dimension',
+  ProductAgent: 'product_analysis',
+  PricingAgent: 'pricing_analysis',
+  MarketAgent: 'market_analysis',
+  StrategyAgent: 'strategy',
+};
+
+function summarizeQaChecks(checks = []) {
+  const summaries = {};
+
+  checks.forEach((check) => {
+    const nodeKey = QA_PHASE_TO_NODE[check.phase];
+    if (!nodeKey) return;
+
+    const current = summaries[nodeKey] || { retryCount: 0 };
+    const retryCount = current.retryCount + (check.passed ? 0 : 1);
+    const label = check.degraded
+      ? `降级通过，打回 ${retryCount} 次`
+      : check.passed
+        ? `通过${check.score != null ? ` ${Math.round(check.score)}分` : ''}`
+        : `未通过，打回 ${retryCount} 次`;
+
+    summaries[nodeKey] = {
+      phase: check.phase,
+      label,
+      status: check.degraded ? 'degraded' : check.passed ? 'passed' : 'failed',
+      score: check.score,
+      retryCount,
+    };
+  });
+
+  return summaries;
+}
+
 export default function TaskDetail() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const [taskInfo, setTaskInfo] = useState(null);
+  const [persistedQaResults, setPersistedQaResults] = useState([]);
+  const [persistedQaSummaries, setPersistedQaSummaries] = useState({});
+  const [artifactCache, setArtifactCache] = useState({});
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
 
   const {
     events, nodeStates, progress, currentMessage,
-    qaResults, taskStatus, handleEvent, AGENT_PHASE_MAP,
+    qaResults, qaSummaries, taskStatus, handleEvent, AGENT_PHASE_MAP,
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
 
+  const loadTaskInfo = useCallback(() => (
+    getTask(taskId).then(setTaskInfo).catch(() => {})
+  ), [taskId]);
+
+  const cacheArtifact = useCallback((phase, data) => {
+    setArtifactCache(prev => ({ ...prev, [phase]: data }));
+  }, []);
+
+  const refreshArtifact = useCallback((phase) => {
+    if (!phase) return Promise.resolve(null);
+    return getArtifact(taskId, phase)
+      .then((data) => {
+        cacheArtifact(phase, data);
+        return data;
+      })
+      .catch(() => null);
+  }, [cacheArtifact, taskId]);
+
+  const refreshQa = useCallback(() => (
+    getArtifact(taskId, 'qa')
+      .then((data) => {
+        const checks = data?.checks || [];
+        cacheArtifact('qa', data);
+        setPersistedQaResults(checks);
+        setPersistedQaSummaries(summarizeQaChecks(checks));
+        return data;
+      })
+      .catch(() => {
+        setPersistedQaResults([]);
+        setPersistedQaSummaries({});
+        return null;
+      })
+  ), [cacheArtifact, taskId]);
+
   useEffect(() => {
-    getTask(taskId).then(setTaskInfo).catch(() => {});
-  }, [taskId]);
+    loadTaskInfo();
+    refreshQa();
+  }, [loadTaskInfo, refreshQa]);
+
+  useEffect(() => {
+    if (!taskId) return undefined;
+    const interval = setInterval(loadTaskInfo, 2000);
+    return () => clearInterval(interval);
+  }, [loadTaskInfo, taskId]);
+
+  useEffect(() => {
+    const event = events[events.length - 1];
+    if (!event) return;
+
+    if (event.type === 'agent_completed') {
+      refreshArtifact(event.phase);
+    }
+    if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
+      refreshQa();
+    }
+  }, [events, refreshArtifact, refreshQa]);
 
   const handleNodeClick = (phase) => {
     setSelectedPhase(phase);
@@ -47,6 +147,18 @@ export default function TaskDetail() {
   const statusText = {
     pending: '等待中', running: '运行中', completed: '已完成', failed: '失败',
   }[taskStatus] || taskStatus;
+  const graphQaSummaries = Object.keys(qaSummaries).length > 0 ? qaSummaries : persistedQaSummaries;
+  const timelineQaResults = qaResults.length > 0 ? qaResults : persistedQaResults;
+  const graphNodeStates = { ...nodeStates };
+  const currentPhase = AGENT_TO_PHASE[taskInfo?.current_agent];
+  if (
+    taskInfo?.status === 'running'
+    && currentPhase
+    && graphNodeStates[currentPhase] !== 'failed'
+    && graphNodeStates[currentPhase] !== 'retrying'
+  ) {
+    graphNodeStates[currentPhase] = 'running';
+  }
 
   return (
     <div style={{ padding: 24 }}>
@@ -106,7 +218,8 @@ export default function TaskDetail() {
       {/* Pipeline Visualization */}
       <Card title="Agent 流程" style={{ marginBottom: 16 }}>
         <PipelineGraph
-          nodeStates={nodeStates}
+          nodeStates={graphNodeStates}
+          qaSummaries={graphQaSummaries}
           onNodeClick={handleNodeClick}
         />
       </Card>
@@ -115,7 +228,7 @@ export default function TaskDetail() {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card title="质检结果" style={{ height: '100%' }}>
-            <QATimeline results={qaResults} />
+            <QATimeline results={timelineQaResults} />
           </Card>
         </Col>
         <Col xs={24} md={12}>
@@ -138,7 +251,7 @@ export default function TaskDetail() {
               <Col span={8}>
                 <Statistic
                   title="质检次数"
-                  value={qaResults.length}
+                  value={timelineQaResults.length}
                 />
               </Col>
             </Row>
@@ -158,6 +271,10 @@ export default function TaskDetail() {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         agentLabel={selectedPhase ? AGENT_PHASE_MAP[selectedPhase]?.label : ''}
+        nodeStatus={selectedPhase ? graphNodeStates[selectedPhase] : undefined}
+        artifactData={selectedPhase ? artifactCache[selectedPhase] : undefined}
+        qaArtifactData={artifactCache.qa}
+        onArtifactLoaded={cacheArtifact}
       />
     </div>
   );

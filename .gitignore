@@ -15,4 +15,8 @@ planning-with-files-skill任务文档/
 docs/
 CLAUDE.md
 业务介绍.md
+.claude
+.DS_Store
 
+.claude/settings.json
+.DS_Store

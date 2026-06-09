@@ -27,6 +27,11 @@ export async function getTask(taskId) {
   return data;
 }
 
+export async function deleteTask(taskId) {
+  const { data } = await api.delete(`/tasks/${taskId}`);
+  return data;
+}
+
 export async function getReport(taskId) {
   const { data } = await api.get(`/tasks/${taskId}/report`);
   return data;

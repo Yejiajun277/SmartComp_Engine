@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -43,7 +44,7 @@ class _DateTimeEncoder(json.JSONEncoder):
 
 
 class TaskManager:
-    def __init__(self, event_bus: EventBus, max_concurrent: int = 2):
+    def __init__(self, event_bus: EventBus, max_concurrent: int = 5):
         self._tasks: dict[str, TaskState] = {}
         self._event_bus = event_bus
         self._semaphore = asyncio.Semaphore(max_concurrent)
@@ -114,14 +115,52 @@ class TaskManager:
             except Exception:
                 continue  # skip corrupt files
 
+    def _sync_tasks_from_disk(self) -> None:
+        """Merge persisted tasks into memory without changing their status."""
+        if not _TASKS_DIR.is_dir():
+            return
+        for path in sorted(_TASKS_DIR.glob("*.json")):
+            if path.name.endswith("_events.jsonl"):
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                task_id = data["id"]
+                if task_id in self._tasks:
+                    continue
+                self._tasks[task_id] = TaskState(
+                    id=task_id,
+                    product_description=data["product_description"],
+                    max_competitors=data["max_competitors"],
+                    skip_qa=data["skip_qa"],
+                    use_rule_engine=data.get("use_rule_engine", False),
+                    status=data["status"],
+                    started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
+                    finished_at=datetime.fromisoformat(data["finished_at"]) if data.get("finished_at") else None,
+                    current_agent=data.get("current_agent"),
+                    progress=data.get("progress", 0.0),
+                    report_path=data.get("report_path"),
+                    html_report_path=data.get("html_report_path"),
+                    report_json=data.get("report_json"),
+                    llm_logs=data.get("llm_logs", []),
+                    error=data.get("error"),
+                )
+            except Exception:
+                continue
+
     def _on_workflow_event(self, event: WorkflowEvent) -> None:
         """Update task.progress and task.current_agent from workflow events."""
         task = self._tasks.get(event.task_id)
         if not task:
             return
         task.progress = event.progress
-        if event.agent:
+        if event.type == EventType.AGENT_STARTED and event.agent:
             task.current_agent = event.agent
+        elif event.type in (EventType.AGENT_COMPLETED, EventType.AGENT_FAILED):
+            if task.current_agent == event.agent:
+                task.current_agent = None
+        if event.data and event.data.get("run_dir"):
+            task.report_path = event.data["run_dir"]
+            self._save_task(task)
 
     async def submit(self, product_description: str, max_competitors: int,
                      skip_qa: bool, use_rule_engine: bool = False) -> str:
@@ -142,7 +181,35 @@ class TaskManager:
     def get(self, task_id: str) -> TaskState | None:
         return self._tasks.get(task_id)
 
+    def delete(self, task_id: str) -> bool:
+        self._sync_tasks_from_disk()
+        task = self._tasks.pop(task_id, None)
+        task_path = _TASKS_DIR / f"{task_id}.json"
+        events_path = _TASKS_DIR / f"{task_id}_events.jsonl"
+        deleted = False
+
+        if task and task.report_path:
+            run_dir = Path(task.report_path)
+            output_root = Path(__file__).resolve().parents[2] / "output"
+            try:
+                if run_dir.is_dir() and output_root in run_dir.resolve().parents:
+                    shutil.rmtree(run_dir)
+                    deleted = True
+            except Exception:
+                pass
+
+        for path in (task_path, events_path):
+            try:
+                if path.exists():
+                    path.unlink()
+                    deleted = True
+            except Exception:
+                pass
+
+        return bool(task or deleted)
+
     def list_all(self) -> list[TaskState]:
+        self._sync_tasks_from_disk()
         return sorted(self._tasks.values(), key=lambda t: t.started_at or datetime.min, reverse=True)
 
     async def _run_task(self, task_id: str, product_description: str,

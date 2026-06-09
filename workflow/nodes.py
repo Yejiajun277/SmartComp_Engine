@@ -141,6 +141,15 @@ class AnalysisGraphNodes:
         self.orchestrator._start_artifacts(
             state["product_description"], state["max_competitors"]
         )
+        await self._emit(
+            state,
+            EventType.PROGRESS_UPDATE,
+            "Orchestrator",
+            "init",
+            progress=0.02,
+            message="运行归档已创建",
+            data={"run_dir": self.orchestrator.run_dir},
+        )
         return {
             "status": "running",
             "run_dir": self.orchestrator.run_dir,
@@ -252,6 +261,8 @@ class AnalysisGraphNodes:
             data = state["competitors_data"]
         if not search_texts and state.get("original_search_texts"):
             search_texts = state["original_search_texts"]
+        self.orchestrator._save_artifact_json("02_competitors_data.json", data)
+        self.orchestrator._save_artifact_json("02_search_texts.json", search_texts)
         await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
                          progress=0.35, message=f"竞品数据采集完成，共 {len(data)} 个")
         return {
@@ -424,6 +435,7 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_product_analysis", call)
         timings = self._merge_timing(state, "product_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        self.orchestrator._save_artifact_json("04_product_analysis.json", analysis)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "ProductAgent", "product_analysis",
                          progress=0.55, message="功能对比分析完成")
@@ -446,6 +458,7 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_pricing_analysis", call)
         timings = self._merge_timing(state, "pricing_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        self.orchestrator._save_artifact_json("05_pricing_analysis.json", analysis)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "PricingAgent", "pricing_analysis",
                          progress=0.65, message="定价分析完成")
@@ -467,6 +480,7 @@ class AnalysisGraphNodes:
         analysis = await self._retry_node("run_market_analysis", call)
         timings = self._merge_timing(state, "market_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        self.orchestrator._save_artifact_json("06_market_analysis.json", analysis)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "MarketAgent", "market_analysis",
                          progress=0.75, message="市场分析完成")
@@ -604,6 +618,7 @@ class AnalysisGraphNodes:
         report = await self._retry_node("generate_strategy", call)
         timings = self._merge_timing(state, "strategy", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        self.orchestrator._save_artifact_json("07_strategy_report.json", report)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "StrategyAgent", "strategy",
                          progress=0.90, message="战略建议报告生成完成")

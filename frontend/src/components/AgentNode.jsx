@@ -7,15 +7,59 @@ import {
 } from '@ant-design/icons';
 
 const STATUS_STYLES = {
-  waiting: { bg: '#f0f0f0', border: '#d9d9d9', icon: <ClockCircleOutlined />, color: '#999' },
-  running: { bg: '#e6f7ff', border: '#1890ff', icon: <LoadingOutlined spin />, color: '#1890ff' },
-  completed: { bg: '#f6ffed', border: '#52c41a', icon: <CheckCircleOutlined />, color: '#52c41a' },
-  failed: { bg: '#fff2f0', border: '#ff4d4f', icon: <ExclamationCircleOutlined />, color: '#ff4d4f' },
-  retrying: { bg: '#fff7e6', border: '#fa8c16', icon: <ExclamationCircleOutlined />, color: '#fa8c16' },
+  waiting: {
+    label: '未开始',
+    bg: '#f7f7f7',
+    border: '#d9d9d9',
+    icon: <ClockCircleOutlined />,
+    color: '#8c8c8c',
+    tagColor: 'default',
+  },
+  running: {
+    label: '执行中',
+    bg: '#e6f7ff',
+    border: '#1890ff',
+    icon: <LoadingOutlined spin />,
+    color: '#1890ff',
+    tagColor: 'processing',
+  },
+  completed: {
+    label: '已完成',
+    bg: '#f6ffed',
+    border: '#52c41a',
+    icon: <CheckCircleOutlined />,
+    color: '#52c41a',
+    tagColor: 'success',
+  },
+  retrying: {
+    label: '质检重做',
+    bg: '#fff7e6',
+    border: '#fa8c16',
+    icon: <ExclamationCircleOutlined />,
+    color: '#fa8c16',
+    tagColor: 'warning',
+  },
+  failed: {
+    label: '失败',
+    bg: '#fff2f0',
+    border: '#ff4d4f',
+    icon: <ExclamationCircleOutlined />,
+    color: '#ff4d4f',
+    tagColor: 'error',
+  },
 };
 
-export default function AgentNode({ label, agent, status = 'waiting', timing, onClick }) {
+const QA_TAG_COLOR = {
+  passed: 'success',
+  failed: 'error',
+  degraded: 'warning',
+  none: 'default',
+};
+
+export default function AgentNode({ label, agent, status = 'waiting', timing, qaStatus, onClick }) {
   const s = STATUS_STYLES[status] || STATUS_STYLES.waiting;
+  const qaLabel = qaStatus?.label;
+  const qaColor = QA_TAG_COLOR[qaStatus?.status || 'none'] || 'default';
 
   return (
     <div
@@ -35,6 +79,18 @@ export default function AgentNode({ label, agent, status = 'waiting', timing, on
       <div style={{ fontSize: 20, marginBottom: 4, color: s.color }}>{s.icon}</div>
       <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
       <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{agent}</div>
+      <div style={{ marginTop: 8 }}>
+        <Tag color={s.tagColor} style={{ marginInlineEnd: 0 }}>
+          状态：{s.label}
+        </Tag>
+      </div>
+      {qaLabel && (
+        <div style={{ marginTop: 8 }}>
+          <Tag color={qaColor} style={{ marginInlineEnd: 0 }}>
+            QA：{qaLabel}
+          </Tag>
+        </div>
+      )}
       {timing && <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{timing}</div>}
     </div>
   );

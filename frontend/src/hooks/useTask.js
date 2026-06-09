@@ -21,6 +21,43 @@ const INITIAL_NODE_STATES = {
   strategy: 'waiting',
 };
 
+const QA_PHASE_TO_NODE = {
+  collection: 'collection',
+  product: 'product_analysis',
+  pricing: 'pricing_analysis',
+  market: 'market_analysis',
+  strategy: 'strategy',
+};
+
+function summarizeQaResults(results) {
+  const summaries = {};
+
+  results.forEach((result) => {
+    const phase = result.phase;
+    const nodeKey = QA_PHASE_TO_NODE[phase];
+    if (!nodeKey) return;
+
+    const current = summaries[nodeKey] || { retryCount: 0, checks: [] };
+    const failedCount = current.retryCount + (result.passed ? 0 : 1);
+    const label = result.degraded
+      ? `降级通过，打回 ${failedCount} 次`
+      : result.passed
+        ? `通过${result.score != null ? ` ${Math.round(result.score)}分` : ''}`
+        : `未通过，打回 ${failedCount} 次`;
+
+    summaries[nodeKey] = {
+      phase,
+      label,
+      status: result.degraded ? 'degraded' : result.passed ? 'passed' : 'failed',
+      score: result.score,
+      retryCount: failedCount,
+      checks: [...current.checks, result],
+    };
+  });
+
+  return summaries;
+}
+
 export function useTask() {
   const [events, setEvents] = useState([]);
   const [nodeStates, setNodeStates] = useState({ ...INITIAL_NODE_STATES });
@@ -38,7 +75,7 @@ export function useTask() {
 
     // Update node states based on event type
     const phase = event.phase;
-    if (phase && INITIAL_NODE_STATES.hasOwnProperty(phase)) {
+    if (phase && Object.prototype.hasOwnProperty.call(INITIAL_NODE_STATES, phase)) {
       if (event.type === 'agent_started') {
         setNodeStates(prev => ({ ...prev, [phase]: 'running' }));
       } else if (event.type === 'agent_completed') {
@@ -49,20 +86,31 @@ export function useTask() {
     }
 
     // Handle QA events
-    if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
+    if (event.type === 'qa_check_started') {
+      return;
+    } else if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
+      const nodeKey = QA_PHASE_TO_NODE[event.phase];
       setQaResults(prev => [...prev, {
         phase: event.phase,
         passed: event.type === 'qa_check_passed',
         score: event.data?.score,
+        degraded: event.data?.degraded,
         message: event.message,
       }]);
-      if (event.type === 'qa_check_failed') {
-        setNodeStates(prev => ({ ...prev, [phase]: 'retrying' }));
+      if (event.type === 'qa_check_failed' && nodeKey) {
+        setNodeStates(prev => ({ ...prev, [nodeKey]: 'retrying' }));
+      }
+    } else if (event.type === 'qa_retrying') {
+      const nodeKey = QA_PHASE_TO_NODE[event.phase];
+      if (nodeKey) {
+        setNodeStates(prev => ({ ...prev, [nodeKey]: 'retrying' }));
       }
     }
 
     // Handle task completion
-    if (event.type === 'task_completed') {
+    if (event.type === 'task_started') {
+      setTaskStatus('running');
+    } else if (event.type === 'task_completed') {
       setTaskStatus('completed');
       setProgress(1.0);
     } else if (event.type === 'task_failed') {
@@ -85,6 +133,7 @@ export function useTask() {
     progress,
     currentMessage,
     qaResults,
+    qaSummaries: summarizeQaResults(qaResults.filter(result => !result.running)),
     taskStatus,
     handleEvent,
     reset,
