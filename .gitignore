@@ -16,3 +16,6 @@ docs/
 CLAUDE.md
 业务介绍.md
 
+
+.claude/
+.DS_Store
