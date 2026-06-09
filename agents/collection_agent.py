@@ -14,6 +14,7 @@ from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
 import config
 import json
+import re
 
 
 class CollectionAgent(BaseAgent):
@@ -32,6 +33,53 @@ class CollectionAgent(BaseAgent):
     def get_search_texts(self) -> dict[str, str]:
         """返回每个竞品的原始搜索文本（供幻觉检测使用）"""
         return self._last_search_texts
+
+    @staticmethod
+    def _validate_against_source(data: 'CompetitorData', search_text: str) -> list[str]:
+        """程序化校验高幻觉字段：提取内容中的数字和关键实体，检查是否在搜索文本中出现。
+
+        Returns:
+            list[str]: 被清空的字段名列表
+        """
+        if not search_text:
+            return []
+
+        cleared = []
+
+        # 从字段内容中提取所有数字（含小数、百分比、亿/万单位）
+        def extract_numbers(text: str) -> list[str]:
+            return re.findall(r'\d[\d,.]*%?|\d+[万亿]', text)
+
+        # 高幻觉字段校验
+        high_risk_fields = {
+            "market_share": data.market_share,
+            "strengths": data.strengths,
+            "weaknesses": data.weaknesses,
+            "user_reviews": data.user_reviews,
+        }
+
+        for field_name, field_value in high_risk_fields.items():
+            if not field_value or len(field_value.strip()) < 10:
+                continue
+
+            numbers = extract_numbers(field_value)
+            if not numbers:
+                continue
+
+            # 检查数字是否在搜索文本中出现
+            found_count = 0
+            for num in numbers:
+                clean_num = num.replace(",", "")
+                if clean_num in search_text or num in search_text:
+                    found_count += 1
+
+            # 如果所有数字都不在搜索文本中，清空该字段
+            if numbers and found_count == 0:
+                print(f"   🚫 程序化校验: {field_name} 中的数字 {numbers[:3]} 未在搜索文本中找到，清空")
+                setattr(data, field_name, "")
+                cleared.append(field_name)
+
+        return cleared
 
     def collect_target_product(self, product_description: str,
                                product_name: str,
@@ -129,7 +177,7 @@ class CollectionAgent(BaseAgent):
             result = sr.get("result")
             text = SearchClient.extract_text(result) if result else ""
             if text:
-                all_text += f"\n--- 搜索: {query} ---\n{text[:1500]}\n"
+                all_text += f"\n--- 搜索: {query} ---\n{text[:2500]}\n"
                 sources.append(text[:500])
 
             # 从结构化 references 构建 Citation 对象
@@ -163,9 +211,9 @@ class CollectionAgent(BaseAgent):
                 product_name=product_name,
                 product_description=product_description,
                 competitor_name=entity_name,
-                search_results=all_text[:8000],
+                search_results=all_text[:12000],
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result = self.ask_llm_json(prompt, max_tokens=6144, temperature=0)
             if result:
                 # 解析结构化产品功能
                 product_features = []
@@ -199,7 +247,7 @@ class CollectionAgent(BaseAgent):
                 citations.extend(extra_cites1)
                 citations.extend(extra_cites2)
 
-                return CompetitorData(
+                data = CompetitorData(
                     name=entity_name,
                     product_features=product_features,
                     pricing_tiers=pricing_tiers,
@@ -211,6 +259,9 @@ class CollectionAgent(BaseAgent):
                     search_sources=sources,
                     citations=citations,
                 )
+                # 程序化幻觉校验：清空搜索文本中完全不存在的数字内容
+                self._validate_against_source(data, all_text)
+                return data
             else:
                 self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
 
@@ -242,7 +293,7 @@ class CollectionAgent(BaseAgent):
             result = sr.get("result")
             text = SearchClient.extract_text(result) if result else ""
             if text:
-                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1000]}\n"
+                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1500]}\n"
             for ref in sr.get("references", []):
                 ref_url = ref.get("url", "")
                 ref_title = ref.get("title", "")
@@ -265,9 +316,9 @@ class CollectionAgent(BaseAgent):
                 product_name=product_name,
                 product_description="",
                 competitor_name=entity_name,
-                search_results=extra_text[:4000],
+                search_results=extra_text[:6000],
             )
-            result = self.ask_llm_json(prompt, max_tokens=2048)
+            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
             if result and result.get("pricing_tiers"):
                 for pt in result["pricing_tiers"]:
                     if isinstance(pt, dict) and pt.get("price"):
@@ -300,7 +351,7 @@ class CollectionAgent(BaseAgent):
             result = sr.get("result")
             text = SearchClient.extract_text(result) if result else ""
             if text:
-                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1000]}\n"
+                extra_text += f"\n--- 补充搜索: {sr.get('query', '')} ---\n{text[:1500]}\n"
             for ref in sr.get("references", []):
                 ref_url = ref.get("url", "")
                 ref_title = ref.get("title", "")
@@ -323,9 +374,9 @@ class CollectionAgent(BaseAgent):
                 product_name=entity_name,
                 product_description="",
                 competitor_name=entity_name,
-                search_results=extra_text[:4000],
+                search_results=extra_text[:6000],
             )
-            result = self.ask_llm_json(prompt, max_tokens=2048)
+            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
             if result and result.get("market_share"):
                 market_share = result["market_share"]
 
@@ -401,7 +452,7 @@ class CollectionAgent(BaseAgent):
                     result = sr.get("result")
                     text = SearchClient.extract_text(result) if result else ""
                     if text:
-                        all_extra_text += f"\n--- 补充搜索({field_name}): {sr.get('query', '')} ---\n{text[:1000]}\n"
+                        all_extra_text += f"\n--- 补充搜索({field_name}): {sr.get('query', '')} ---\n{text[:1500]}\n"
                     for ref in sr.get("references", []):
                         ref_url = ref.get("url", "")
                         ref_title = ref.get("title", "")
@@ -426,11 +477,11 @@ class CollectionAgent(BaseAgent):
                     product_name=product_name,
                     product_description="",
                     competitor_name=comp_name,
-                    search_results=all_extra_text[:6000],
+                    search_results=all_extra_text[:8000],
                 )
                 extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
 
-                result = self.ask_llm_json(extract_prompt, max_tokens=8192)
+                result = self.ask_llm_json(extract_prompt, max_tokens=8192, temperature=0)
                 if result:
                     still_truncated = []
                     for field_name in fields:
@@ -468,7 +519,7 @@ class CollectionAgent(BaseAgent):
                     if still_truncated:
                         self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
                         retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
-                        retry_result = self.ask_llm_json(retry_prompt, max_tokens=8192)
+                        retry_result = self.ask_llm_json(retry_prompt, max_tokens=8192, temperature=0)
                         if retry_result:
                             for field_name in still_truncated:
                                 retry_val = retry_result.get(field_name, "")

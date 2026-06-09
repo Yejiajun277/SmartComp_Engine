@@ -11,8 +11,10 @@ LLM调用：1次
 from agents.base_agent import BaseAgent
 from models.domain import (
     ProductAnalysis, PricingAnalysis, MarketAnalysis,
-    StrategyReport, ActionItem, CitationIndex, CompetitorData
+    StrategyReport, ActionItem, CitationIndex, CompetitorData,
+    TargetProductIntro, IntroItem, Citation
 )
+from core.search_client import SearchClient
 from core.prompt_loader import load as load_prompts
 import config
 import json
@@ -28,6 +30,7 @@ class StrategyAgent(BaseAgent):
             system_prompt=prompts["system_prompt"],
         )
         self._prompt_strategy = prompts["prompt_strategy"]
+        self.search_client = SearchClient()
 
     async def run(self, product_name: str,
                   competitor_count: int,
@@ -71,11 +74,28 @@ class StrategyAgent(BaseAgent):
             analysis_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
 
         if config.ENABLE_LLM:
+            intro_supplement_cites = []
+            if self._needs_target_intro_supplement(target_product_data):
+                intro_supplement_cites = self._supplement_target_intro_sources(
+                    product_name, len(citation_index.citations)
+                )
+                for cite in intro_supplement_cites:
+                    citation_index.add(cite)
+
+            target_intro_context = self._build_target_intro_context(
+                product_name,
+                target_product_data,
+                product_analysis,
+                pricing_analysis,
+                market_analysis,
+                intro_supplement_cites,
+            )
             prompt = self._prompt_strategy.format(
                 product_name=product_name,
+                target_intro_context=target_intro_context,
                 analysis_text=analysis_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result = self.ask_llm_json(prompt, max_tokens=6144)
             if result:
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
@@ -132,6 +152,259 @@ class StrategyAgent(BaseAgent):
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _dedupe_ids(ids: list[str]) -> list[str]:
+        seen = set()
+        result = []
+        for cid in ids:
+            if cid and cid not in seen:
+                seen.add(cid)
+                result.append(cid)
+        return result
+
+    @staticmethod
+    def _find_feature_value(values_dict: dict, target_name: str) -> str:
+        """从 feature_matrix.values 中查找我方产品状态，兼容模糊键名。"""
+        if not values_dict:
+            return ""
+        if target_name in values_dict:
+            return values_dict[target_name]
+        for key, val in values_dict.items():
+            if target_name in key or key in target_name:
+                return val
+        return ""
+
+    @staticmethod
+    def _trim_text(text: str, limit: int = 140) -> str:
+        text = (text or "").strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip("，。；;、 ") + "..."
+
+    def _pick_query_citations(self, citations: list[Citation],
+                              keywords: list[str],
+                              limit: int = 3) -> list[str]:
+        ids = []
+        for cite in citations or []:
+            query = cite.query or ""
+            if any(keyword in query for keyword in keywords):
+                ids.append(cite.id)
+            if len(ids) >= limit:
+                break
+        return ids
+
+    def _needs_target_intro_supplement(self, target_product_data: CompetitorData | None) -> bool:
+        """仅在目标产品介绍素材明显不足时，补一轮轻量搜索。"""
+        if not target_product_data:
+            return True
+        empty_core_fields = sum(
+            1
+            for value in (
+                target_product_data.market_share,
+                target_product_data.user_reviews,
+                target_product_data.strengths,
+            )
+            if not (value or "").strip()
+        )
+        return (
+            len(target_product_data.citations) < 6
+            or len(target_product_data.product_features) < 2
+            or not target_product_data.pricing_tiers
+            or empty_core_fields >= 2
+        )
+
+    def _supplement_target_intro_sources(self, product_name: str,
+                                         base_count: int = 0) -> list[Citation]:
+        """为目标产品介绍补充少量通用介绍类来源，不回写采集产物。"""
+        self._log(f"   🧩 目标产品介绍素材不足，为 {product_name} 补充介绍类搜索")
+        queries = [
+            f"{product_name} 产品简介 核心功能 官方介绍",
+            f"{product_name} 产品定位 用户价值 平台介绍",
+        ]
+        results = self.search_client.batch_search(queries)
+        citations = []
+        counter = base_count
+        for i, sr in enumerate(results):
+            for ref in sr.get("references", []):
+                ref_url = ref.get("url", "")
+                ref_title = ref.get("title", "")
+                if not ref_url and not ref_title:
+                    continue
+                citations.append(Citation(
+                    id=f"{product_name}:intro_sup_{i}:r{counter}",
+                    title=ref_title,
+                    url=ref_url,
+                    snippet=ref.get("content", "") or ref.get("summary", ""),
+                    site_name=ref.get("site_name", ""),
+                    query=sr.get("query", ""),
+                    competitor=product_name,
+                ))
+                counter += 1
+        return citations
+
+    def _build_target_intro_context(self, product_name: str,
+                                    target_product_data: CompetitorData | None,
+                                    product_analysis: ProductAnalysis,
+                                    pricing_analysis: PricingAnalysis,
+                                    market_analysis: MarketAnalysis,
+                                    supplemental_citations: list[Citation] | None = None) -> str:
+        """构建目标产品介绍的专用 LLM 素材，尽量给结构化事实而不是全文。"""
+        lines = [f"## 目标产品：{product_name}"]
+        target_citations = list(target_product_data.citations) if target_product_data else []
+        target_citations.extend(supplemental_citations or [])
+
+        if target_product_data:
+            lines.append("\n### 原始采集事实")
+            if target_product_data.product_features:
+                lines.append("- 功能项：")
+                feature_refs = self._pick_query_citations(target_citations, ["产品功能", "功能介绍", "核心功能"], 3)
+                ref_text = f" [{','.join(feature_refs)}]" if feature_refs else ""
+                for fi in target_product_data.product_features[:5]:
+                    lines.append(
+                        f"  - {fi.name}: {self._trim_text(fi.description, 120)}{ref_text}"
+                    )
+            if target_product_data.pricing_tiers:
+                lines.append("- 定价层级：")
+                for pt in target_product_data.pricing_tiers[:4]:
+                    cites = pt.citations or self._pick_query_citations(
+                        target_citations, ["定价", "价格", "收费", "会员", "套餐"], 2
+                    )
+                    cite_text = f" [{','.join(cites)}]" if cites else ""
+                    feat_text = "；".join(pt.features[:2]) if pt.features else ""
+                    lines.append(
+                        f"  - {pt.tier_name}: {self._trim_text(pt.price, 100)}"
+                        f"{'；' + self._trim_text(feat_text, 60) if feat_text else ''}{cite_text}"
+                    )
+            if target_product_data.market_share:
+                market_refs = self._pick_query_citations(target_citations, ["市场份额", "用户量", "用户规模", "DAU", "MAU"], 3)
+                lines.append(f"- 市场数据：{self._trim_text(target_product_data.market_share, 180)}"
+                             f"{f' [{','.join(market_refs)}]' if market_refs else ''}")
+            if target_product_data.user_reviews:
+                review_refs = self._pick_query_citations(target_citations, ["用户评价", "用户反馈", "使用场景", "评测"], 3)
+                lines.append(f"- 用户评价：{self._trim_text(target_product_data.user_reviews, 180)}"
+                             f"{f' [{','.join(review_refs)}]' if review_refs else ''}")
+            if target_product_data.strengths:
+                strength_refs = self._pick_query_citations(target_citations, ["竞争优势", "核心优势", "行业地位", "优势"], 3)
+                lines.append(f"- 优势：{self._trim_text(target_product_data.strengths, 180)}"
+                             f"{f' [{','.join(strength_refs)}]' if strength_refs else ''}")
+            if target_product_data.weaknesses:
+                weakness_refs = self._pick_query_citations(target_citations, ["劣势", "不足", "用户吐槽", "差评"], 3)
+                lines.append(f"- 劣势：{self._trim_text(target_product_data.weaknesses, 180)}"
+                             f"{f' [{','.join(weakness_refs)}]' if weakness_refs else ''}")
+            if target_product_data.channels:
+                channel_refs = self._pick_query_citations(target_citations, ["渠道", "推广", "合作伙伴", "生态"], 3)
+                lines.append(f"- 渠道：{self._trim_text(target_product_data.channels, 180)}"
+                             f"{f' [{','.join(channel_refs)}]' if channel_refs else ''}")
+
+        lines.append("\n### 三维分析中与我方产品直接相关的结构化结果")
+        for fm in product_analysis.feature_matrix[:10]:
+            value = self._find_feature_value(fm.values, product_name)
+            if value in ("✅", "🔶", "✓", "支持", "部分支持"):
+                own_cites = [cid for cid in fm.citations if cid.startswith(product_name + ":")]
+                lines.append(
+                    f"- 功能矩阵：{fm.feature} = {value}"
+                    f"{f' [{','.join(own_cites)}]' if own_cites else ''}"
+                )
+
+        for pc in pricing_analysis.pricing_comparison:
+            if pc.competitor == product_name:
+                lines.append(
+                    f"- 定价分析：免费={self._trim_text(pc.free_tier, 90)}；"
+                    f"付费={self._trim_text(pc.paid_tier, 130)}；"
+                    f"模式={self._trim_text(pc.pricing_model, 90)}"
+                    f"{f' [{','.join(pc.citations)}]' if pc.citations else ''}"
+                )
+                break
+
+        for ms in market_analysis.market_share_data:
+            if ms.competitor == product_name:
+                lines.append(
+                    f"- 市场分析：份额/规模={self._trim_text(ms.share_estimate, 120)}；趋势={ms.trend}"
+                    f"{f' [{','.join(ms.citations)}]' if ms.citations else ''}"
+                )
+                break
+
+        rep = market_analysis.user_reputation.get(product_name)
+        if rep:
+            lines.append(
+                f"- 用户口碑：评分={rep.score}；关键词={', '.join(rep.keywords[:6])}"
+                f"{f' [{','.join(rep.citations)}]' if rep.citations else ''}"
+            )
+
+        profile = market_analysis.user_profiles.get(product_name)
+        if profile:
+            lines.append(
+                f"- 用户画像：目标用户={self._trim_text(profile.target_audience, 80)}；"
+                f"场景={', '.join(profile.use_cases[:4])}；痛点={', '.join(profile.pain_points[:4])}"
+                    f"{f' [{','.join(profile.citations)}]' if profile.citations else ''}"
+            )
+
+        if supplemental_citations:
+            lines.append("\n### 补充介绍类来源摘录")
+            for cite in supplemental_citations[:4]:
+                lines.append(
+                    f"- [{cite.id}] {cite.title}: {self._trim_text(cite.snippet, 150)}"
+                )
+
+        if target_citations:
+            lines.append("\n### 可用引用 ID")
+            lines.append(self.build_citations_text(target_citations[:20]))
+        else:
+            lines.append("\n### 可用引用 ID\n- 无")
+
+        return "\n".join(lines)
+
+    def _parse_intro_item(self, data: dict) -> IntroItem:
+        citations = []
+        if isinstance(data, dict):
+            citations = self._dedupe_ids(list(data.get("citations", [])) + self.extract_citation_ids(data))
+        return IntroItem(
+            title=data.get("title", "") if isinstance(data, dict) else "",
+            summary=data.get("summary", "") if isinstance(data, dict) else "",
+            citations=citations,
+        )
+
+    def _parse_target_product_intro(self, result: dict) -> TargetProductIntro | None:
+        data = result.get("target_product_intro", {})
+        if not isinstance(data, dict):
+            return None
+
+        def parse_items(key: str) -> list[IntroItem]:
+            items = []
+            for item in data.get(key, []):
+                if not isinstance(item, dict):
+                    continue
+                parsed = self._parse_intro_item(item)
+                if parsed.title or parsed.summary or parsed.citations:
+                    items.append(parsed)
+            return items
+
+        channel = data.get("channel")
+        channel_item = self._parse_intro_item(channel) if isinstance(channel, dict) else None
+        if channel_item and not any([channel_item.title, channel_item.summary, channel_item.citations]):
+            channel_item = None
+        intro = TargetProductIntro(
+            hero_summary=data.get("hero_summary", ""),
+            core_capabilities=parse_items("core_capabilities"),
+            monetization=parse_items("monetization"),
+            market_user=parse_items("market_user"),
+            strengths=parse_items("strengths"),
+            weaknesses=parse_items("weaknesses"),
+            channel=channel_item,
+        )
+
+        if not any([
+            intro.hero_summary,
+            intro.core_capabilities,
+            intro.monetization,
+            intro.market_user,
+            intro.strengths,
+            intro.weaknesses,
+            intro.channel,
+        ]):
+            return None
+        return intro
+
     def _parse_strategy_report(self, product_name: str, competitor_count: int,
                                 result: dict) -> StrategyReport:
         """解析LLM返回的策略报告，提取引用 ID"""
@@ -146,7 +419,7 @@ class StrategyAgent(BaseAgent):
                 citations=ap_cites,
             ))
 
-        return StrategyReport(
+        report = StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
             overall_positioning=result.get("overall_positioning", ""),
@@ -158,6 +431,8 @@ class StrategyAgent(BaseAgent):
             market_analysis_summary=result.get("market_analysis_summary", ""),
             summary=result.get("summary", ""),
         )
+        report.target_product_intro = self._parse_target_product_intro(result)
+        return report
 
     def _rule_strategy(self, product_name: str, competitor_count: int,
                         product_analysis: ProductAnalysis,
@@ -334,6 +609,8 @@ class StrategyAgent(BaseAgent):
                 return '<span style="color:#ef4444;font-size:18px;">❌</span>'
             elif v in ("🔶", "△", "部分", "部分支持"):
                 return '<span style="color:#f59e0b;font-size:18px;">🔶</span>'
+            elif v in ("⚪", "数据不足"):
+                return '<span style="color:#94a3b8;font-size:18px;">⚪</span>'
             else:
                 return f'<span style="color:#64748b;">{esc(v)}</span>'
 
@@ -406,6 +683,7 @@ class StrategyAgent(BaseAgent):
                 if num:
                     cite = report.citation_index.get(cid)
                     if cite:
+                        used_cite_ids.add(cid)
                         parts.append(
                             f'<sup><a href="#cite-{cid}" title="{esc(cite.title)} - {esc(cite.url)}" '
                             f'style="color:#3b82f6;text-decoration:none;font-size:11px;">[{num}]</a></sup>'
@@ -444,8 +722,96 @@ class StrategyAgent(BaseAgent):
             else:
                 return f'<span style="color:#64748b;">→ {esc(normalized)}</span>'
 
+        def render_intro_items(items: list[IntroItem], empty_text: str = "暂无公开信息") -> str:
+            if not items:
+                return f'<div style="font-size:13px;color:#64748b;line-height:1.7;">{esc(empty_text)}</div>'
+            html = ""
+            for item in items:
+                title_html = f'<div style="font-size:13px;font-weight:700;color:#0f172a;">{esc(item.title)}{cite_sup(item.citations)}</div>' if item.title else ""
+                html += f'''
+                        <div style="padding:10px 0;border-bottom:1px solid #e2e8f0;">
+                            {title_html}
+                            <div style="font-size:12px;color:#64748b;line-height:1.55;margin-top:{'4px' if title_html else '0'};">{esc(item.summary)}</div>
+                        </div>'''
+            return html
+
+        def render_target_product_intro_from_llm(intro: TargetProductIntro | None,
+                                                 data: CompetitorData | None) -> str:
+            """优先渲染 LLM 生成的目标产品介绍。"""
+            if not intro:
+                return ""
+
+            name = (data.name if data else "") or report.product_name
+            hero_cites = []
+            if intro.core_capabilities:
+                hero_cites.extend(intro.core_capabilities[0].citations)
+            if intro.strengths:
+                hero_cites.extend(intro.strengths[0].citations)
+            hero_cites = list(dict.fromkeys(hero_cites))[:2]
+            intro_source_ids = []
+            for item in (
+                intro.core_capabilities + intro.monetization + intro.market_user +
+                intro.strengths + intro.weaknesses
+            ):
+                intro_source_ids.extend(item.citations)
+            if intro.channel:
+                intro_source_ids.extend(intro.channel.citations)
+            intro_source_count = len(set(intro_source_ids))
+
+            channel_html = ""
+            if intro.channel and (intro.channel.title or intro.channel.summary):
+                title = intro.channel.title or "渠道"
+                channel_html = f'''
+                    <div style="flex:1;min-width:220px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;">
+                        <div style="font-size:12px;font-weight:800;color:#1d4ed8;margin-bottom:5px;">{esc(title)}{cite_sup(intro.channel.citations)}</div>
+                        <div style="font-size:12px;color:#1e40af;line-height:1.6;">{esc(intro.channel.summary)}</div>
+                    </div>'''
+
+            return f'''
+            <div style="background:#fff;border-radius:18px;padding:28px;margin-bottom:24px;box-shadow:0 12px 32px rgba(15,23,42,0.07);border:1px solid #e2e8f0;">
+                <div style="display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+                    <div style="max-width:720px;">
+                        <div style="font-size:12px;font-weight:700;color:#2563eb;letter-spacing:.08em;margin-bottom:8px;">TARGET PRODUCT</div>
+                        <h2 style="font-size:24px;color:#0f172a;margin:0 0 10px 0;">{esc(name)}{cite_sup(hero_cites)}</h2>
+                        <div style="font-size:14px;color:#475569;line-height:1.75;">{esc(intro.hero_summary)}</div>
+                    </div>
+                    <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#fff;border-radius:14px;padding:14px 18px;min-width:180px;">
+                        <div style="font-size:12px;opacity:.72;margin-bottom:6px;">介绍依据</div>
+                        <div style="font-size:18px;font-weight:800;">{intro_source_count}</div>
+                        <div style="font-size:12px;opacity:.78;">条公开来源可追溯</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:16px;">
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:16px;">
+                        <div style="font-size:12px;font-weight:800;color:#64748b;margin-bottom:8px;">核心能力</div>
+                        {render_intro_items(intro.core_capabilities, "暂无核心能力摘要")}
+                    </div>
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:16px;">
+                        <div style="font-size:12px;font-weight:800;color:#64748b;margin-bottom:8px;">定价 / 商业化</div>
+                        {render_intro_items(intro.monetization, "暂无定价/商业化摘要")}
+                    </div>
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:16px;">
+                        <div style="font-size:12px;font-weight:800;color:#64748b;margin-bottom:8px;">市场 / 用户</div>
+                        {render_intro_items(intro.market_user, "暂无市场/用户摘要")}
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:220px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:12px;padding:12px 14px;">
+                        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:5px;">优势</div>
+                        {render_intro_items(intro.strengths, "暂无优势摘要")}
+                    </div>
+                    <div style="flex:1;min-width:220px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;">
+                        <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:5px;">短板</div>
+                        {render_intro_items(intro.weaknesses, "暂无短板摘要")}
+                    </div>
+                    {channel_html or '<div style="flex:1;min-width:220px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;"><div style="font-size:12px;font-weight:800;color:#1d4ed8;margin-bottom:5px;">渠道</div><div style="font-size:12px;color:#1e40af;line-height:1.6;">暂无渠道摘要</div></div>'}
+                </div>
+            </div>'''
+
         def render_target_product_intro(data: CompetitorData | None) -> str:
-            """渲染目标产品介绍板块"""
+            """渲染目标产品介绍板块（回退逻辑：使用原始采集数据）"""
             if not data:
                 return ""
 
@@ -509,6 +875,9 @@ class StrategyAgent(BaseAgent):
         if report.citation_index and report.citation_index.citations:
             for idx, cid in enumerate(report.citation_index.citations.keys(), 1):
                 global_cite_num[cid] = idx
+
+        # 跟踪正文中实际引用的来源 ID（用于附录过滤）
+        used_cite_ids: set[str] = set()
 
         # 收集所有竞品名（我方产品排首位）
         all_names = []
@@ -602,13 +971,23 @@ class StrategyAgent(BaseAgent):
             our_model = ""
             if report.target_product_data and report.target_product_data.pricing_tiers:
                 tiers = report.target_product_data.pricing_tiers
-                free_tiers = [t for t in tiers if any(k in t.tier_name for k in ["免费", "免费版", "基础"])]
-                paid_tiers = [t for t in tiers if t not in free_tiers]
-                if free_tiers:
-                    our_free = free_tiers[0].price or "；".join(t.tier_name for t in free_tiers)
-                if paid_tiers:
-                    our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in paid_tiers[:3] if t.price)
-                our_model = "；".join(t.tier_name for t in tiers[:4]) if tiers else ""
+                # 从所有定价层级中提取信息
+                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
+                for t in tiers:
+                    tn = t.tier_name or ""
+                    tp = t.price or ""
+                    combined = tn + tp
+                    if any(k in combined for k in free_keywords) and not our_free:
+                        our_free = tp or tn
+                    elif tp and not our_paid:
+                        our_paid = tp
+                # 如果没有明确的免费/付费区分，用第一个tier的价格作为付费信息
+                if not our_paid and tiers:
+                    for t in tiers:
+                        if t.price:
+                            our_paid = t.price
+                            break
+                our_model = "；".join(t.tier_name for t in tiers[:4] if t.tier_name) if tiers else ""
 
             if pi:
                 comparison_rows += f'''
@@ -661,17 +1040,10 @@ class StrategyAgent(BaseAgent):
                     <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
-            # ── 优劣势分析 ──
-            strengths_text = ""
-            weaknesses_text = ""
+            # ── 优劣势分析（仅使用 ProductAgent 的对比分析结果） ──
             our_adv_text = ""
             their_adv_text = ""
 
-            if cd:
-                if cd.strengths:
-                    strengths_text = strip_source_text(cd.strengths)
-                if cd.weaknesses:
-                    weaknesses_text = strip_source_text(cd.weaknesses)
             if adv:
                 our_adv_text = strip_source_text(adv.our_advantage)
                 their_adv_text = strip_source_text(adv.their_advantage)
@@ -694,22 +1066,6 @@ class StrategyAgent(BaseAgent):
                     <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
                         <div style="font-size:12px;font-weight:600;color:#dc2626;margin-bottom:4px;">⚠️ 对方优势</div>
                         <div style="font-size:13px;color:#b91c1c;line-height:1.6;">{esc(their_adv_text)}</div>
-                    </div>
-                </div>''')
-            if strengths_text:
-                swot_parts.append(f'''
-                <div style="flex:1;min-width:200px;">
-                    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:4px;">💪 对方长处</div>
-                        <div style="font-size:13px;color:#1d4ed8;line-height:1.6;">{esc(strengths_text)}</div>
-                    </div>
-                </div>''')
-            if weaknesses_text:
-                swot_parts.append(f'''
-                <div style="flex:1;min-width:200px;">
-                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:4px;">🎯 对方短板</div>
-                        <div style="font-size:13px;color:#b45309;line-height:1.6;">{esc(weaknesses_text)}</div>
                     </div>
                 </div>''')
 
@@ -766,7 +1122,7 @@ class StrategyAgent(BaseAgent):
                     </table>
                 </div>
                 <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:#94a3b8;">
-                    <span>✅ 支持</span><span>🔶 部分支持</span><span>❌ 不支持</span><span>❓ 未知</span>
+                    <span>✅ 支持</span><span>🔶 部分支持</span><span>⚪ 数据不足</span><span>❌ 不支持</span>
                 </div>
             </div>'''
 
@@ -783,12 +1139,19 @@ class StrategyAgent(BaseAgent):
                 our_free = ""
                 our_paid = ""
                 our_model = ""
+                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
                 for t in tpd.pricing_tiers:
-                    if any(k in t.tier_name for k in ["免费", "基础"]):
-                        our_free = our_free or t.price or t.tier_name
-                    elif t.price:
-                        our_paid += f"{t.tier_name}: {t.price}；"
-                our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4])
+                    combined = (t.tier_name or "") + (t.price or "")
+                    if any(k in combined for k in free_keywords) and not our_free:
+                        our_free = t.price or t.tier_name
+                    elif t.price and not our_paid:
+                        our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
+                if not our_paid:
+                    for t in tpd.pricing_tiers:
+                        if t.price:
+                            our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
+                            break
+                our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4] if t.tier_name)
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#f0fdf4;">
                     <td style="padding:10px 16px;font-weight:600;font-size:13px;color:#166534;">⭐ {esc(report.product_name)}（我方）</td>
@@ -1191,16 +1554,21 @@ class StrategyAgent(BaseAgent):
                 {qa_checks_html}
             </div>'''
 
-        # 数据来源附录
+        # 数据来源附录（只展示正文实际引用的来源）
         references_html = ""
-        if report.citation_index and report.citation_index.citations:
+        if report.citation_index and used_cite_ids:
             ref_items = ""
             seen_urls = set()
-            for cid, cite in report.citation_index.citations.items():
+            used_count = 0
+            for cid in used_cite_ids:
+                cite = report.citation_index.get(cid)
+                if not cite:
+                    continue
                 if cite.url and cite.url in seen_urls:
                     continue
                 if cite.url:
                     seen_urls.add(cite.url)
+                used_count += 1
                 num = global_cite_num.get(cid, "")
                 num_label = f'<span style="display:inline-block;min-width:28px;font-weight:700;color:#3b82f6;font-size:13px;">[{num}]</span>' if num else ""
                 site_label = f' <span style="color:#64748b;font-size:12px;">({esc(cite.site_name)})</span>' if cite.site_name else ""
@@ -1212,7 +1580,7 @@ class StrategyAgent(BaseAgent):
                 </div>'''
             references_html = f'''
             <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                <h2 style="font-size:20px;color:#1e293b;margin-bottom:16px;">📚 数据来源（共 {len(report.citation_index.citations)} 条）</h2>
+                <h2 style="font-size:20px;color:#1e293b;margin-bottom:16px;">📚 数据来源（共 {used_count} 条）</h2>
                 <div style="max-height:400px;overflow-y:auto;">{ref_items}</div>
             </div>'''
 
@@ -1251,7 +1619,7 @@ class StrategyAgent(BaseAgent):
 	    </div>
 
 	    <!-- 目标产品介绍 -->
-	    {render_target_product_intro(report.target_product_data)}
+	    {render_target_product_intro_from_llm(report.target_product_intro, report.target_product_data) or render_target_product_intro(report.target_product_data)}
 
 	    <!-- 竞品发现 -->
 	    {"<div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>" + competitor_cards + '</div></div>' if competitor_cards else ''}
