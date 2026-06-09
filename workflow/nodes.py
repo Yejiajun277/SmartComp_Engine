@@ -226,7 +226,7 @@ class AnalysisGraphNodes:
                          progress=0.15, message="正在采集目标产品数据...")
 
         async def call():
-            return self.orchestrator.collection_agent.collect_target_product(
+            return await self.orchestrator.collection_agent.async_collect_target_product(
                 state["product_description"], state["product_name"]
             )
 
@@ -338,7 +338,7 @@ class AnalysisGraphNodes:
         )
         if missing_fields:
             # 定向补充搜索：仅针对缺失/截断字段补搜，不整体重跑采集
-            supplemented = collection_agent.supplement_missing_fields(
+            supplemented = await collection_agent.async_supplement_missing_fields(
                 state["product_name"],
                 state["competitors_data"],
                 missing_fields,
@@ -357,7 +357,7 @@ class AnalysisGraphNodes:
             }
 
         # 无缺失字段：保持整体重跑路径
-        feedback = quality_agent.build_feedback(state["qa_collection"])
+        feedback = await quality_agent.async_build_feedback(state["qa_collection"])
         return {
             "collection_supplemented": False,
             "collection_feedback": feedback,
@@ -368,7 +368,7 @@ class AnalysisGraphNodes:
     async def mark_collection_degraded(self, state: AnalysisState) -> AnalysisState:
         result = state["qa_collection"]
         result.degraded = True
-        feedback = self.orchestrator.quality_agent.build_feedback(result)
+        feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
         return {
             "qa_collection": result,
             "latest_feedback": feedback,
@@ -559,17 +559,17 @@ class AnalysisGraphNodes:
         return {"qa_checks": checks, "timings": timings}
 
     async def prepare_product_retry(self, state: AnalysisState) -> AnalysisState:
-        return self._prepare_analysis_retry(state, "product")
+        return await self._prepare_analysis_retry(state, "product")
 
     async def prepare_pricing_retry(self, state: AnalysisState) -> AnalysisState:
-        return self._prepare_analysis_retry(state, "pricing")
+        return await self._prepare_analysis_retry(state, "pricing")
 
     async def prepare_market_retry(self, state: AnalysisState) -> AnalysisState:
-        return self._prepare_analysis_retry(state, "market")
+        return await self._prepare_analysis_retry(state, "market")
 
-    def _prepare_analysis_retry(self, state: AnalysisState, analysis_type: str) -> AnalysisState:
+    async def _prepare_analysis_retry(self, state: AnalysisState, analysis_type: str) -> AnalysisState:
         qa = state[f"qa_{analysis_type}"]
-        feedback = self.orchestrator.quality_agent.build_feedback(qa)
+        feedback = await self.orchestrator.quality_agent.async_build_feedback(qa)
         retry_key = f"{analysis_type}_retry_count"
         feedback_key = f"{analysis_type}_feedback"
         prev_score_key = f"{analysis_type}_prev_score"
@@ -592,7 +592,7 @@ class AnalysisGraphNodes:
                 updates[key] = result
                 updates["quality_exhausted"][analysis_type] = True
                 if not latest_feedback:
-                    latest_feedback = self.orchestrator.quality_agent.build_feedback(result)
+                    latest_feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
                     updates[f"{analysis_type}_feedback"] = latest_feedback
         if latest_feedback:
             updates["latest_feedback"] = latest_feedback
@@ -660,7 +660,7 @@ class AnalysisGraphNodes:
         }
 
     async def prepare_strategy_retry(self, state: AnalysisState) -> AnalysisState:
-        feedback = self.orchestrator.quality_agent.build_feedback(state["qa_strategy"])
+        feedback = await self.orchestrator.quality_agent.async_build_feedback(state["qa_strategy"])
         return {
             "strategy_feedback": feedback,
             "latest_feedback": feedback,
@@ -670,7 +670,7 @@ class AnalysisGraphNodes:
     async def mark_strategy_degraded(self, state: AnalysisState) -> AnalysisState:
         result = state["qa_strategy"]
         result.degraded = True
-        feedback = self.orchestrator.quality_agent.build_feedback(result)
+        feedback = await self.orchestrator.quality_agent.async_build_feedback(result)
         return {
             "qa_strategy": result,
             "strategy_feedback": feedback,

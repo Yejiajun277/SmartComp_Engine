@@ -53,7 +53,7 @@ class MarketAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result = await self.async_ask_llm_json(prompt, max_tokens=4096)
             if result:
                 analysis = self._parse_market_analysis(result)
                 self._log(f"✅ 市场分析完成: {len(analysis.market_share_data)}个竞品市场数据")

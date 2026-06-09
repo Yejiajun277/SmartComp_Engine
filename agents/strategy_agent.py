@@ -76,7 +76,7 @@ class StrategyAgent(BaseAgent):
         if config.ENABLE_LLM:
             intro_supplement_cites = []
             if self._needs_target_intro_supplement(target_product_data):
-                intro_supplement_cites = self._supplement_target_intro_sources(
+                intro_supplement_cites = await self._async_supplement_target_intro_sources(
                     product_name, len(citation_index.citations)
                 )
                 for cite in intro_supplement_cites:
@@ -95,7 +95,7 @@ class StrategyAgent(BaseAgent):
                 target_intro_context=target_intro_context,
                 analysis_text=analysis_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=6144)
+            result = await self.async_ask_llm_json(prompt, max_tokens=6144)
             if result:
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
@@ -222,6 +222,35 @@ class StrategyAgent(BaseAgent):
             f"{product_name} 产品定位 用户价值 平台介绍",
         ]
         results = self.search_client.batch_search(queries)
+        citations = []
+        counter = base_count
+        for i, sr in enumerate(results):
+            for ref in sr.get("references", []):
+                ref_url = ref.get("url", "")
+                ref_title = ref.get("title", "")
+                if not ref_url and not ref_title:
+                    continue
+                citations.append(Citation(
+                    id=f"{product_name}:intro_sup_{i}:r{counter}",
+                    title=ref_title,
+                    url=ref_url,
+                    snippet=ref.get("content", "") or ref.get("summary", ""),
+                    site_name=ref.get("site_name", ""),
+                    query=sr.get("query", ""),
+                    competitor=product_name,
+                ))
+                counter += 1
+        return citations
+
+    async def _async_supplement_target_intro_sources(self, product_name: str,
+                                                     base_count: int = 0) -> list[Citation]:
+        """为目标产品介绍异步补充少量通用介绍类来源，不回写采集产物。"""
+        self._log(f"   🧩 目标产品介绍素材不足，为 {product_name} 补充介绍类搜索")
+        queries = [
+            f"{product_name} 产品简介 核心功能 官方介绍",
+            f"{product_name} 产品定位 用户价值 平台介绍",
+        ]
+        results = await self.search_client.async_batch_search(queries)
         citations = []
         counter = base_count
         for i, sr in enumerate(results):

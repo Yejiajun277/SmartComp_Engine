@@ -330,7 +330,7 @@ class QualityAgent(BaseAgent):
             competitors_data_json=json.dumps(data_summary, ensure_ascii=False, indent=2),
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -574,7 +574,7 @@ class QualityAgent(BaseAgent):
             feedback="",
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ {analysis_type} 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -747,7 +747,7 @@ class QualityAgent(BaseAgent):
             strategy_report_json=json.dumps(strategy_json, ensure_ascii=False, indent=2),
         )
 
-        result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
         if not result:
             self._log(f"   ⚠️ 策略报告幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -778,6 +778,30 @@ class QualityAgent(BaseAgent):
                 return feedback
 
         # 规则引擎 fallback
+        critical_issues = [i for i in result.issues if i.severity == "critical"]
+        if critical_issues:
+            descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
+            return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
+        return "质检未通过，请检查输出完整性。"
+
+    async def async_build_feedback(self, result: QualityCheckResult) -> str:
+        """根据质检结果异步构造给被打回 Agent 的反馈消息"""
+        if config.ENABLE_LLM:
+            prompt = self._prompt_build_feedback.format(
+                qa_result_json=json.dumps({
+                    "phase": result.phase,
+                    "target_agent": result.target_agent,
+                    "score": result.score,
+                    "issues": [
+                        {"severity": i.severity, "field": i.field, "description": i.description, "suggestion": i.suggestion}
+                        for i in result.issues
+                    ],
+                }, ensure_ascii=False, indent=2)
+            )
+            feedback = await self.async_ask_llm(prompt, max_tokens=512)
+            if feedback:
+                return feedback
+
         critical_issues = [i for i in result.issues if i.severity == "critical"]
         if critical_issues:
             descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]

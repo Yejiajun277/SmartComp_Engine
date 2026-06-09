@@ -12,6 +12,10 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 # task_manager is injected via app.state in main.py
 
 
+def _empty_qa_timeline():
+    return {"checks": [], "max_retries": 2, "total_retries": 0}
+
+
 def _get_manager(request):
     return request.app.state.task_manager
 
@@ -122,6 +126,8 @@ async def get_artifact(task_id: str, phase: str, request: Request):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     if not task.report_path:
+        if phase == "qa":
+            return _empty_qa_timeline()
         raise HTTPException(status_code=404, detail="No artifacts available")
 
     import json
@@ -148,6 +154,8 @@ async def get_artifact(task_id: str, phase: str, request: Request):
 
     artifact_path = run_dir / filename
     if not artifact_path.exists():
+        if phase == "qa":
+            return _empty_qa_timeline()
         raise HTTPException(status_code=404, detail=f"Artifact not found: {filename}")
 
     return json.loads(artifact_path.read_text(encoding="utf-8"))

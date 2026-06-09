@@ -6,7 +6,7 @@ agents/base_agent.py — Agent基类
 """
 
 from abc import ABC, abstractmethod
-from core.llm_client import llm_call, parse_llm_json, get_last_call_error
+from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error
 import config
 import json
 import re
@@ -99,6 +99,70 @@ class BaseAgent(ABC):
                     self.llm_logs[-1]["parse_error"] = reason
                 self._log(f"   ⚠️ LLM返回了文本但JSON解析失败: {reason}")
                 return {}, reason
+        reason = get_last_call_error() or "empty_response"
+        return {}, reason
+
+    async def async_ask_llm(self, user_message: str,
+                            temperature: float = None,
+                            max_tokens: int = None) -> str:
+        """异步调用LLM做决策"""
+        temp = temperature if temperature is not None else config.LLM_TEMPERATURE
+        tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
+
+        result = await async_llm_call(self.system_prompt, user_message,
+                                      temperature=temp, max_tokens=tokens,
+                                      agent_id=self.agent_id)
+
+        content = result.get("content", "") if isinstance(result, dict) else (result or "")
+
+        self.llm_logs.append({
+            "agent_id": self.agent_id,
+            "timestamp": result.get("timestamp", "") if isinstance(result, dict) else "",
+            "system_prompt": (self.system_prompt or "")[:_LOG_TEXT_MAX],
+            "user_message": (user_message or "")[:_LOG_TEXT_MAX],
+            "result": content[:_LOG_TEXT_MAX] if content else "",
+            "prompt_tokens": result.get("prompt_tokens", 0) if isinstance(result, dict) else 0,
+            "completion_tokens": result.get("completion_tokens", 0) if isinstance(result, dict) else 0,
+            "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
+            "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
+            "model": result.get("model", "") if isinstance(result, dict) else "",
+            "finish_reason": result.get("finish_reason", "") if isinstance(result, dict) else "",
+            "temperature": temp,
+            "max_tokens": tokens,
+            "success": bool(content),
+            "parse_error": "",
+        })
+
+        return content
+
+    async def async_ask_llm_json(self, user_message: str,
+                                 temperature: float = None,
+                                 max_tokens: int = None) -> dict:
+        """异步调用LLM并解析JSON返回"""
+        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        if text:
+            parsed = parse_llm_json(text)
+            if parsed:
+                return parsed
+            if self.llm_logs:
+                self.llm_logs[-1]["parse_error"] = get_last_call_error() or "json_parse_error"
+            self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
+        return {}
+
+    async def async_ask_llm_json_with_reason(self, user_message: str,
+                                             temperature: float = None,
+                                             max_tokens: int = None) -> tuple[dict, str]:
+        """异步调用LLM并解析JSON返回，附带失败原因"""
+        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        if text:
+            parsed = parse_llm_json(text)
+            if parsed:
+                return parsed, "success"
+            reason = get_last_call_error() or "json_parse_error"
+            if self.llm_logs:
+                self.llm_logs[-1]["parse_error"] = reason
+            self._log(f"   ⚠️ LLM返回了文本但JSON解析失败: {reason}")
+            return {}, reason
         reason = get_last_call_error() or "empty_response"
         return {}, reason
 

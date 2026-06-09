@@ -64,7 +64,7 @@ class PricingAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result = await self.async_ask_llm_json(prompt, max_tokens=4096)
             if result:
                 analysis = self._parse_pricing_analysis(result)
                 self._log(f"✅ 定价分析完成: {len(analysis.pricing_comparison)}个竞品定价对比")

@@ -6,6 +6,7 @@ core/llm_client.py — 豆包 LLM 调用封装
 import json
 import re
 import time
+import asyncio
 from datetime import datetime
 
 import config
@@ -127,6 +128,102 @@ def _call_doubao(system_prompt: str, user_message: str,
     return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
 
+async def _async_call_doubao(system_prompt: str, user_message: str,
+                             temperature: float, max_tokens: int,
+                             agent_id: str) -> dict:
+    """异步调用豆包 OpenAI 兼容接口，返回结构化结果。"""
+    import httpx
+    global _last_call_error
+
+    if not config.DOUBAO_API_KEY:
+        _last_call_error = "api_key_missing"
+        print(f"  [豆包] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+    api_url = f"{config.DOUBAO_BASE_URL.rstrip('/')}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.DOUBAO_API_KEY}",
+    }
+    prompt_len = len(system_prompt) + len(user_message)
+    payload = {
+        "model": config.DOUBAO_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        for attempt in range(2):
+            t0 = time.time()
+            try:
+                print(f"  [豆包] [{agent_id}] 🔄 异步调用豆包 (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
+                resp = await client.post(api_url, headers=headers, json=payload)
+                duration_ms = (time.time() - t0) * 1000
+                result = resp.json()
+
+                if resp.status_code >= 400 or "error" in result:
+                    error = result.get("error", {})
+                    message = error.get("message") or result
+                    error_type = error.get("type", "unknown")
+                    error_code = error.get("code", resp.status_code)
+                    _last_call_error = f"api_error({resp.status_code}, {error_type}, {error_code})"
+                    print(f"  [豆包] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
+                    if attempt == 0:
+                        await asyncio.sleep(1)
+                        continue
+                    return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+                message = result.get("choices", [{}])[0].get("message", {})
+                content = message.get("content", "") or message.get("reasoning", "")
+
+                if not content:
+                    finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
+                    _last_call_error = f"empty_response(finish_reason={finish_reason})"
+                    print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
+                    return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+                usage = result.get("usage", {})
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
+                _last_call_error = ""
+                print(
+                    f"  [豆包] [{agent_id}] ✅ 异步调用成功 "
+                    f"(tokens: {prompt_tokens}+{completion_tokens}, 输出长度: {len(content)}字)"
+                )
+                return {
+                    "content": content,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "model": result.get("model", config.DOUBAO_MODEL),
+                    "finish_reason": result.get("choices", [{}])[0].get("finish_reason", ""),
+                    "duration_ms": duration_ms,
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                }
+            except httpx.TimeoutException:
+                duration_ms = (time.time() - t0) * 1000
+                _last_call_error = f"timeout(300s, attempt {attempt + 1})"
+                print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
+                if attempt == 0:
+                    continue
+                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+            except httpx.ConnectError as e:
+                duration_ms = (time.time() - t0) * 1000
+                _last_call_error = f"connection_error({str(e)[:200]})"
+                print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
+                if attempt == 0:
+                    await asyncio.sleep(2)
+                    continue
+                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+    return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+
 def llm_call(system_prompt: str, user_message: str,
              temperature: float = 0.3, max_tokens: int = 4096,
              agent_id: str = "") -> dict:
@@ -159,6 +256,48 @@ def llm_call(system_prompt: str, user_message: str,
     except ImportError:
         _last_call_error = "requests_not_installed"
         print(f"  [豆包] {call_label} ❌ requests未安装 (pip install requests)")
+        _call_stats["fallback"] += 1
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+    except Exception as e:
+        _last_call_error = f"exception({type(e).__name__}: {str(e)[:200]})"
+        print(f"  [豆包] {call_label} ❌ 异常: {e}")
+        _call_stats["errors"].append(str(e))
+        _call_stats["fallback"] += 1
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+
+async def async_llm_call(system_prompt: str, user_message: str,
+                         temperature: float = 0.3, max_tokens: int = 4096,
+                         agent_id: str = "") -> dict:
+    """统一异步 LLM 调用入口。返回 dict，包含 content 和元数据。"""
+    global _last_call_error
+    _call_stats["total"] += 1
+    call_label = f"[{agent_id}]" if agent_id else ""
+
+    if not config.ENABLE_LLM:
+        _last_call_error = "llm_disabled"
+        _call_stats["fallback"] += 1
+        print(f"  [LLM] {call_label} ⏭️ LLM未启用，使用规则引擎")
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+    provider = _normalize_provider(config.LLM_PROVIDER)
+    if provider != "doubao":
+        _last_call_error = f"unknown_provider({config.LLM_PROVIDER})"
+        _call_stats["fallback"] += 1
+        print(f"  [LLM] {call_label} ❌ 未知的LLM_PROVIDER: {config.LLM_PROVIDER}")
+        return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
+
+    try:
+        result = await _async_call_doubao(system_prompt, user_message, temperature, max_tokens, agent_id)
+        if result["content"]:
+            _call_stats["success"] += 1
+            return result
+
+        _call_stats["fallback"] += 1
+        return result
+    except ImportError:
+        _last_call_error = "httpx_not_installed"
+        print(f"  [豆包] {call_label} ❌ httpx未安装 (pip install httpx)")
         _call_stats["fallback"] += 1
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
     except Exception as e:

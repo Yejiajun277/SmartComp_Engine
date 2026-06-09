@@ -65,7 +65,7 @@ class ProductAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=4096)
+            result = await self.async_ask_llm_json(prompt, max_tokens=4096)
             if result:
                 analysis = self._parse_product_analysis(result)
                 self._log(f"✅ 产品分析完成: {len(analysis.feature_matrix)}个功能维度, "

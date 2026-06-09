@@ -49,7 +49,7 @@ class DimensionAgent(BaseAgent):
                 product_description=product_description,
                 competitors_text=competitors_text,
             )
-            result = self.ask_llm_json(prompt, max_tokens=2048)
+            result = await self.async_ask_llm_json(prompt, max_tokens=2048)
             if result:
                 dim_config = self._parse_config(result)
                 self._log(

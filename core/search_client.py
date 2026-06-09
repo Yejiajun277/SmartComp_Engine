@@ -4,6 +4,7 @@ core/search_client.py - 豆包联网搜索客户端
 """
 
 import time
+import asyncio
 
 import config
 
@@ -128,6 +129,111 @@ class SearchClient:
                 results.append({"query": q, "result": None, "references": [], "error": str(e)})
             if i < total - 1:
                 time.sleep(delay)
+        return results
+
+    async def async_search(self, query: str, recency: str | None = None) -> dict:
+        """
+        异步执行一次联网搜索，并兼容旧的返回结构。
+        """
+        if not self.api_key:
+            raise RuntimeError("DOUBAO_API_KEY 未配置，无法执行联网搜索")
+
+        import httpx
+        from datetime import datetime
+
+        api_url = f"{self.base_url}/responses"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        payload = {
+            "model": self.model,
+            "tools": [{"type": "web_search"}],
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": self._build_search_prompt(query, recency or self.recency),
+                        }
+                    ],
+                }
+            ],
+            "max_output_tokens": config.SEARCH_MAX_OUTPUT_TOKENS,
+        }
+
+        t0 = time.time()
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(api_url, headers=headers, json=payload)
+            duration_ms = (time.time() - t0) * 1000
+            resp.raise_for_status()
+            result = self._normalize_response(resp.json())
+            refs = result.get("references", [])
+            result_text = SearchClient.extract_text(result)
+            self.search_logs.append({
+                "type": "search",
+                "agent_id": "",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "query": query,
+                "duration_ms": round(duration_ms, 1),
+                "success": True,
+                "result_count": len(refs),
+                "result_text_len": len(result_text),
+                "error": "",
+            })
+            return result
+        except Exception as e:
+            duration_ms = (time.time() - t0) * 1000
+            self.search_logs.append({
+                "type": "search",
+                "agent_id": "",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "query": query,
+                "duration_ms": round(duration_ms, 1),
+                "success": False,
+                "result_count": 0,
+                "result_text_len": 0,
+                "error": str(e)[:200],
+            })
+            raise
+
+    async def async_batch_search(
+        self,
+        queries: list[str],
+        delay: float = config.SEARCH_DELAY_SECONDS,
+    ) -> list[dict]:
+        """
+        异步批量联网搜索，逐条调用并附带非阻塞间隔，避免限流。
+        """
+        if not config.ENABLE_LLM:
+            return [
+                {
+                    "query": q,
+                    "result": None,
+                    "references": [],
+                    "error": "规则引擎模式跳过联网搜索",
+                }
+                for q in queries
+            ]
+
+        results = []
+        total = len(queries)
+        for i, q in enumerate(queries):
+            print(f"  [SearchClient] 异步搜索 {i + 1}/{total}: {q[:50]}...")
+            try:
+                result = await self.async_search(q)
+                results.append({
+                    "query": q,
+                    "result": result,
+                    "references": result.get("references", []) if result else [],
+                })
+            except Exception as e:
+                print(f"  [SearchClient] 搜索失败: {q[:50]}... | 错误: {e}")
+                results.append({"query": q, "result": None, "references": [], "error": str(e)})
+            if i < total - 1:
+                await asyncio.sleep(delay)
         return results
 
     @staticmethod
