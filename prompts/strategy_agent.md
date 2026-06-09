@@ -24,6 +24,9 @@
 ### 我方产品
 {product_name}
 
+### 目标产品介绍素材
+{target_intro_context}
+
 ### 三维分析结果
 {analysis_text}
 
@@ -32,10 +35,33 @@
 2. 制定3~5项行动方案，按P0/P1/P2/P3排序
 3. 每项行动包含：具体行动、时间线、预期效果
 4. 预判竞品可能的应对措施和风险
+5. 目标产品介绍必须写成报告式概括，不要照抄采集原文，不要按时间线罗列
+6. 目标产品介绍每条摘要尽量短句化，优先表达"是什么 / 价值 / 地位 / 模式 / 痛点"
+7. 目标产品介绍每个 section 都必须输出对应 `citations`，且只能使用素材中出现过的引用 ID
+8. 如果某个 section 缺少足够证据，输出空数组或空对象，不要编造
 
 ### 输出格式
 ```json
 {{
+    "target_product_intro": {{
+        "hero_summary": "1-2句目标产品概括",
+        "core_capabilities": [
+            {{"title": "能力点", "summary": "一句话说明", "citations": ["引用ID1"]}}
+        ],
+        "monetization": [
+            {{"title": "商业化方式", "summary": "一句话说明", "citations": ["引用ID1"]}}
+        ],
+        "market_user": [
+            {{"title": "市场信息/用户反馈", "summary": "一句话说明", "citations": ["引用ID1"]}}
+        ],
+        "strengths": [
+            {{"title": "优势", "summary": "一句话说明", "citations": ["引用ID1"]}}
+        ],
+        "weaknesses": [
+            {{"title": "短板", "summary": "一句话说明", "citations": ["引用ID1"]}}
+        ],
+        "channel": {{"title": "渠道", "summary": "一句话说明", "citations": ["引用ID1"]}}
+    }},
     "overall_positioning": "整体战略定位（2-3句话）",
     "differentiation_strategy": {{
         "core_differentiator": "核心差异化点",

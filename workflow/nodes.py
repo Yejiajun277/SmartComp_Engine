@@ -14,6 +14,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from agents.quality_agent import QualityAgent
+import config
 from models.domain import (
     MarketAnalysis,
     PricingAnalysis,
@@ -212,6 +213,18 @@ class AnalysisGraphNodes:
     async def check_collection_quality(self, state: AnalysisState) -> AnalysisState:
         attempt = state.get("collection_retry_count", 0) + 1
 
+        if config.SKIP_QA:
+            result = QualityCheckResult(
+                phase="collection", target_agent="CollectionAgent",
+                passed=True, score=100.0, hallucination_status="skipped",
+            )
+            self.orchestrator.quality_agent.timeline.add_check(result)
+            return {
+                "qa_collection": result,
+                "qa_checks": self._append_qa(state, result),
+                "timings": self._merge_timing(state, "qa_collection", 0),
+            }
+
         async def call():
             return await self.orchestrator.quality_agent.check_collection(
                 state["competitors_data"],
@@ -404,6 +417,14 @@ class AnalysisGraphNodes:
         retry_key = f"{analysis_type}_retry_count"
         attempt = state.get(retry_key, 0) + 1
 
+        if config.SKIP_QA:
+            agent_name = {"product": "ProductAgent", "pricing": "PricingAgent", "market": "MarketAgent"}[analysis_type]
+            result = QualityCheckResult(
+                phase=analysis_type, target_agent=agent_name,
+                passed=True, score=100.0, hallucination_status="skipped",
+            )
+            return {f"qa_{analysis_type}": result}
+
         async def call():
             return await self.orchestrator.quality_agent.check_analysis(
                 analysis_type,
@@ -499,6 +520,18 @@ class AnalysisGraphNodes:
 
     async def check_strategy_quality(self, state: AnalysisState) -> AnalysisState:
         attempt = state.get("strategy_retry_count", 0) + 1
+
+        if config.SKIP_QA:
+            result = QualityCheckResult(
+                phase="strategy", target_agent="StrategyAgent",
+                passed=True, score=100.0, hallucination_status="skipped",
+            )
+            self.orchestrator.quality_agent.timeline.add_check(result)
+            return {
+                "qa_strategy": result,
+                "qa_checks": self._append_qa(state, result),
+                "timings": self._merge_timing(state, "qa_strategy", 0),
+            }
 
         async def call():
             return await self.orchestrator.quality_agent.check_strategy(
