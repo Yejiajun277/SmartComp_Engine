@@ -244,6 +244,52 @@ class TaskManager:
 
                 from core.orchestrator import Orchestrator
                 orchestrator = Orchestrator()
+
+                # 给每个 Agent 注册 on_log_added 回调，LLM 调用完成后立即通知前端
+                def _on_agent_log(log_entry):
+                    task.llm_logs.append({
+                        "type": "llm",
+                        "agent": log_entry.get("agent_id", ""),
+                        **{k: log_entry.get(k, "") for k in (
+                            "timestamp", "system_prompt", "user_message", "result",
+                            "model", "finish_reason", "parse_error",
+                        )},
+                        **{k: log_entry.get(k, 0) for k in (
+                            "prompt_tokens", "completion_tokens", "total_tokens",
+                            "duration_ms", "max_tokens",
+                        )},
+                        **{k: log_entry.get(k, 0.0) for k in ("temperature",)},
+                        "success": log_entry.get("success", True),
+                    })
+                    # fire-and-forget 事件发射（不阻塞 Agent 执行）
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(self._event_bus.emit(task_id, WorkflowEvent(
+                            type=EventType.LLM_LOGS_UPDATED,
+                            task_id=task_id,
+                            agent=log_entry.get("agent_id", "Agent"),
+                            phase="llm_logs",
+                            status="running",
+                            progress=task.progress,
+                            message=f"LLM 调用日志已更新（{len(task.llm_logs)} 条）",
+                            data={"total": len(task.llm_logs)},
+                        )))
+                    except Exception:
+                        pass
+
+                for agent in [
+                    orchestrator.discovery_agent,
+                    orchestrator.collection_agent,
+                    orchestrator.dimension_agent,
+                    orchestrator.product_agent,
+                    orchestrator.pricing_agent,
+                    orchestrator.market_agent,
+                    orchestrator.strategy_agent,
+                    orchestrator.quality_agent,
+                ]:
+                    if hasattr(agent, 'on_log_added'):
+                        agent.on_log_added = _on_agent_log
+
                 log_sync_task = asyncio.create_task(self._sync_llm_logs_live(task, orchestrator))
                 try:
                     report = await orchestrator.analyze(
@@ -326,29 +372,39 @@ class TaskManager:
                 self._event_bus.remove_listener(self._on_workflow_event)
 
     async def _sync_llm_logs_live(self, task: TaskState, orchestrator) -> None:
-        """Periodically persist LLM/search logs and notify the frontend while a task is running."""
-        last_count = 0
+        """Periodically persist task state to disk while a task is running.
+
+        LLM log events are now emitted immediately via on_log_added callback.
+        This task only handles periodic disk persistence and search log sync.
+        """
+        last_persisted = 0
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(3)
             try:
-                logs = _collect_llm_logs(orchestrator)
+                # 持久化到磁盘（仅当有新日志时）
+                if len(task.llm_logs) > last_persisted:
+                    last_persisted = len(task.llm_logs)
+                    self._save_task(task)
+                # 补充搜索日志（搜索客户端没有 on_log_added 回调）
+                search_logs = []
+                for agent in [
+                    orchestrator.discovery_agent,
+                    orchestrator.collection_agent,
+                ]:
+                    if hasattr(agent, 'search_client') and hasattr(agent.search_client, 'search_logs'):
+                        for log in agent.search_client.search_logs:
+                            log_entry = dict(log)
+                            log_entry.setdefault("type", "search")
+                            log_entry.setdefault("agent", agent.agent_id)
+                            search_logs.append(log_entry)
+                if search_logs:
+                    existing_search = [l for l in task.llm_logs if l.get("type") == "search"]
+                    if len(search_logs) != len(existing_search):
+                        # 合并搜索日志（不覆盖已有的 LLM 日志）
+                        task.llm_logs = [l for l in task.llm_logs if l.get("type") != "search"] + search_logs
+                        self._save_task(task)
             except Exception:
                 continue
-            if len(logs) == last_count:
-                continue
-            last_count = len(logs)
-            task.llm_logs = logs
-            self._save_task(task)
-            await self._event_bus.emit(task.id, WorkflowEvent(
-                type=EventType.LLM_LOGS_UPDATED,
-                task_id=task.id,
-                agent="Orchestrator",
-                phase="llm_logs",
-                status="running",
-                progress=task.progress,
-                message=f"LLM 调用日志已更新（{last_count} 条）",
-                data={"total": last_count},
-            ))
 
 
 def _collect_llm_logs(orchestrator) -> list[dict]:

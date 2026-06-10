@@ -29,6 +29,7 @@ class BaseAgent(ABC):
         self.system_prompt = system_prompt
         self.log: list[str] = []
         self.llm_logs: list[dict] = []
+        self.on_log_added = None  # callback(log_entry: dict) — 每次 llm_logs 追加后调用
 
     def _log(self, message: str):
         """记录Agent日志"""
@@ -71,6 +72,12 @@ class BaseAgent(ABC):
             "user_message_archive": user_message if config.ARCHIVE_PROMPTS else "",
             "max_tokens_requested": tokens,
         })
+
+        if self.on_log_added:
+            try:
+                self.on_log_added(self.llm_logs[-1])
+            except Exception:
+                pass
 
         return content
 
