@@ -145,6 +145,12 @@ class BaseAgent(ABC):
             "parse_error": "",
         })
 
+        if self.on_log_added:
+            try:
+                self.on_log_added(self.llm_logs[-1])
+            except Exception:
+                pass
+
         return content
 
     async def async_ask_llm_json(self, user_message: str,
