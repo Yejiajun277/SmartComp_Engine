@@ -89,6 +89,10 @@ function normalizeQaResult(event) {
     feedback_to_agent: event.data?.feedback_to_agent,
     hallucination_status: event.data?.hallucination_status,
     hallucination_score: event.data?.hallucination_score,
+    accuracy_rate: event.data?.accuracy_rate,
+    coverage_rate: event.data?.coverage_rate,
+    correction_count: event.data?.correction_count,
+    total_fields: event.data?.total_fields,
     message: event.message,
   };
 }

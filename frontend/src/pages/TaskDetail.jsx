@@ -1,10 +1,13 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Progress, Typography, Row, Col, Statistic, Button, Tag, Space } from 'antd';
+import { Card, Progress, Typography, Row, Col, Statistic, Button, Tag, Space, Divider } from 'antd';
 import {
   ArrowLeftOutlined,
   FileTextOutlined,
   RobotOutlined,
+  CheckCircleOutlined,
+  FileSearchOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { getArtifact, getTask } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -173,6 +176,26 @@ export default function TaskDetail() {
   const graphQaSummaries = Object.keys(qaSummaries).length > 0 ? qaSummaries : persistedQaSummaries;
   const timelineQaResults = qaResults.length > 0 ? qaResults : persistedQaResults;
   const graphNodeStates = { ...nodeStates };
+
+  // 业务闭环指标：从最近一轮 QA 结果中聚合（排除 skipped 的检查）
+  const allChecks = artifactCache.qa?.checks || [];
+  let accuracyRate = 0;
+  let coverageRate = 0;
+  let correctionRate = 0;
+  const validChecks = allChecks.filter(
+    (c) => c.hallucination_status !== 'skipped' && (c.total_fields || 0) > 0,
+  );
+  if (validChecks.length > 0) {
+    // 取每个 phase 最后一轮
+    const lastByPhase = {};
+    validChecks.forEach((c) => { lastByPhase[c.phase] = c; });
+    const lastChecks = Object.values(lastByPhase);
+    const totalFields = lastChecks.reduce((s, c) => s + (c.total_fields || 0), 0) || 1;
+    accuracyRate = lastChecks.reduce((s, c) => s + (c.accuracy_rate || 0) * (c.total_fields || 0), 0) / totalFields;
+    coverageRate = lastChecks.reduce((s, c) => s + (c.coverage_rate || 0) * (c.total_fields || 0), 0) / totalFields;
+    const corrected = lastChecks.reduce((s, c) => s + (c.correction_count || 0), 0);
+    correctionRate = corrected / totalFields * 100;
+  }
   const currentPhase = AGENT_TO_PHASE[taskInfo?.current_agent];
   if (
     taskInfo?.status === 'running'
@@ -278,6 +301,61 @@ export default function TaskDetail() {
                 />
               </Col>
             </Row>
+            {validChecks.length > 0 && (
+              <>
+                <Divider style={{ margin: '16px 0 12px' }} />
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Statistic
+                      title="准确率"
+                      value={accuracyRate.toFixed(1)}
+                      suffix="%"
+                      prefix={<CheckCircleOutlined />}
+                      valueStyle={{ color: accuracyRate >= 80 ? '#3f8600' : accuracyRate >= 60 ? '#d4b106' : '#cf1322' }}
+                    />
+                    <Progress
+                      percent={Math.round(accuracyRate)}
+                      size="small"
+                      showInfo={false}
+                      strokeColor={accuracyRate >= 80 ? '#3f8600' : accuracyRate >= 60 ? '#d4b106' : '#cf1322'}
+                      style={{ marginTop: 4 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="覆盖率"
+                      value={coverageRate.toFixed(1)}
+                      suffix="%"
+                      prefix={<FileSearchOutlined />}
+                      valueStyle={{ color: coverageRate >= 80 ? '#3f8600' : coverageRate >= 60 ? '#d4b106' : '#cf1322' }}
+                    />
+                    <Progress
+                      percent={Math.round(coverageRate)}
+                      size="small"
+                      showInfo={false}
+                      strokeColor={coverageRate >= 80 ? '#3f8600' : coverageRate >= 60 ? '#d4b106' : '#cf1322'}
+                      style={{ marginTop: 4 }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="修正率"
+                      value={correctionRate.toFixed(1)}
+                      suffix="%"
+                      prefix={<EditOutlined />}
+                      valueStyle={{ color: correctionRate <= 10 ? '#3f8600' : correctionRate <= 30 ? '#d4b106' : '#cf1322' }}
+                    />
+                    <Progress
+                      percent={Math.round(correctionRate)}
+                      size="small"
+                      showInfo={false}
+                      strokeColor={correctionRate <= 10 ? '#3f8600' : correctionRate <= 30 ? '#d4b106' : '#cf1322'}
+                      style={{ marginTop: 4 }}
+                    />
+                  </Col>
+                </Row>
+              </>
+            )}
           </Card>
         </Col>
       </Row>

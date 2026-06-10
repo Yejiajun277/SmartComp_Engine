@@ -12,7 +12,8 @@ from agents.base_agent import BaseAgent
 from models.domain import (
     ProductAnalysis, PricingAnalysis, MarketAnalysis,
     StrategyReport, ActionItem, CitationIndex, CompetitorData,
-    TargetProductIntro, IntroItem, Citation
+    TargetProductIntro, IntroItem, Citation,
+    SWOTAnalysis, SWOTQuadrant, SWOTCrossStrategy
 )
 from core.search_client import SearchClient
 from core.prompt_loader import load as load_prompts
@@ -466,7 +467,38 @@ class StrategyAgent(BaseAgent):
             summary=result.get("summary", ""),
         )
         report.target_product_intro = self._parse_target_product_intro(result)
+        report.swot = self._parse_swot(result.get("swot"))
         return report
+
+    def _parse_swot(self, data: dict | None) -> SWOTAnalysis | None:
+        """解析 SWOT 分析数据"""
+        if not data or not isinstance(data, dict):
+            return None
+
+        def parse_quadrant(q_data: dict | None) -> SWOTQuadrant:
+            if not q_data or not isinstance(q_data, dict):
+                return SWOTQuadrant()
+            return SWOTQuadrant(
+                items=q_data.get("items", []),
+                citations=q_data.get("citations", []),
+            )
+
+        cross = data.get("cross_strategies", {})
+        if not isinstance(cross, dict):
+            cross = {}
+
+        return SWOTAnalysis(
+            strengths=parse_quadrant(data.get("strengths")),
+            weaknesses=parse_quadrant(data.get("weaknesses")),
+            opportunities=parse_quadrant(data.get("opportunities")),
+            threats=parse_quadrant(data.get("threats")),
+            cross_strategies=SWOTCrossStrategy(
+                so=cross.get("so", []),
+                wo=cross.get("wo", []),
+                st=cross.get("st", []),
+                wt=cross.get("wt", []),
+            ),
+        )
 
     def _rule_strategy(self, product_name: str, competitor_count: int,
                         product_analysis: ProductAnalysis,
@@ -479,6 +511,20 @@ class StrategyAgent(BaseAgent):
         diff_points = product_analysis.differentiation_points[:3] if product_analysis.differentiation_points else []
         diff_text = "、".join(diff_points) if diff_points else "需进一步分析"
 
+        # 基于三维分析数据生成基础 SWOT
+        swot = SWOTAnalysis(
+            strengths=SWOTQuadrant(items=diff_points if diff_points else ["需进一步分析产品优势"]),
+            weaknesses=SWOTQuadrant(items=["需启用LLM获取深度劣势分析"]),
+            opportunities=SWOTQuadrant(items=["需启用LLM获取市场机会分析"]),
+            threats=SWOTQuadrant(items=["需启用LLM获取威胁分析"]),
+            cross_strategies=SWOTCrossStrategy(
+                so=[f"利用{diff_text}优势抓住市场机会"],
+                wo=["启用LLM以识别弥补劣势的机会"],
+                st=["启用LLM以制定应对威胁的策略"],
+                wt=["启用LLM以制定规避风险的策略"],
+            ),
+        )
+
         return StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
@@ -488,6 +534,7 @@ class StrategyAgent(BaseAgent):
                 "core_differentiator": diff_text,
                 "supporting_points": diff_points,
             },
+            swot=swot,
             action_plan=[
                 ActionItem(priority="P0", action="深入调研竞品最新动态", timeline="1-2周",
                            expected_impact="建立竞品情报基线"),
@@ -558,6 +605,41 @@ class StrategyAgent(BaseAgent):
             lines.append(f"  核心差异: {core}")
             if points:
                 lines.append(f"  支撑点: {', '.join(points)}")
+
+        # SWOT 分析
+        if report.swot:
+            lines.append("")
+            lines.append("─── SWOT 分析 ───")
+            swot = report.swot
+            if swot.strengths.items:
+                lines.append("  💪 优势 (Strengths):")
+                for item in swot.strengths.items:
+                    lines.append(f"    + {item}")
+            if swot.weaknesses.items:
+                lines.append("  ⚠️ 劣势 (Weaknesses):")
+                for item in swot.weaknesses.items:
+                    lines.append(f"    - {item}")
+            if swot.opportunities.items:
+                lines.append("  🌟 机会 (Opportunities):")
+                for item in swot.opportunities.items:
+                    lines.append(f"    ○ {item}")
+            if swot.threats.items:
+                lines.append("  🔴 威胁 (Threats):")
+                for item in swot.threats.items:
+                    lines.append(f"    × {item}")
+            if swot.cross_strategies:
+                cs = swot.cross_strategies
+                if cs.so or cs.wo or cs.st or cs.wt:
+                    lines.append("")
+                    lines.append("  交叉矩阵策略:")
+                    if cs.so:
+                        lines.append("    SO（进攻）: " + "; ".join(cs.so))
+                    if cs.wo:
+                        lines.append("    WO（改进）: " + "; ".join(cs.wo))
+                    if cs.st:
+                        lines.append("    ST（防御）: " + "; ".join(cs.st))
+                    if cs.wt:
+                        lines.append("    WT（规避）: " + "; ".join(cs.wt))
 
         lines.append("")
         lines.append("─── 行动方案 ───")
@@ -1236,6 +1318,7 @@ class StrategyAgent(BaseAgent):
         # ══════════════════════════════════════════════
         market_html = ""
         if market_analysis and market_analysis.market_share_data:
+            # 解析市场份额数值，用于条形图比例
             max_share = 0
             share_data = []
             for ms in market_analysis.market_share_data:
@@ -1246,21 +1329,23 @@ class StrategyAgent(BaseAgent):
 
             share_data_sorted = sorted(share_data, key=lambda x: x[1], reverse=True)
 
+            # 份额条形图
             share_bars = ""
             for ms, share_num in share_data_sorted:
-                bar_width = (share_num / max_share * 100) if max_share > 0 else 50
-                bar_width = max(bar_width, 5)
+                if max_share > 0 and share_num > 0:
+                    bar_width = max(share_num / max_share * 85, 8)
+                else:
+                    bar_width = 8
                 share_bars += f'''
-                <div style="display:flex;align-items:center;margin-bottom:12px;">
-                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
+                <div style="display:flex;align-items:center;margin-bottom:10px;">
+                    <div style="width:140px;font-size:13px;font-weight:500;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{esc(ms.competitor)}">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
                     <div style="flex:1;margin:0 12px;">
-                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
-                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
-                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">{esc(ms.share_estimate)}</span>
-                            </div>
+                        <div style="background:#f1f5f9;border-radius:6px;height:26px;overflow:hidden;position:relative;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;min-width:8px;"></div>
                         </div>
                     </div>
-                    <div style="width:80px;text-align:right;flex-shrink:0;">{trend_icon(ms.trend)}</div>
+                    <div style="width:90px;font-size:13px;color:#475569;flex-shrink:0;text-align:right;">{esc(ms.share_estimate)}</div>
+                    <div style="width:60px;text-align:center;flex-shrink:0;">{trend_icon(ms.trend)}</div>
                 </div>'''
 
             # 用户口碑
@@ -1270,12 +1355,12 @@ class StrategyAgent(BaseAgent):
                 for name, rep in market_analysis.user_reputation.items():
                     kw_tags = ""
                     for kw in (rep.keywords or [])[:5]:
-                        kw_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(kw)}</span>'
+                        kw_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;display:inline-block;margin:2px 2px 0 0;">{esc(kw)}</span>'
                     rep_cards += f'''
-                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;">
-                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;">{esc(name)}</div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;min-width:160px;max-width:220px;box-sizing:border-box;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-break:break-all;">{esc(name)}</div>
                         <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
-                        <div>{kw_tags}</div>
+                        <div style="line-height:1.8;">{kw_tags}</div>
                     </div>'''
                 reputation_html = f'''
                 <div style="margin-top:20px;">
@@ -1288,23 +1373,24 @@ class StrategyAgent(BaseAgent):
             if market_analysis.user_profiles:
                 profile_cards = ""
                 for name, profile in market_analysis.user_profiles.items():
-                    occ_tags = ""
-                    for occ in (profile.occupation_distribution or [])[:4]:
-                        occ_tags += f'<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(occ)}</span>'
-                    use_tags = ""
-                    for uc in (profile.use_cases or [])[:4]:
-                        use_tags += f'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(uc)}</span>'
-                    pain_tags = ""
-                    for pp in (profile.pain_points or [])[:4]:
-                        pain_tags += f'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(pp)}</span>'
+                    def make_tags(items, bg, fg):
+                        if not items:
+                            return '—'
+                        return "".join(
+                            f'<span style="background:{bg};color:{fg};padding:2px 8px;border-radius:12px;font-size:11px;display:inline-block;margin:2px 4px 0 0;">{esc(it)}</span>'
+                            for it in items[:4]
+                        )
+                    occ_tags = make_tags(profile.occupation_distribution, "#dbeafe", "#1e40af")
+                    use_tags = make_tags(profile.use_cases, "#dcfce7", "#166534")
+                    pain_tags = make_tags(profile.pain_points, "#fee2e2", "#991b1b")
                     profile_cards += f'''
-                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:250px;">
-                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;">{esc(name)}{cite_sup(profile.citations)}</div>
-                        <div style="font-size:13px;margin-bottom:4px;"><strong>目标用户：</strong>{esc(profile.target_audience) if profile.target_audience else '—'}</div>
-                        <div style="font-size:13px;margin-bottom:4px;"><strong>年龄分布：</strong>{esc(profile.age_range) if profile.age_range else '—'}</div>
-                        <div style="font-size:13px;margin-bottom:4px;"><strong>职业分布：</strong>{occ_tags if occ_tags else '—'}</div>
-                        <div style="font-size:13px;margin-bottom:4px;"><strong>使用场景：</strong>{use_tags if use_tags else '—'}</div>
-                        <div style="font-size:13px;"><strong>核心痛点：</strong>{pain_tags if pain_tags else '—'}</div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;min-width:260px;flex:1;box-sizing:border-box;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;word-break:break-all;">{esc(name)}{cite_sup(profile.citations)}</div>
+                        <div style="font-size:13px;margin-bottom:6px;"><strong>目标用户：</strong>{esc(profile.target_audience) if profile.target_audience else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:6px;"><strong>年龄分布：</strong>{esc(profile.age_range) if profile.age_range else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:6px;"><strong>职业分布：</strong>{occ_tags}</div>
+                        <div style="font-size:13px;margin-bottom:6px;"><strong>使用场景：</strong>{use_tags}</div>
+                        <div style="font-size:13px;"><strong>核心痛点：</strong>{pain_tags}</div>
                     </div>'''
                 profiles_html = f'''
                 <div style="margin-top:20px;">
@@ -1312,14 +1398,22 @@ class StrategyAgent(BaseAgent):
                     <div style="display:flex;gap:12px;flex-wrap:wrap;">{profile_cards}</div>
                 </div>'''
 
+            # 增长趋势和渠道分析
+            trend_html = ""
+            if market_analysis.growth_trends:
+                trend_html = f'<div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;word-break:break-all;"><strong>增长趋势：</strong>{esc(market_analysis.growth_trends)}</div>'
+            channel_html = ""
+            if market_analysis.channel_analysis:
+                channel_html = f'<div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;word-break:break-all;"><strong>渠道分析：</strong>{esc(market_analysis.channel_analysis)}</div>'
+
             market_html = f'''
-            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);overflow:hidden;">
                 <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📈 市场格局分析</h2>
                 {share_bars}
                 {reputation_html}
                 {profiles_html}
-                {'<div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;"><strong>增长趋势：</strong>' + esc(market_analysis.growth_trends) + '</div>' if market_analysis.growth_trends else ''}
-                {'<div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;"><strong>渠道分析：</strong>' + esc(market_analysis.channel_analysis) + '</div>' if market_analysis.channel_analysis else ''}
+                {trend_html}
+                {channel_html}
             </div>'''
 
         # ══════════════════════════════════════════════
@@ -1443,6 +1537,73 @@ class StrategyAgent(BaseAgent):
                 </div>
                 {'<ul style="margin:0;padding-left:20px;line-height:1.8;">' + points_items + '</ul>' if points_items else ''}
             </div>'''
+
+        # SWOT 分析矩阵
+        swot_html = ""
+        if report.swot:
+            swot = report.swot
+
+            def render_swot_items(items: list[str], color: str) -> str:
+                if not items:
+                    return f'<div style="color:#94a3b8;font-size:13px;font-style:italic;">暂无数据</div>'
+                html = ""
+                for item in items:
+                    html += f'<div style="padding:4px 0;font-size:13px;color:#334155;">• {esc(item)}</div>'
+                return html
+
+            s_items = render_swot_items(swot.strengths.items, "#22c55e")
+            w_items = render_swot_items(swot.weaknesses.items, "#f59e0b")
+            o_items = render_swot_items(swot.opportunities.items, "#3b82f6")
+            t_items = render_swot_items(swot.threats.items, "#ef4444")
+
+            # 交叉矩阵策略
+            cross_html = ""
+            cs = swot.cross_strategies
+            if cs:
+                strategies = [
+                    ("SO（进攻）", cs.so, "#22c55e", "利用优势抓住机会"),
+                    ("WO（改进）", cs.wo, "#f59e0b", "弥补劣势以抓住机会"),
+                    ("ST（防御）", cs.st, "#3b82f6", "利用优势应对威胁"),
+                    ("WT（规避）", cs.wt, "#ef4444", "减少劣势以规避威胁"),
+                ]
+                for label, items, color, desc in strategies:
+                    if items:
+                        items_html = "".join(
+                            f'<div style="padding:3px 0;font-size:13px;color:#334155;">• {esc(item)}</div>'
+                            for item in items
+                        )
+                        cross_html += f'''
+                        <div style="background:#fff;border:1px solid {color}33;border-left:4px solid {color};border-radius:8px;padding:14px 16px;flex:1;min-width:220px;">
+                            <div style="font-size:14px;font-weight:600;color:{color};margin-bottom:4px;">{label}</div>
+                            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">{desc}</div>
+                            {items_html}
+                        </div>'''
+
+            swot_html = f'''
+        <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📊 SWOT 分析矩阵</h2>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:18px;">
+                    <div style="font-size:15px;font-weight:700;color:#16a34a;margin-bottom:10px;">💪 优势 Strengths</div>
+                    {s_items}
+                </div>
+                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:18px;">
+                    <div style="font-size:15px;font-weight:700;color:#d97706;margin-bottom:10px;">⚠️ 劣势 Weaknesses</div>
+                    {w_items}
+                </div>
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:18px;">
+                    <div style="font-size:15px;font-weight:700;color:#2563eb;margin-bottom:10px;">🌟 机会 Opportunities</div>
+                    {o_items}
+                </div>
+                <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:18px;">
+                    <div style="font-size:15px;font-weight:700;color:#dc2626;margin-bottom:10px;">🔴 威胁 Threats</div>
+                    {t_items}
+                </div>
+            </div>
+
+            {'<div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:12px;">🔄 交叉矩阵策略</div><div style="display:flex;gap:12px;flex-wrap:wrap;">' + cross_html + '</div>' if cross_html else ''}
+        </div>'''
 
         # 行动方案
         action_cards = ""
@@ -1636,13 +1797,28 @@ class StrategyAgent(BaseAgent):
             </div>
             {metrics_html}'''
 
+        # 对正文实际引用的来源重新从 1 开始编号，消除序号空洞
+        # 构建旧编号→新编号的映射，用于字符串替换
+        old_to_new: dict[int, int] = {}
+        used_sorted = []
+        if used_cite_ids and global_cite_num:
+            used_sorted = sorted(
+                used_cite_ids,
+                key=lambda cid: global_cite_num.get(cid, 99999),
+            )
+            for new_idx, cid in enumerate(used_sorted, 1):
+                old_num = global_cite_num.get(cid)
+                if old_num is not None:
+                    old_to_new[old_num] = new_idx
+                global_cite_num[cid] = new_idx
+
         # 数据来源附录（只展示正文实际引用的来源）
         references_html = ""
         if report.citation_index and used_cite_ids:
             ref_items = ""
             seen_urls = set()
             used_count = 0
-            for cid in used_cite_ids:
+            for cid in used_sorted:
                 cite = report.citation_index.get(cid)
                 if not cite:
                     continue
@@ -1726,6 +1902,7 @@ class StrategyAgent(BaseAgent):
 
     <!-- 策略建议 -->
     {diff_strategy_html}
+    {swot_html}
     {action_html}
     {risk_html}
 
@@ -1750,5 +1927,15 @@ class StrategyAgent(BaseAgent):
 </div>
 </body>
 </html>'''
+
+        # 替换正文中已渲染的引用编号（消除空洞，从 1 连续）
+        if old_to_new:
+            def _replace_cite_num(m):
+                old = int(m.group(1))
+                new = old_to_new.get(old)
+                if new is not None:
+                    return f'[{new}]'
+                return m.group(0)
+            html = re.sub(r'\[(\d+)\](?=(</a></sup>))', _replace_cite_num, html)
 
         return html

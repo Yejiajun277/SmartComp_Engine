@@ -131,11 +131,24 @@
    - overall_positioning 是否非空
    - action_plan 是否非空且每项有 action
    - risk_assessment 是否非空
+   - **SWOT 分析**：
+     - swot 字段是否存在
+     - strengths.items 是否非空（至少 2 条内部优势）
+     - weaknesses.items 是否非空（至少 2 条内部劣势）
+     - opportunities.items 是否非空（至少 2 条外部机会）
+     - threats.items 是否非空（至少 2 条外部威胁）
+     - cross_strategies 是否非空（so/wo/st/wt 至少各 1 条）
 
 2. **幻觉检测**：
    - 整体定位是否基于三维分析交叉推导
    - 行动方案是否有分析依据支撑
    - 风险评估是否基于竞品数据中的信号
+   - SWOT 各象限内容是否与三维分析结果一致（优势/劣势来自产品分析，机会/威胁来自市场分析）
+
+3. **SWOT 质量检查**：
+   - 优势和劣势是否为内部因素（描述产品自身特征）
+   - 机会和威胁是否为外部因素（描述市场/竞争环境）
+   - 交叉策略是否合理关联了对应象限的内容
 
 ### 输出格式
 同 prompt_check_collection 的输出格式。实际输出时必须是纯 JSON，不要 Markdown 代码块，不要注释、省略号或尾逗号。

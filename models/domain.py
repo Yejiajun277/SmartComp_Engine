@@ -333,6 +333,32 @@ class TargetProductIntro:
 
 
 @dataclass
+class SWOTQuadrant:
+    """SWOT 单个象限"""
+    items: list[str] = field(default_factory=list)       # 要点列表
+    citations: list[str] = field(default_factory=list)   # 引用 ID 列表
+
+
+@dataclass
+class SWOTCrossStrategy:
+    """SWOT 交叉矩阵策略"""
+    so: list[str] = field(default_factory=list)   # 优势×机会：进攻策略
+    wo: list[str] = field(default_factory=list)   # 劣势×机会：改进策略
+    st: list[str] = field(default_factory=list)   # 优势×威胁：防御策略
+    wt: list[str] = field(default_factory=list)   # 劣势×威胁：规避策略
+
+
+@dataclass
+class SWOTAnalysis:
+    """完整的 SWOT 分析"""
+    strengths: SWOTQuadrant = field(default_factory=SWOTQuadrant)
+    weaknesses: SWOTQuadrant = field(default_factory=SWOTQuadrant)
+    opportunities: SWOTQuadrant = field(default_factory=SWOTQuadrant)
+    threats: SWOTQuadrant = field(default_factory=SWOTQuadrant)
+    cross_strategies: SWOTCrossStrategy = field(default_factory=SWOTCrossStrategy)
+
+
+@dataclass
 class StrategyReport:
     """策略建议报告（最终输出）"""
     product_name: str                       # 产品名称
@@ -341,6 +367,7 @@ class StrategyReport:
     target_product_intro: TargetProductIntro | None = None  # 目标产品介绍摘要
     overall_positioning: str = ""           # 整体定位
     differentiation_strategy: dict = field(default_factory=dict)
+    swot: SWOTAnalysis | None = None        # SWOT 分析
     action_plan: list[ActionItem] = field(default_factory=list)
     risk_assessment: str = ""
     product_analysis_summary: str = ""      # 产品分析摘要
