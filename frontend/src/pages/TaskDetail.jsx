@@ -70,11 +70,9 @@ export default function TaskDetail() {
   const [artifactCache, setArtifactCache] = useState({});
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
-  const [llmLogsRefreshKey, setLlmLogsRefreshKey] = useState(0);
-
   const {
     events, nodeStates, progress, currentMessage,
-    qaResults, qaSummaries, taskStatus, handleEvent, AGENT_PHASE_MAP,
+    qaResults, qaSummaries, taskStatus, llmLogsKey, handleEvent, AGENT_PHASE_MAP,
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
@@ -154,9 +152,6 @@ export default function TaskDetail() {
       } else {
         refreshQa();
       }
-    }
-    if (event.type === 'llm_logs_updated' || event.type === 'task_completed') {
-      setLlmLogsRefreshKey(prev => prev + 1);
     }
     if (event.type === 'task_completed') {
       refreshQa();
@@ -289,7 +284,7 @@ export default function TaskDetail() {
 
       {/* LLM Logs */}
       <Card title="LLM 调用日志" style={{ marginBottom: 16 }}>
-        <LlmLogs taskId={taskId} refreshKey={llmLogsRefreshKey} />
+        <LlmLogs taskId={taskId} refreshKey={llmLogsKey} />
       </Card>
 
       {/* Agent Detail Drawer */}

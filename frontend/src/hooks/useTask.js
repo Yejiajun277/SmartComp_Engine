@@ -100,6 +100,7 @@ export function useTask() {
   const [currentMessage, setCurrentMessage] = useState('');
   const [qaResults, setQaResults] = useState([]);
   const [taskStatus, setTaskStatus] = useState('pending');
+  const [llmLogsKey, setLlmLogsKey] = useState(0);
 
   const handleEvent = useCallback((event) => {
     console.log('[useTask] handleEvent:', event.type, event.phase, event.progress);
@@ -153,6 +154,11 @@ export function useTask() {
       }
     }
 
+    // Handle LLM logs update
+    if (event.type === 'llm_logs_updated') {
+      setLlmLogsKey(prev => prev + 1);
+    }
+
     // Handle task completion
     if (event.type === 'task_started') {
       setTaskStatus('running');
@@ -171,6 +177,7 @@ export function useTask() {
     setCurrentMessage('');
     setQaResults([]);
     setTaskStatus('pending');
+    setLlmLogsKey(0);
   }, []);
 
   return {
@@ -181,6 +188,7 @@ export function useTask() {
     qaResults,
     qaSummaries: summarizeQaResults(qaResults),
     taskStatus,
+    llmLogsKey,
     handleEvent,
     reset,
     AGENT_PHASE_MAP,
