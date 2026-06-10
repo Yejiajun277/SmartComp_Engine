@@ -64,7 +64,7 @@ class PricingAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if result:
                 if truncated and len(competitors_data) >= 2:
                     self._log(f"⚠️ 检测到输出截断，启动分片重试...")
@@ -110,7 +110,7 @@ class PricingAgent(BaseAgent):
                 chunk_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
 
             prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=chunk_text)
-            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if not result:
                 self._log(f"  ⚠️ 分片 {i+1} 调用失败，跳过")
                 continue

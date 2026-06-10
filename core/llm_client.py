@@ -152,7 +152,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                              agent_id: str) -> dict:
     """异步调用豆包 OpenAI 兼容接口，返回结构化结果。"""
     import httpx
-    global _last_call_error
+    global _last_call_error, _last_finish_reason, _last_usage
 
     if not config.DOUBAO_API_KEY:
         _last_call_error = "api_key_missing"
@@ -191,6 +191,8 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                     error_type = error.get("type", "unknown")
                     error_code = error.get("code", resp.status_code)
                     _last_call_error = f"api_error({resp.status_code}, {error_type}, {error_code})"
+                    _last_finish_reason = ""
+                    _last_usage = {}
                     print(f"  [豆包] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
                     if attempt == 0:
                         await asyncio.sleep(1)
@@ -199,34 +201,47 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
 
                 message = result.get("choices", [{}])[0].get("message", {})
                 content = message.get("content", "") or message.get("reasoning", "")
+                finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
 
                 if not content:
-                    finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
                     _last_call_error = f"empty_response(finish_reason={finish_reason})"
+                    _last_finish_reason = finish_reason
+                    _last_usage = {}
                     print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
                     return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
                 usage = result.get("usage", {})
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
+                total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
                 _last_call_error = ""
+                _last_finish_reason = finish_reason
+                _last_usage = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+                truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
                 print(
                     f"  [豆包] [{agent_id}] ✅ 异步调用成功 "
-                    f"(tokens: {prompt_tokens}+{completion_tokens}, 输出长度: {len(content)}字)"
+                    f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
+                    f"finish={finish_reason}){truncation_warn}"
                 )
                 return {
                     "content": content,
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens,
+                    "total_tokens": total_tokens,
                     "model": result.get("model", config.DOUBAO_MODEL),
-                    "finish_reason": result.get("choices", [{}])[0].get("finish_reason", ""),
+                    "finish_reason": finish_reason,
                     "duration_ms": duration_ms,
                     "timestamp": datetime.now().isoformat(timespec="seconds"),
                 }
             except httpx.TimeoutException:
                 duration_ms = (time.time() - t0) * 1000
                 _last_call_error = f"timeout(300s, attempt {attempt + 1})"
+                _last_finish_reason = ""
+                _last_usage = {}
                 print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
                 if attempt == 0:
                     continue
@@ -234,6 +249,8 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
             except httpx.ConnectError as e:
                 duration_ms = (time.time() - t0) * 1000
                 _last_call_error = f"connection_error({str(e)[:200]})"
+                _last_finish_reason = ""
+                _last_usage = {}
                 print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
                 if attempt == 0:
                     await asyncio.sleep(2)

@@ -65,7 +65,7 @@ class ProductAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=competitors_text,
             )
-            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if result:
                 # 检测到截断且竞品数量较多时，启动分片重试
                 if truncated and len(competitors_data) >= 2:
@@ -129,7 +129,7 @@ class ProductAgent(BaseAgent):
                 product_name=product_name,
                 competitors_text=chunk_text,
             )
-            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
             if not result:
                 self._log(f"  ⚠️ 分片 {i+1} 调用失败，跳过")
                 continue

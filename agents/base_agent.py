@@ -178,6 +178,29 @@ class BaseAgent(ABC):
         reason = get_last_call_error() or "empty_response"
         return {}, reason
 
+    async def async_ask_llm_json_with_truncation_check(self, user_message: str,
+                                                        temperature: float = None,
+                                                        max_tokens: int = None) -> tuple[dict, bool]:
+        """异步调用LLM并解析JSON，同时检测输出是否被截断。"""
+        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        truncated = is_last_call_truncated()
+
+        if text:
+            parsed = parse_llm_json(text)
+            if parsed:
+                if truncated:
+                    self._log(f"   ⚠️ JSON解析成功但输出被截断(max_tokens耗尽)，部分内容可能缺失")
+                return parsed, truncated
+            else:
+                if self.llm_logs:
+                    self.llm_logs[-1]["parse_error"] = get_last_call_error() or "json_parse_error"
+                if truncated:
+                    self._log(f"   ⚠️ 输出被截断且JSON解析失败，需要分片重试")
+                else:
+                    self._log(f"   ⚠️ LLM返回了文本但JSON解析失败，降级到规则引擎")
+                return {}, truncated
+        return {}, truncated
+
     def ask_llm_json_with_truncation_check(self, user_message: str,
                                             temperature: float = None,
                                             max_tokens: int = None) -> tuple[dict, bool]:

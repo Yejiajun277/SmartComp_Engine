@@ -95,11 +95,11 @@ class StrategyAgent(BaseAgent):
                 target_intro_context=target_intro_context,
                 analysis_text=analysis_text,
             )
-            result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=6144)
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=6144)
             if result and truncated:
                 # 截断了：提升 max_tokens 重试一次
                 self._log("⚠️ 策略输出被截断，提升 max_tokens 重试...")
-                result2, truncated2 = self.ask_llm_json_with_truncation_check(prompt, max_tokens=8192)
+                result2, truncated2 = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192)
                 if result2:
                     if truncated2:
                         self._log("⚠️ 8192 tokens 仍截断，使用已有结果（部分内容可能不完整）")
