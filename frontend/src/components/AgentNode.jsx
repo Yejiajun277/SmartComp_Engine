@@ -32,12 +32,12 @@ const STATUS_STYLES = {
     tagColor: 'success',
   },
   retrying: {
-    label: '质检重做',
-    bg: '#fff7e6',
-    border: '#fa8c16',
-    icon: <ExclamationCircleOutlined />,
-    color: '#fa8c16',
-    tagColor: 'warning',
+    label: '执行中',
+    bg: '#e6f7ff',
+    border: '#1890ff',
+    icon: <LoadingOutlined spin />,
+    color: '#1890ff',
+    tagColor: 'processing',
   },
   failed: {
     label: '失败',

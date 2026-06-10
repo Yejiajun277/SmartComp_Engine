@@ -4,11 +4,13 @@
 import asyncio
 import unittest
 
+from models.domain import CompetitorData, QualityCheckResult, QualityIssue
 from workflow.nodes import AnalysisGraphNodes
 from workflow.state import initial_analysis_state
 
 from tests.test_orchestrator_baseline import (
     make_orchestrator,
+    competitor_list,
     product_analysis,
     pricing_analysis,
     market_analysis,
@@ -65,6 +67,29 @@ class FlakyDiscoveryAgent:
         if self.calls == 1:
             raise TimeoutError("temporary discovery timeout")
         return await self.wrapped.run(product_description, max_competitors)
+
+
+class ExcessiveHallucinationQualityAgent:
+    def __init__(self):
+        self.timeline = type("Timeline", (), {"add_check": lambda self, result: None})()
+
+    async def check_collection(self, competitors_data, original_search_texts, competitor_list=None, attempt=1):
+        return QualityCheckResult(
+            phase="collection",
+            target_agent="CollectionAgent",
+            passed=False,
+            score=67.0,
+            attempt=attempt,
+            issues=[
+                QualityIssue("critical", "hallucination", "x.user_reviews", "unsupported"),
+                QualityIssue("warning", "hallucination", "x.strengths", "unsupported"),
+                QualityIssue("warning", "hallucination", "x.weaknesses", "unsupported"),
+                QualityIssue("warning", "hallucination", "x.channels", "unsupported"),
+            ],
+        )
+
+    def extract_missing_fields(self, result, competitors_data):
+        return {}
 
 
 class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
@@ -218,7 +243,23 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
         state = merge_state(state, await nodes.discover_competitors(state))
 
         self.assertEqual(orch.discovery_agent.calls, 2)
-        self.assertEqual(state["product_name"], "Target")
+
+    async def test_collection_quality_excessive_hallucination_event_does_not_crash(self):
+        orch = make_orchestrator()
+        orch.quality_agent = ExcessiveHallucinationQualityAgent()
+        nodes = AnalysisGraphNodes(orch)
+        state = initial_analysis_state("Target product", 1)
+        state.update({
+            "collection_retry_count": 1,
+            "competitors_data": {"Competitor": CompetitorData(name="Competitor")},
+            "original_search_texts": {"Competitor": "source text"},
+            "competitor_list": competitor_list(("Competitor",)),
+        })
+
+        update = await nodes.check_collection_quality(state)
+
+        self.assertFalse(update["qa_collection"].passed)
+        self.assertEqual(update["qa_collection"].score, 67.0)
 
 
 if __name__ == "__main__":

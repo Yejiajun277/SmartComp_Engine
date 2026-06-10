@@ -354,11 +354,16 @@ class AnalysisGraphNodes:
                 result.passed = True
             elif has_excessive_hallucinations:
                 # 记录为什么没有通过
-                self._emit(
+                await self._emit(
+                    state,
                     EventType.QA_CHECK_FAILED,
-                    f"降级通过被阻止：发现{len(hallucination_issues)}个幻觉问题"
-                    + (f"，其中{len(critical_hallucinations)}个为critical级别" if critical_hallucinations else ""),
-                    phase="collection",
+                    "QualityAgent",
+                    "collection",
+                    progress=0.38,
+                    message=(
+                        f"降级通过被阻止：发现{len(hallucination_issues)}个幻觉问题"
+                        + (f"，其中{len(critical_hallucinations)}个为critical级别" if critical_hallucinations else "")
+                    ),
                 )
         # 重试后设置修正率：上轮缺失字段数即为本轮修正数
         if state.get("collection_retry_count", 0) > 0:

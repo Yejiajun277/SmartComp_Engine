@@ -1318,7 +1318,6 @@ class StrategyAgent(BaseAgent):
         # ══════════════════════════════════════════════
         market_html = ""
         if market_analysis and market_analysis.market_share_data:
-            # 解析市场份额数值，用于条形图比例
             max_share = 0
             share_data = []
             for ms in market_analysis.market_share_data:
@@ -1329,23 +1328,21 @@ class StrategyAgent(BaseAgent):
 
             share_data_sorted = sorted(share_data, key=lambda x: x[1], reverse=True)
 
-            # 份额条形图
             share_bars = ""
             for ms, share_num in share_data_sorted:
-                if max_share > 0 and share_num > 0:
-                    bar_width = max(share_num / max_share * 85, 8)
-                else:
-                    bar_width = 8
+                bar_width = (share_num / max_share * 100) if max_share > 0 else 50
+                bar_width = max(bar_width, 5)
                 share_bars += f'''
-                <div style="display:flex;align-items:center;margin-bottom:10px;">
-                    <div style="width:140px;font-size:13px;font-weight:500;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{esc(ms.competitor)}">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
+                <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
                     <div style="flex:1;margin:0 12px;">
-                        <div style="background:#f1f5f9;border-radius:6px;height:26px;overflow:hidden;position:relative;">
-                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;min-width:8px;"></div>
+                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
+                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">{esc(ms.share_estimate)}</span>
+                            </div>
                         </div>
                     </div>
-                    <div style="width:90px;font-size:13px;color:#475569;flex-shrink:0;text-align:right;">{esc(ms.share_estimate)}</div>
-                    <div style="width:60px;text-align:center;flex-shrink:0;">{trend_icon(ms.trend)}</div>
+                    <div style="width:80px;text-align:right;flex-shrink:0;">{trend_icon(ms.trend)}</div>
                 </div>'''
 
             # 用户口碑
@@ -1355,12 +1352,12 @@ class StrategyAgent(BaseAgent):
                 for name, rep in market_analysis.user_reputation.items():
                     kw_tags = ""
                     for kw in (rep.keywords or [])[:5]:
-                        kw_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;display:inline-block;margin:2px 2px 0 0;">{esc(kw)}</span>'
+                        kw_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(kw)}</span>'
                     rep_cards += f'''
-                    <div style="background:#f8fafc;border-radius:10px;padding:14px;min-width:160px;max-width:220px;box-sizing:border-box;">
-                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-break:break-all;">{esc(name)}</div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;max-width:100%;box-sizing:border-box;overflow:hidden;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}</div>
                         <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
-                        <div style="line-height:1.8;">{kw_tags}</div>
+                        <div>{kw_tags}</div>
                     </div>'''
                 reputation_html = f'''
                 <div style="margin-top:20px;">
@@ -1373,24 +1370,23 @@ class StrategyAgent(BaseAgent):
             if market_analysis.user_profiles:
                 profile_cards = ""
                 for name, profile in market_analysis.user_profiles.items():
-                    def make_tags(items, bg, fg):
-                        if not items:
-                            return '—'
-                        return "".join(
-                            f'<span style="background:{bg};color:{fg};padding:2px 8px;border-radius:12px;font-size:11px;display:inline-block;margin:2px 4px 0 0;">{esc(it)}</span>'
-                            for it in items[:4]
-                        )
-                    occ_tags = make_tags(profile.occupation_distribution, "#dbeafe", "#1e40af")
-                    use_tags = make_tags(profile.use_cases, "#dcfce7", "#166534")
-                    pain_tags = make_tags(profile.pain_points, "#fee2e2", "#991b1b")
+                    occ_tags = ""
+                    for occ in (profile.occupation_distribution or [])[:4]:
+                        occ_tags += f'<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(occ)}</span>'
+                    use_tags = ""
+                    for uc in (profile.use_cases or [])[:4]:
+                        use_tags += f'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(uc)}</span>'
+                    pain_tags = ""
+                    for pp in (profile.pain_points or [])[:4]:
+                        pain_tags += f'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(pp)}</span>'
                     profile_cards += f'''
-                    <div style="background:#f8fafc;border-radius:10px;padding:14px;min-width:260px;flex:1;box-sizing:border-box;">
-                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;word-break:break-all;">{esc(name)}{cite_sup(profile.citations)}</div>
-                        <div style="font-size:13px;margin-bottom:6px;"><strong>目标用户：</strong>{esc(profile.target_audience) if profile.target_audience else '—'}</div>
-                        <div style="font-size:13px;margin-bottom:6px;"><strong>年龄分布：</strong>{esc(profile.age_range) if profile.age_range else '—'}</div>
-                        <div style="font-size:13px;margin-bottom:6px;"><strong>职业分布：</strong>{occ_tags}</div>
-                        <div style="font-size:13px;margin-bottom:6px;"><strong>使用场景：</strong>{use_tags}</div>
-                        <div style="font-size:13px;"><strong>核心痛点：</strong>{pain_tags}</div>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:250px;max-width:100%;box-sizing:border-box;overflow:hidden;">
+                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}{cite_sup(profile.citations)}</div>
+                        <div style="font-size:13px;margin-bottom:4px;word-wrap:break-word;overflow-wrap:break-word;"><strong>目标用户：</strong>{esc(profile.target_audience) if profile.target_audience else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>年龄分布：</strong>{esc(profile.age_range) if profile.age_range else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>职业分布：</strong>{occ_tags if occ_tags else '—'}</div>
+                        <div style="font-size:13px;margin-bottom:4px;"><strong>使用场景：</strong>{use_tags if use_tags else '—'}</div>
+                        <div style="font-size:13px;"><strong>核心痛点：</strong>{pain_tags if pain_tags else '—'}</div>
                     </div>'''
                 profiles_html = f'''
                 <div style="margin-top:20px;">
@@ -1398,22 +1394,14 @@ class StrategyAgent(BaseAgent):
                     <div style="display:flex;gap:12px;flex-wrap:wrap;">{profile_cards}</div>
                 </div>'''
 
-            # 增长趋势和渠道分析
-            trend_html = ""
-            if market_analysis.growth_trends:
-                trend_html = f'<div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;word-break:break-all;"><strong>增长趋势：</strong>{esc(market_analysis.growth_trends)}</div>'
-            channel_html = ""
-            if market_analysis.channel_analysis:
-                channel_html = f'<div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;word-break:break-all;"><strong>渠道分析：</strong>{esc(market_analysis.channel_analysis)}</div>'
-
             market_html = f'''
-            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);overflow:hidden;">
+            <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);overflow:hidden;word-wrap:break-word;overflow-wrap:break-word;">
                 <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">📈 市场格局分析</h2>
                 {share_bars}
                 {reputation_html}
                 {profiles_html}
-                {trend_html}
-                {channel_html}
+                {'<div style="margin-top:16px;padding:12px 16px;background:#eff6ff;border-radius:8px;font-size:14px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word;"><strong>增长趋势：</strong>' + esc(market_analysis.growth_trends) + '</div>' if market_analysis.growth_trends else ''}
+                {'<div style="margin-top:10px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word;"><strong>渠道分析：</strong>' + esc(market_analysis.channel_analysis) + '</div>' if market_analysis.channel_analysis else ''}
             </div>'''
 
         # ══════════════════════════════════════════════
