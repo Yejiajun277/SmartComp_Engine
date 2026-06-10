@@ -376,7 +376,14 @@ class CollectionAgent(BaseAgent):
                 competitor_name=entity_name,
                 search_results=all_text[:12000],
             )
-            result = await self.async_ask_llm_json(prompt, max_tokens=6144, temperature=0)
+            # 使用截断检测，与同步版本保持一致的max_tokens
+            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
+            if truncated and result:
+                # 检测到截断：对文本字段进行补充提取（与同步版本逻辑一致）
+                self._log(f"   ⚠️ 异步采集输出被截断，补充提取文本字段...")
+                result = self._supplement_text_fields(
+                    result, product_name, product_description, entity_name, all_text
+                )
             if result:
                 product_features = []
                 for fi in result.get("product_features", []):

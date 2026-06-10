@@ -328,6 +328,7 @@ class AnalysisGraphNodes:
         start = time.perf_counter()
         result = await self._retry_node("check_collection_quality", call)
         # 「仅幻觉」短路通过：已至少重试 1 轮且未通过，但无缺失字段、无 critical completeness 问题
+        # 新增：检查幻觉问题数量，过多幻觉不应通过
         if not result.passed and state.get("collection_retry_count", 0) >= 1:
             missing_fields = self.orchestrator.quality_agent.extract_missing_fields(
                 result, state["competitors_data"]
@@ -336,8 +337,29 @@ class AnalysisGraphNodes:
                 issue.severity == "critical" and issue.category == "completeness"
                 for issue in result.issues
             )
-            if not missing_fields and not has_critical_completeness:
+            # 统计幻觉问题数量和严重程度
+            hallucination_issues = [
+                issue for issue in result.issues
+                if issue.category == "hallucination"
+            ]
+            critical_hallucinations = [
+                issue for issue in hallucination_issues
+                if issue.severity == "critical"
+            ]
+            # 如果有超过3个幻觉问题或任何critical幻觉，不应通过
+            has_excessive_hallucinations = (
+                len(hallucination_issues) > 3 or len(critical_hallucinations) > 0
+            )
+            if not missing_fields and not has_critical_completeness and not has_excessive_hallucinations:
                 result.passed = True
+            elif has_excessive_hallucinations:
+                # 记录为什么没有通过
+                self._emit(
+                    EventType.QA_CHECK_FAILED,
+                    f"降级通过被阻止：发现{len(hallucination_issues)}个幻觉问题"
+                    + (f"，其中{len(critical_hallucinations)}个为critical级别" if critical_hallucinations else ""),
+                    phase="collection",
+                )
         # 重试后设置修正率：上轮缺失字段数即为本轮修正数
         if state.get("collection_retry_count", 0) > 0:
             result.correction_count = state.get("collection_pending_fields", 0)
