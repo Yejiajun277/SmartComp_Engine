@@ -164,6 +164,10 @@ class TaskManager:
 
     async def submit(self, product_description: str, max_competitors: int,
                      skip_qa: bool, use_rule_engine: bool = False) -> str:
+        if not use_rule_engine:
+            import config as app_config
+            use_rule_engine = not bool(app_config.DOUBAO_API_KEY)
+
         task_id = str(uuid.uuid4())[:8]
         task = TaskState(
             id=task_id,

@@ -70,6 +70,71 @@ cd frontend && npm run dev
 
 生产环境下 FastAPI 直接从 `frontend/dist/` 提供前端静态文件。
 
+## Docker Compose 部署
+
+项目提供单容器生产部署：容器内先构建 React 前端，再由 FastAPI 在 `:8000` 同时提供 API、WebSocket 和静态前端页面。
+
+### 1. 准备 `.env`
+
+在项目根目录创建 `.env`，Compose 会在运行时注入该文件。`.env` 不会被复制进镜像，也不应提交到 Git。
+
+```env
+DOUBAO_API_KEY=你的豆包 API Key
+DOUBAO_MODEL=你的接入点 ID
+DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+
+SEARCH_RECENCY=month
+SEARCH_DELAY_SECONDS=2.0
+```
+
+如果没有配置 `DOUBAO_API_KEY`，Web 任务会自动切换到规则引擎模式；配置后默认使用 LLM 模式。
+
+### 2. 构建并启动
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+启动后访问：
+
+```text
+http://localhost:8000
+```
+
+健康检查：
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+预期返回：
+
+```json
+{"status":"ok"}
+```
+
+### 3. 数据持久化
+
+Compose 会挂载本地 `./output` 到容器内 `/app/output`，用于保存任务状态、HTML/JSON 报告和运行归档。重启容器不会丢失这些产物。
+
+### 4. 镜像源说明
+
+`docker-compose.yml` 默认使用可覆盖的基础镜像参数：
+
+```yaml
+NODE_IMAGE: docker.m.daocloud.io/library/node:22-alpine
+PYTHON_IMAGE: docker.m.daocloud.io/library/python:3.12-slim
+```
+
+如需切换回 Docker Hub 或公司内部镜像源，可在命令行覆盖：
+
+```bash
+docker compose build \
+  --build-arg NODE_IMAGE=node:22-alpine \
+  --build-arg PYTHON_IMAGE=python:3.12-slim
+```
+
 ### 前端技术栈
 
 React 19 + Vite 8 + Ant Design 6，通过 REST API 和 WebSocket 实时通信。
