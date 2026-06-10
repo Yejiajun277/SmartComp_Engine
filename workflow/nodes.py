@@ -356,6 +356,11 @@ class AnalysisGraphNodes:
                              "degraded": result.degraded,
                              "qa_result": self._qa_event_payload(result),
                          })
+        # QA 通过后同步更新采集节点状态为 completed
+        if result.passed or result.degraded:
+            await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
+                             progress=0.39,
+                             message=f"数据采集完成（经过 {state.get('collection_retry_count', 0) + 1} 轮质检）")
         return {
             "qa_collection": result,
             "qa_checks": self._append_qa(state, result),
@@ -363,6 +368,12 @@ class AnalysisGraphNodes:
         }
 
     async def prepare_collection_retry(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.QA_RETRYING, "CollectionAgent", "collection",
+                         progress=0.35,
+                         message="正在准备采集数据重做...",
+                         data={
+                             "retry_count": state.get("collection_retry_count", 0) + 1,
+                         })
         quality_agent = self.orchestrator.quality_agent
         collection_agent = self.orchestrator.collection_agent
         missing_fields = quality_agent.extract_missing_fields(
@@ -616,6 +627,12 @@ class AnalysisGraphNodes:
                              "degraded": result.degraded,
                              "qa_result": self._qa_event_payload(result),
                          })
+        # QA 通过后同步更新分析节点状态为 completed
+        if result.passed or result.degraded:
+            phase_key = f"{analysis_type}_analysis"
+            await self._emit(state, EventType.AGENT_COMPLETED, agent_name, phase_key,
+                             progress=state.get("progress", 0.75),
+                             message=f"{analysis_type}分析完成（经过 {state.get(retry_key, 0) + 1} 轮质检）")
         return {f"qa_{analysis_type}": result}
 
     async def join_analysis_quality(self, state: AnalysisState) -> AnalysisState:
@@ -644,6 +661,12 @@ class AnalysisGraphNodes:
         return await self._prepare_analysis_retry(state, "market")
 
     async def _prepare_analysis_retry(self, state: AnalysisState, analysis_type: str) -> AnalysisState:
+        await self._emit(state, EventType.QA_RETRYING, "QualityAgent", analysis_type,
+                         progress=state.get("progress", 0.75),
+                         message=f"正在准备{analysis_type}分析重做...",
+                         data={
+                             "retry_count": state.get(f"{analysis_type}_retry_count", 0) + 1,
+                         })
         qa = state[f"qa_{analysis_type}"]
         feedback = await self.orchestrator.quality_agent.async_build_feedback(qa)
         retry_key = f"{analysis_type}_retry_count"
@@ -772,6 +795,11 @@ class AnalysisGraphNodes:
                              "degraded": result.degraded,
                              "qa_result": self._qa_event_payload(result),
                          })
+        # QA 通过后同步更新策略节点状态为 completed
+        if result.passed or result.degraded:
+            await self._emit(state, EventType.AGENT_COMPLETED, "StrategyAgent", "strategy",
+                             progress=0.95,
+                             message=f"策略报告完成（经过 {state.get('strategy_retry_count', 0) + 1} 轮质检）")
         return {
             "qa_strategy": result,
             "qa_checks": self._append_qa(state, result),
@@ -779,6 +807,12 @@ class AnalysisGraphNodes:
         }
 
     async def prepare_strategy_retry(self, state: AnalysisState) -> AnalysisState:
+        await self._emit(state, EventType.QA_RETRYING, "StrategyAgent", "strategy",
+                         progress=0.91,
+                         message="正在准备策略报告重做...",
+                         data={
+                             "retry_count": state.get("strategy_retry_count", 0) + 1,
+                         })
         qa = state["qa_strategy"]
         feedback = await self.orchestrator.quality_agent.async_build_feedback(qa)
         pending = sum(1 for i in qa.issues if i.severity == "critical" and i.category == "completeness")
