@@ -48,6 +48,7 @@ class BaseAgent(ABC):
                           agent_id=self.agent_id)
 
         content = result.get("content", "") if isinstance(result, dict) else (result or "")
+        usage = result.get("usage", {}) if isinstance(result, dict) else {}
 
         self.llm_logs.append({
             "agent_id": self.agent_id,
@@ -65,15 +66,10 @@ class BaseAgent(ABC):
             "max_tokens": tokens,
             "success": bool(content),
             "parse_error": "",
-            # Token 用量（来自 API 响应）
-            "prompt_tokens": usage.get("prompt_tokens", 0),
-            "completion_tokens": usage.get("completion_tokens", 0),
-            "total_tokens": usage.get("total_tokens", 0),
             # Prompt 归档（可选，通过 config 控制）
-            "system_prompt": self.system_prompt if config.ARCHIVE_PROMPTS else "",
-            "user_message": user_message if config.ARCHIVE_PROMPTS else "",
+            "system_prompt_archive": self.system_prompt if config.ARCHIVE_PROMPTS else "",
+            "user_message_archive": user_message if config.ARCHIVE_PROMPTS else "",
             "max_tokens_requested": tokens,
-            "temperature": temp,
         })
 
         return content
