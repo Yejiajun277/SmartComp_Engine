@@ -1,0 +1,50 @@
+{
+  "product_name": "产品名称",
+  "competitor_count": 0,
+  "overall_positioning": "整体定位描述",
+  "differentiation_strategy": {},
+  "swot": {
+    "strengths": {
+      "items": ["内部优势1", "内部优势2"],
+      "citations": ["citations示例1"]
+    },
+    "weaknesses": {
+      "items": ["内部劣势1", "内部劣势2"],
+      "citations": ["citations示例1"]
+    },
+    "opportunities": {
+      "items": ["外部机会1", "外部机会2"],
+      "citations": ["citations示例1"]
+    },
+    "threats": {
+      "items": ["外部威胁1", "外部威胁2"],
+      "citations": ["citations示例1"]
+    },
+    "cross_strategies": {
+      "so": ["利用优势抓住机会的策略1"],
+      "wo": ["弥补劣势以抓住机会的策略1"],
+      "st": ["利用优势应对威胁的策略1"],
+      "wt": ["减少劣势以规避威胁的策略1"]
+    }
+  },
+  "action_plan": [
+    {
+      "priority": "P0",
+      "action": "行动描述",
+      "timeline": "时间线",
+      "expected_impact": "预期效果",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "risk_assessment": "风险评估",
+  "product_analysis_summary": "product_analysis_summary示例值",
+  "pricing_analysis_summary": "pricing_analysis_summary示例值",
+  "market_analysis_summary": "market_analysis_summary示例值",
+  "summary": "分析摘要",
+  "raw_llm_logs": [],
+  "citation_index": {
+    "citations": {}
+  }
+}

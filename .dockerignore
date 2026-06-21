@@ -1,0 +1,13 @@
+.git
+.env
+output
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+frontend/node_modules
+frontend/dist
+frontend/.npm-cache
+frontend/.vite
+.DS_Store

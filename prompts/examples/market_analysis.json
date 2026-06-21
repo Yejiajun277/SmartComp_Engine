@@ -1,0 +1,51 @@
+{
+  "market_share_data": [
+    {
+      "competitor": "竞品名称",
+      "share_estimate": "份额估算",
+      "trend": "上升/稳定/下降",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "growth_trends": "growth_trends示例值",
+  "user_reputation": {
+    "竞品名1": {
+      "score": "评分（如8.5/10）",
+      "keywords": [
+        "正面关键词1",
+        "负面关键词1"
+      ],
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  },
+  "user_profiles": {
+    "竞品名1": {
+      "target_audience": "目标用户群体描述",
+      "age_range": "年龄分布（如18-35岁为主）",
+      "occupation_distribution": [
+        "职业1",
+        "职业2"
+      ],
+      "use_cases": [
+        "使用场景1",
+        "使用场景2"
+      ],
+      "pain_points": [
+        "痛点1",
+        "痛点2"
+      ],
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  },
+  "channel_analysis": "channel_analysis示例值",
+  "summary": "分析摘要",
+  "citations": [
+    "citations示例1"
+  ]
+}

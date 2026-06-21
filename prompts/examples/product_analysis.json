@@ -1,0 +1,29 @@
+{
+  "feature_matrix": [
+    {
+      "feature": "功能名称",
+      "values": {},
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "competitive_advantages": [
+    {
+      "competitor": "竞品名称",
+      "our_advantage": "我方优势描述",
+      "their_advantage": "对方优势描述",
+      "citations": [
+        "citations示例1"
+      ]
+    }
+  ],
+  "differentiation_points": [
+    "差异化点1",
+    "差异化点2"
+  ],
+  "summary": "分析摘要",
+  "citations": [
+    "citations示例1"
+  ]
+}
