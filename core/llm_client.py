@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-core/llm_client.py — 豆包 LLM 调用封装
+core/llm_client.py — mimo_v2.5 LLM 调用封装
 """
 
 import json
@@ -30,31 +30,31 @@ _EMPTY_RESULT = {
 
 
 def _normalize_provider(provider: str) -> str:
-    aliases = {"doubao", "qianfan", "ollama"}
+    aliases = {"mimo", "doubao", "qianfan", "ollama"}
     provider = (provider or "").lower()
-    return "doubao" if provider in aliases else provider
+    return "mimo" if provider in aliases else provider
 
 
-def _call_doubao(system_prompt: str, user_message: str,
-                 temperature: float, max_tokens: int,
-                 agent_id: str) -> dict:
-    """调用豆包 OpenAI 兼容接口，返回结构化结果。"""
+def _call_mimo(system_prompt: str, user_message: str,
+               temperature: float, max_tokens: int,
+               agent_id: str) -> dict:
+    """调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
     import requests
     global _last_call_error, _last_finish_reason, _last_usage
 
-    if not config.DOUBAO_API_KEY:
+    if not config.MIMO_API_KEY:
         _last_call_error = "api_key_missing"
-        print(f"  [豆包] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
+        print(f"  [mimo] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-    api_url = f"{config.DOUBAO_BASE_URL.rstrip('/')}/chat/completions"
+    api_url = f"{config.MIMO_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.DOUBAO_API_KEY}",
+        "Authorization": f"Bearer {config.MIMO_API_KEY}",
     }
     prompt_len = len(system_prompt) + len(user_message)
     payload = {
-        "model": config.DOUBAO_MODEL,
+        "model": config.MIMO_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
@@ -67,7 +67,7 @@ def _call_doubao(system_prompt: str, user_message: str,
     for attempt in range(2):
         t0 = time.time()
         try:
-            print(f"  [豆包] [{agent_id}] 🔄 调用豆包 (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
+            print(f"  [mimo] [{agent_id}] 🔄 调用 mimo (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
             resp = requests.post(api_url, headers=headers, json=payload, timeout=300)
             duration_ms = (time.time() - t0) * 1000
             result = resp.json()
@@ -80,21 +80,21 @@ def _call_doubao(system_prompt: str, user_message: str,
                 _last_call_error = f"api_error({resp.status_code}, {error_type}, {error_code})"
                 _last_finish_reason = ""
                 _last_usage = {}
-                print(f"  [豆包] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
+                print(f"  [mimo] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
                 if attempt == 0:
                     time.sleep(1)
                     continue
                 return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
             message = result.get("choices", [{}])[0].get("message", {})
-            content = message.get("content", "") or message.get("reasoning", "")
+            content = message.get("content", "") or message.get("reasoning", "") or message.get("reasoning_content", "")
             finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
 
             if not content:
                 _last_call_error = f"empty_response(finish_reason={finish_reason})"
                 _last_finish_reason = finish_reason
                 _last_usage = {}
-                print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
+                print(f"  [mimo] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
                 return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
             usage = result.get("usage", {})
@@ -110,7 +110,7 @@ def _call_doubao(system_prompt: str, user_message: str,
             }
             truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
             print(
-                f"  [豆包] [{agent_id}] ✅ 调用成功 "
+                f"  [mimo] [{agent_id}] ✅ 调用成功 "
                 f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
                 f"finish={finish_reason}){truncation_warn}"
             )
@@ -119,7 +119,7 @@ def _call_doubao(system_prompt: str, user_message: str,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
-                "model": result.get("model", config.DOUBAO_MODEL),
+                "model": result.get("model", config.MIMO_MODEL),
                 "finish_reason": result.get("choices", [{}])[0].get("finish_reason", ""),
                 "duration_ms": duration_ms,
                 "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -129,7 +129,7 @@ def _call_doubao(system_prompt: str, user_message: str,
             _last_call_error = f"timeout(300s, attempt {attempt + 1})"
             _last_finish_reason = ""
             _last_usage = {}
-            print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
+            print(f"  [mimo] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
             if attempt == 0:
                 continue
             return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
@@ -138,7 +138,7 @@ def _call_doubao(system_prompt: str, user_message: str,
             _last_call_error = f"connection_error({str(e)[:200]})"
             _last_finish_reason = ""
             _last_usage = {}
-            print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
+            print(f"  [mimo] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
             if attempt == 0:
                 time.sleep(2)
                 continue
@@ -147,26 +147,33 @@ def _call_doubao(system_prompt: str, user_message: str,
     return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
 
-async def _async_call_doubao(system_prompt: str, user_message: str,
-                             temperature: float, max_tokens: int,
-                             agent_id: str) -> dict:
-    """异步调用豆包 OpenAI 兼容接口，返回结构化结果。"""
+async def _async_call_mimo(system_prompt: str, user_message: str,
+                           temperature: float, max_tokens: int,
+                           agent_id: str) -> dict:
+    """异步调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
     import httpx
+    import ssl
     global _last_call_error, _last_finish_reason, _last_usage
 
-    if not config.DOUBAO_API_KEY:
+    # 修复 conda 环境中 SSL_CERT_FILE 指向不存在文件的问题
+    import os
+    _ssl_cert = os.environ.get("SSL_CERT_FILE", "")
+    if _ssl_cert and not os.path.isfile(_ssl_cert):
+        os.environ.pop("SSL_CERT_FILE", None)
+
+    if not config.MIMO_API_KEY:
         _last_call_error = "api_key_missing"
-        print(f"  [豆包] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
+        print(f"  [mimo] [{agent_id}] ⚠️ API密钥未配置，降级到规则引擎")
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-    api_url = f"{config.DOUBAO_BASE_URL.rstrip('/')}/chat/completions"
+    api_url = f"{config.MIMO_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.DOUBAO_API_KEY}",
+        "Authorization": f"Bearer {config.MIMO_API_KEY}",
     }
     prompt_len = len(system_prompt) + len(user_message)
     payload = {
-        "model": config.DOUBAO_MODEL,
+        "model": config.MIMO_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
@@ -180,7 +187,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
         for attempt in range(2):
             t0 = time.time()
             try:
-                print(f"  [豆包] [{agent_id}] 🔄 异步调用豆包 (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
+                print(f"  [mimo] [{agent_id}] 🔄 异步调用 mimo (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
                 resp = await client.post(api_url, headers=headers, json=payload)
                 duration_ms = (time.time() - t0) * 1000
                 result = resp.json()
@@ -193,21 +200,21 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                     _last_call_error = f"api_error({resp.status_code}, {error_type}, {error_code})"
                     _last_finish_reason = ""
                     _last_usage = {}
-                    print(f"  [豆包] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
+                    print(f"  [mimo] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
                     if attempt == 0:
                         await asyncio.sleep(1)
                         continue
                     return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
                 message = result.get("choices", [{}])[0].get("message", {})
-                content = message.get("content", "") or message.get("reasoning", "")
+                content = message.get("content", "") or message.get("reasoning", "") or message.get("reasoning_content", "")
                 finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
 
                 if not content:
                     _last_call_error = f"empty_response(finish_reason={finish_reason})"
                     _last_finish_reason = finish_reason
                     _last_usage = {}
-                    print(f"  [豆包] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
+                    print(f"  [mimo] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
                     return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
                 usage = result.get("usage", {})
@@ -223,7 +230,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                 }
                 truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
                 print(
-                    f"  [豆包] [{agent_id}] ✅ 异步调用成功 "
+                    f"  [mimo] [{agent_id}] ✅ 异步调用成功 "
                     f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
                     f"finish={finish_reason}){truncation_warn}"
                 )
@@ -232,7 +239,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
                     "total_tokens": total_tokens,
-                    "model": result.get("model", config.DOUBAO_MODEL),
+                    "model": result.get("model", config.MIMO_MODEL),
                     "finish_reason": finish_reason,
                     "duration_ms": duration_ms,
                     "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -242,7 +249,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                 _last_call_error = f"timeout(300s, attempt {attempt + 1})"
                 _last_finish_reason = ""
                 _last_usage = {}
-                print(f"  [豆包] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
+                print(f"  [mimo] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
                 if attempt == 0:
                     continue
                 return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
@@ -251,7 +258,7 @@ async def _async_call_doubao(system_prompt: str, user_message: str,
                 _last_call_error = f"connection_error({str(e)[:200]})"
                 _last_finish_reason = ""
                 _last_usage = {}
-                print(f"  [豆包] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
+                print(f"  [mimo] [{agent_id}] ❌ 连接失败 (attempt {attempt + 1}): {e}")
                 if attempt == 0:
                     await asyncio.sleep(2)
                     continue
@@ -275,14 +282,14 @@ def llm_call(system_prompt: str, user_message: str,
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     provider = _normalize_provider(config.LLM_PROVIDER)
-    if provider != "doubao":
+    if provider != "mimo":
         _last_call_error = f"unknown_provider({config.LLM_PROVIDER})"
         _call_stats["fallback"] += 1
         print(f"  [LLM] {call_label} ❌ 未知的LLM_PROVIDER: {config.LLM_PROVIDER}")
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     try:
-        result = _call_doubao(system_prompt, user_message, temperature, max_tokens, agent_id)
+        result = _call_mimo(system_prompt, user_message, temperature, max_tokens, agent_id)
         if result["content"]:
             _call_stats["success"] += 1
             return result
@@ -291,12 +298,12 @@ def llm_call(system_prompt: str, user_message: str,
         return result
     except ImportError:
         _last_call_error = "requests_not_installed"
-        print(f"  [豆包] {call_label} ❌ requests未安装 (pip install requests)")
+        print(f"  [mimo] {call_label} ❌ requests未安装 (pip install requests)")
         _call_stats["fallback"] += 1
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
     except Exception as e:
         _last_call_error = f"exception({type(e).__name__}: {str(e)[:200]})"
-        print(f"  [豆包] {call_label} ❌ 异常: {e}")
+        print(f"  [mimo] {call_label} ❌ 异常: {e}")
         _call_stats["errors"].append(str(e))
         _call_stats["fallback"] += 1
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
@@ -317,14 +324,14 @@ async def async_llm_call(system_prompt: str, user_message: str,
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     provider = _normalize_provider(config.LLM_PROVIDER)
-    if provider != "doubao":
+    if provider != "mimo":
         _last_call_error = f"unknown_provider({config.LLM_PROVIDER})"
         _call_stats["fallback"] += 1
         print(f"  [LLM] {call_label} ❌ 未知的LLM_PROVIDER: {config.LLM_PROVIDER}")
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     try:
-        result = await _async_call_doubao(system_prompt, user_message, temperature, max_tokens, agent_id)
+        result = await _async_call_mimo(system_prompt, user_message, temperature, max_tokens, agent_id)
         if result["content"]:
             _call_stats["success"] += 1
             return result
@@ -333,12 +340,12 @@ async def async_llm_call(system_prompt: str, user_message: str,
         return result
     except ImportError:
         _last_call_error = "httpx_not_installed"
-        print(f"  [豆包] {call_label} ❌ httpx未安装 (pip install httpx)")
+        print(f"  [mimo] {call_label} ❌ httpx未安装 (pip install httpx)")
         _call_stats["fallback"] += 1
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
     except Exception as e:
         _last_call_error = f"exception({type(e).__name__}: {str(e)[:200]})"
-        print(f"  [豆包] {call_label} ❌ 异常: {e}")
+        print(f"  [mimo] {call_label} ❌ 异常: {e}")
         _call_stats["errors"].append(str(e))
         _call_stats["fallback"] += 1
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
@@ -348,7 +355,7 @@ def check_llm_backend() -> dict:
     """检查当前 LLM 后端可用性。"""
     provider = _normalize_provider(config.LLM_PROVIDER)
 
-    if provider != "doubao":
+    if provider != "mimo":
         return {
             "provider": provider,
             "available": False,
@@ -356,19 +363,19 @@ def check_llm_backend() -> dict:
             "detail": f"未知的LLM_PROVIDER: {config.LLM_PROVIDER}",
         }
 
-    if not config.DOUBAO_API_KEY:
+    if not config.MIMO_API_KEY:
         return {
-            "provider": "doubao",
+            "provider": "mimo",
             "available": False,
-            "model": config.DOUBAO_MODEL,
-            "detail": "豆包API密钥未配置",
+            "model": config.MIMO_MODEL,
+            "detail": "mimo API密钥未配置",
         }
 
     return {
-        "provider": "doubao",
+        "provider": "mimo",
         "available": True,
-        "model": config.DOUBAO_MODEL,
-        "detail": "豆包API密钥已配置",
+        "model": config.MIMO_MODEL,
+        "detail": "mimo API密钥已配置",
     }
 
 

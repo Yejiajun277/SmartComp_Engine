@@ -31,17 +31,19 @@ _load_dotenv()
 # ========================
 # LLM / 联网搜索配置
 # ========================
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "doubao")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "mimo")
 
-DOUBAO_API_KEY = os.environ.get("DOUBAO_API_KEY", "")
-DOUBAO_BASE_URL = os.environ.get(
-    "DOUBAO_BASE_URL",
-    "https://ark.cn-beijing.volces.com/api/v3",
+MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
+MIMO_BASE_URL = os.environ.get(
+    "MIMO_BASE_URL",
+    "https://token-plan-cn.xiaomimimo.com/v1",
 )
-DOUBAO_MODEL = os.environ.get(
-    "DOUBAO_MODEL",
-    "ep-20260514111325-xjmj7",
+MIMO_MODEL = os.environ.get(
+    "MIMO_MODEL",
+    "mimo-v2.5-pro",
 )
+
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
 SEARCH_RECENCY = os.environ.get("SEARCH_RECENCY", "month")
 SEARCH_DELAY_SECONDS = float(os.environ.get("SEARCH_DELAY_SECONDS", "2.0"))

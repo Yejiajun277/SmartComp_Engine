@@ -22,11 +22,11 @@ class QualityAgent(BaseAgent):
     """质检 Agent — 完整性检查 + 幻觉检测"""
 
     MAX_RETRIES = 2
-    PASS_SCORE = 70
+    PASS_SCORE = 75
 
     # 阶段权重：(critical扣分, warning扣分)
     PHASE_WEIGHTS = {
-        "collection": (15, 3),
+        "collection": (15, 5),
         "product": (20, 5),
         "pricing": (20, 5),
         "market": (20, 5),
@@ -231,7 +231,7 @@ class QualityAgent(BaseAgent):
             # 定价层级检查
             if not data.pricing_tiers:
                 issues.append(QualityIssue(
-                    severity="warning", category="completeness",
+                    severity="critical", category="completeness",
                     field=f"{name}.pricing_tiers",
                     description="定价层级为空",
                     suggestion="补充该竞品的定价信息",
@@ -256,30 +256,30 @@ class QualityAgent(BaseAgent):
             # 市场份额检查（含无意义文本检测）
             if not data.market_share:
                 issues.append(QualityIssue(
-                    severity="warning", category="completeness",
+                    severity="critical", category="completeness",
                     field=f"{name}.market_share",
                     description="市场份额信息为空",
                     suggestion="补充该竞品的市场份额数据",
                 ))
             elif self._is_meaningless(data.market_share):
                 issues.append(QualityIssue(
-                    severity="warning", category="completeness",
+                    severity="critical", category="completeness",
                     field=f"{name}.market_share",
                     description=f"市场份额为无意义文本: '{data.market_share}'",
                     suggestion="补充该竞品的实际市场份额数据",
                 ))
 
             # 文本字段检查（空或过短）
-            for field_name, display_name, search_hint in [
-                ("strengths", "优势", "竞争优势 核心优势 行业地位"),
-                ("weaknesses", "劣势", "劣势 不足 用户吐槽"),
-                ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态"),
-                ("user_reviews", "用户评价", "用户评价 口碑 评分"),
+            for field_name, display_name, search_hint, severity_if_empty in [
+                ("strengths", "优势", "竞争优势 核心优势 行业地位", "critical"),
+                ("weaknesses", "劣势", "劣势 不足 用户吐槽", "critical"),
+                ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态", "warning"),
+                ("user_reviews", "用户评价", "用户评价 口碑 评分", "warning"),
             ]:
                 text = getattr(data, field_name)
                 if not text or not text.strip():
                     issues.append(QualityIssue(
-                        severity="warning", category="completeness",
+                        severity=severity_if_empty, category="completeness",
                         field=f"{name}.{field_name}",
                         description=f"{display_name}信息为空，需要补充搜索",
                         suggestion=f"搜索 '{name} {search_hint}' 补充{display_name}数据",

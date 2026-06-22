@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-core/search_client.py - 豆包联网搜索客户端
+core/search_client.py - Tavily 联网搜索客户端
 """
 
 import time
@@ -10,18 +10,14 @@ import config
 
 
 class SearchClient:
-    """基于豆包 Responses API 的联网搜索客户端。"""
+    """基于 Tavily Search API 的联网搜索客户端。"""
 
     def __init__(
         self,
-        api_key: str = config.DOUBAO_API_KEY,
-        base_url: str = config.DOUBAO_BASE_URL,
-        model: str = config.DOUBAO_MODEL,
+        api_key: str = config.TAVILY_API_KEY,
         recency: str = config.SEARCH_RECENCY,
     ):
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self.model = model
         self.recency = recency
         self.search_logs: list[dict] = []
 
@@ -30,40 +26,26 @@ class SearchClient:
         执行一次联网搜索，并兼容旧的返回结构。
         """
         if not self.api_key:
-            raise RuntimeError("DOUBAO_API_KEY 未配置，无法执行联网搜索")
+            raise RuntimeError("TAVILY_API_KEY 未配置，无法执行联网搜索")
 
-        import requests
+        from tavily import TavilyClient
         from datetime import datetime
 
-        api_url = f"{self.base_url}/responses"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
-        payload = {
-            "model": self.model,
-            "tools": [{"type": "web_search"}],
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": self._build_search_prompt(query, recency or self.recency),
-                        }
-                    ],
-                }
-            ],
-            "max_output_tokens": config.SEARCH_MAX_OUTPUT_TOKENS,
-        }
+        client = TavilyClient(api_key=self.api_key)
+
+        # 将 recency 映射为 Tavily 的 days 参数
+        days = self._recency_to_days(recency or self.recency)
 
         t0 = time.time()
         try:
-            resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            response = client.search(
+                query=query,
+                max_results=5,
+                search_depth="advanced",
+                days=days,
+            )
             duration_ms = (time.time() - t0) * 1000
-            resp.encoding = "utf-8"
-            resp.raise_for_status()
-            result = self._normalize_response(resp.json())
+            result = self._normalize_response(response)
             refs = result.get("references", [])
             result_text = SearchClient.extract_text(result)
             self.search_logs.append({
@@ -133,71 +115,13 @@ class SearchClient:
 
     async def async_search(self, query: str, recency: str | None = None) -> dict:
         """
-        异步执行一次联网搜索，并兼容旧的返回结构。
+        异步执行一次联网搜索（在线程池中运行同步 Tavily 客户端）。
         """
         if not self.api_key:
-            raise RuntimeError("DOUBAO_API_KEY 未配置，无法执行联网搜索")
+            raise RuntimeError("TAVILY_API_KEY 未配置，无法执行联网搜索")
 
-        import httpx
-        from datetime import datetime
-
-        api_url = f"{self.base_url}/responses"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
-        payload = {
-            "model": self.model,
-            "tools": [{"type": "web_search"}],
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": self._build_search_prompt(query, recency or self.recency),
-                        }
-                    ],
-                }
-            ],
-            "max_output_tokens": config.SEARCH_MAX_OUTPUT_TOKENS,
-        }
-
-        t0 = time.time()
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(api_url, headers=headers, json=payload)
-            duration_ms = (time.time() - t0) * 1000
-            resp.raise_for_status()
-            result = self._normalize_response(resp.json())
-            refs = result.get("references", [])
-            result_text = SearchClient.extract_text(result)
-            self.search_logs.append({
-                "type": "search",
-                "agent_id": "",
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "query": query,
-                "duration_ms": round(duration_ms, 1),
-                "success": True,
-                "result_count": len(refs),
-                "result_text_len": len(result_text),
-                "error": "",
-            })
-            return result
-        except Exception as e:
-            duration_ms = (time.time() - t0) * 1000
-            self.search_logs.append({
-                "type": "search",
-                "agent_id": "",
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "query": query,
-                "duration_ms": round(duration_ms, 1),
-                "success": False,
-                "result_count": 0,
-                "result_text_len": 0,
-                "error": str(e)[:200],
-            })
-            raise
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: self.search(query, recency))
 
     async def async_batch_search(
         self,
@@ -237,6 +161,17 @@ class SearchClient:
         return results
 
     @staticmethod
+    def _recency_to_days(recency: str) -> int | None:
+        """将 recency 字符串转换为 Tavily search 的 days 参数。"""
+        mapping = {
+            "day": 1,
+            "week": 7,
+            "month": 30,
+            "year": 365,
+        }
+        return mapping.get((recency or "").lower())
+
+    @staticmethod
     def extract_text(search_result: dict) -> str:
         """从兼容结构中提取纯文本内容。"""
         if not search_result:
@@ -270,78 +205,30 @@ class SearchClient:
         return "\n".join(texts)
 
     @staticmethod
-    def _build_search_prompt(query: str, recency: str) -> str:
-        recency_hint = {
-            "day": "优先最近1天内的信息",
-            "week": "优先最近1周内的信息",
-            "month": "优先最近1个月内的信息",
-            "year": "优先最近1年内的信息",
-        }.get((recency or "").lower(), "")
-
-        if recency_hint:
-            return f"{query}\n\n要求：请使用联网搜索，并{recency_hint}，给出简洁结果并保留可引用的信息来源。"
-        return f"{query}\n\n要求：请使用联网搜索，给出简洁结果并保留可引用的信息来源。"
-
-    @staticmethod
     def _normalize_response(response: dict) -> dict:
-        answer_text = SearchClient._extract_output_text(response)
-        references = SearchClient._extract_references(response)
+        """将 Tavily 响应转换为兼容的统一格式。"""
+        # Tavily 返回 {"results": [...], "answer": "...", ...}
+        answer = response.get("answer", "")
+        results = response.get("results", [])
+
+        references = []
+        for r in results:
+            references.append({
+                "title": r.get("title", ""),
+                "content": r.get("content", ""),
+                "summary": r.get("content", "")[:200] if r.get("content") else "",
+                "url": r.get("url", ""),
+                "site_name": "",
+            })
+
         return {
             "choices": [
                 {
                     "message": {
-                        "content": answer_text,
+                        "content": answer,
                     }
                 }
             ],
             "references": references,
             "raw_response": response,
         }
-
-    @staticmethod
-    def _extract_output_text(response: dict) -> str:
-        output_text = response.get("output_text")
-        if isinstance(output_text, str) and output_text.strip():
-            return output_text.strip()
-
-        texts = []
-        for item in response.get("output", []):
-            if item.get("type") != "message":
-                continue
-
-            for content in item.get("content", []):
-                text = content.get("text")
-                if text:
-                    texts.append(text)
-
-        return "\n".join(texts).strip()
-
-    @staticmethod
-    def _extract_references(response: dict) -> list[dict]:
-        refs = []
-        seen = set()
-
-        for item in response.get("output", []):
-            for content in item.get("content", []):
-                for annotation in content.get("annotations", []):
-                    title = annotation.get("title", "")
-                    url = annotation.get("url", "")
-                    if not title and not url:
-                        continue
-
-                    key = (title, url)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-
-                    refs.append(
-                        {
-                            "title": title,
-                            "content": annotation.get("text", "") or annotation.get("summary", ""),
-                            "summary": annotation.get("summary", ""),
-                            "url": url,
-                            "site_name": annotation.get("site_name", ""),
-                        }
-                    )
-
-        return refs

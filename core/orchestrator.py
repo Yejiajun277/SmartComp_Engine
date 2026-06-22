@@ -562,7 +562,7 @@ class Orchestrator:
             "use_langgraph_workflow": config.USE_LANGGRAPH_WORKFLOW,
             "langgraph_node_retries": config.LANGGRAPH_NODE_RETRIES,
             "llm_provider": config.LLM_PROVIDER,
-            "doubao_model": config.DOUBAO_MODEL,
+            "mimo_model": config.MIMO_MODEL,
             "started_at": datetime.now().isoformat(timespec="seconds"),
             "ended_at": "",
             "timings": {},

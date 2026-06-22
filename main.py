@@ -4,7 +4,7 @@
 main.py — 智能竞品分析多Agent系统 主入口
 
 运行示例:
-  python3 main.py "飞书"                        # 默认：豆包LLM + 百度搜索
+  python3 main.py "飞书"                        # 默认：mimo LLM + Tavily搜索
   python3 main.py --rule "飞书"                 # 规则引擎模式（零依赖）
   python3 main.py --count 5 "飞书"              # 指定竞品数量
   python3 main.py --verbose "飞书"              # 详细模式
@@ -54,7 +54,7 @@ async def run_analysis(product_description: str,
     if use_llm:
         from core.llm_client import check_llm_backend
         backend = check_llm_backend()
-        provider_label = {"doubao": "豆包"}.get(
+        provider_label = {"mimo": "mimo_v2.5"}.get(
             backend["provider"], backend["provider"])
         print(f"  LLM后端: {provider_label}")
         print(f"  模型: {backend['model']}")
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 ║  智能竞品分析多Agent系统 — 运行模式                           ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-║  python3 main.py "产品名"       默认：豆包LLM智能分析        ║
+║  python3 main.py "产品名"       默认：mimo LLM智能分析        ║
 ║  python3 main.py --rule "产品名"  规则引擎模式（零依赖）     ║
 ║  python3 main.py --count 5 "产品名" 指定竞品数量(1~8)       ║
 ║  python3 main.py --debug "产品名" 调试模式（跳过质检）       ║
@@ -170,14 +170,15 @@ if __name__ == "__main__":
 ║    串行汇总: 策略建议                                        ║
 ║                                                              ║
 ║  LLM后端:                                                    ║
-║    豆包(默认): 方舟兼容接口，失败自动降级到规则引擎          ║
+║    mimo(默认): OpenAI兼容接口，失败自动降级到规则引擎        ║
 ║    规则引擎(--rule): 关键词匹配+模板，零依赖                 ║
 ║                                                              ║
 ║  配置方式(config.py 或环境变量):                             ║
-║    LLM_PROVIDER=doubao          选择LLM后端                  ║
-║    DOUBAO_API_KEY=xxx           豆包API密钥                  ║
-║    DOUBAO_BASE_URL=https://...  方舟接口地址                 ║
-║    DOUBAO_MODEL=ep-xxxx         豆包接入点ID                 ║
+║    LLM_PROVIDER=mimo            选择LLM后端                  ║
+║    MIMO_API_KEY=xxx             mimo API密钥                 ║
+║    MIMO_BASE_URL=https://...    mimo接口地址                 ║
+║    MIMO_MODEL=mimo_v2.5         模型名称                     ║
+║    TAVILY_API_KEY=xxx           Tavily搜索API密钥            ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
         sys.exit(0)
@@ -195,9 +196,9 @@ if __name__ == "__main__":
         backend = check_llm_backend()
         if not backend["available"]:
             print(f"⚠️  LLM后端不可用：{backend['detail']}")
-            if backend["provider"] == "doubao":
+            if backend["provider"] == "mimo":
                 print("   请设置环境变量：")
-                print("     export DOUBAO_API_KEY=your_api_key")
+                print("     export MIMO_API_KEY=your_api_key")
             print("   降级为规则引擎模式运行...\n")
             use_llm = False
 
