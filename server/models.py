@@ -23,6 +23,8 @@ class EventType(str, Enum):
     QA_RETRYING = "qa_retrying"
     PROGRESS_UPDATE = "progress_update"
     LLM_LOGS_UPDATED = "llm_logs_updated"
+    INTERVENTION_REQUIRED = "intervention_required"
+    INTERVENTION_SUBMITTED = "intervention_submitted"
 
 
 class WorkflowEvent(BaseModel):
@@ -42,6 +44,35 @@ class TaskCreateRequest(BaseModel):
     max_competitors: int = 5
     skip_qa: bool = False
     use_rule_engine: bool = False
+    enable_human_review: bool = False
+
+
+class DescriptionEvaluateRequest(BaseModel):
+    """描述质量评估请求。"""
+    product_description: str
+
+
+class DescriptionQuestion(BaseModel):
+    """LLM生成的补充问题。"""
+    question: str = Field(description="问题文本")
+    field: str = Field(description="对应的字段名，如 category/features/target_users")
+    options: list[str] | None = Field(default=None, description="选择题选项，None表示开放式问题")
+
+
+class DescriptionEvaluateResponse(BaseModel):
+    """描述质量评估响应。"""
+    quality_score: float = Field(description="质量分数 0-1")
+    quality: str = Field(description="good | insufficient")
+    missing_dimensions: list[str] = Field(default=[], description="缺失的维度")
+    questions: list[DescriptionQuestion] = Field(default=[], description="补充问题列表")
+
+
+class InterventionResponse(BaseModel):
+    """用户提交的人工介入决策。"""
+    action: str = Field(description="approve | reject | edit")
+    feedback: str = Field(default="", description="打回时的反馈意见")
+    edited_competitors: list[dict] | None = Field(default=None, description="编辑后的竞品列表")
+    edited_competitors_data: dict | None = Field(default=None, description="编辑后的采集数据")
 
 
 class TaskCreateResponse(BaseModel):
@@ -59,3 +90,5 @@ class TaskSummary(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    enable_human_review: bool = False
+    pending_intervention: str | None = None  # competitor_confirm | data_review | None

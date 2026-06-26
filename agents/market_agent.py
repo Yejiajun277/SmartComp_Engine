@@ -212,9 +212,20 @@ class MarketAgent(BaseAgent):
         for name, rep in result.get("user_reputation", {}).items():
             rep_cites = self.extract_citation_ids(rep)
             all_citation_ids.extend(rep_cites)
+
+            # 处理关键词：兼容新旧格式
+            positive_keywords = rep.get("positive_keywords", [])
+            negative_keywords = rep.get("negative_keywords", [])
+            keywords = rep.get("keywords", [])
+
+            # 如果有新的正负面关键词格式，合并为旧格式兼容
+            if positive_keywords or negative_keywords:
+                keywords = positive_keywords + negative_keywords
+
             user_reputation[name] = UserReputation(
-                score=rep.get("score", ""),
-                keywords=rep.get("keywords", []),
+                positive_keywords=positive_keywords,
+                negative_keywords=negative_keywords,
+                keywords=keywords,
                 citations=rep_cites,
             )
 

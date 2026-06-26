@@ -129,14 +129,15 @@ class StrategyAgent(BaseAgent):
         # 产品分析
         lines.append("## 一、产品分析")
         if product_analysis.feature_matrix:
-            features = [fm.feature for fm in product_analysis.feature_matrix]
+            features = [str(fm.feature) if not isinstance(fm.feature, list) else ", ".join(fm.feature) for fm in product_analysis.feature_matrix]
             lines.append(f"对比功能维度: {', '.join(features[:10])}")
         if product_analysis.competitive_advantages:
             for adv in product_analysis.competitive_advantages[:5]:
                 cite_tag = f" [{','.join(adv.citations)}]" if adv.citations else ""
                 lines.append(f"- vs {adv.competitor}: 我方优势={adv.our_advantage}, 对方优势={adv.their_advantage}{cite_tag}")
         if product_analysis.differentiation_points:
-            lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points[:5])}")
+            diff_pts = self._flatten_strings(product_analysis.differentiation_points[:5])
+            lines.append(f"差异化点: {', '.join(diff_pts)}")
         lines.append(f"摘要: {product_analysis.summary}")
 
         # 定价分析
@@ -364,7 +365,8 @@ class StrategyAgent(BaseAgent):
         rep = market_analysis.user_reputation.get(product_name)
         if rep:
             cite_tag = f" [{','.join(rep.citations)}]" if rep.citations else ""
-            lines.append(f"- 用户口碑：评分={rep.score}；关键词={', '.join(rep.keywords[:6])}{cite_tag}")
+            all_keywords = (rep.positive_keywords or []) + (rep.negative_keywords or rep.keywords or [])
+            lines.append(f"- 用户口碑：关键词={', '.join(all_keywords[:6])}{cite_tag}")
 
         profile = market_analysis.user_profiles.get(product_name)
         if profile:
@@ -440,6 +442,21 @@ class StrategyAgent(BaseAgent):
             return None
         return intro
 
+    @staticmethod
+    def _flatten_strings(items) -> list[str]:
+        """将可能是嵌套列表的结构展平为字符串列表"""
+        result = []
+        if not items:
+            return result
+        for item in items:
+            if isinstance(item, list):
+                result.extend(str(s) for s in item if s)
+            elif isinstance(item, str):
+                result.append(item)
+            else:
+                result.append(str(item))
+        return result
+
     def _parse_strategy_report(self, product_name: str, competitor_count: int,
                                 result: dict) -> StrategyReport:
         """解析LLM返回的策略报告，提取引用 ID"""
@@ -454,11 +471,18 @@ class StrategyAgent(BaseAgent):
                 citations=ap_cites,
             ))
 
+        # 防御：确保 differentiation_strategy 中的列表是字符串列表
+        diff_strategy = result.get("differentiation_strategy", {})
+        if isinstance(diff_strategy, dict):
+            for key in ("supporting_points",):
+                if key in diff_strategy and isinstance(diff_strategy[key], list):
+                    diff_strategy[key] = self._flatten_strings(diff_strategy[key])
+
         report = StrategyReport(
             product_name=product_name,
             competitor_count=competitor_count,
             overall_positioning=result.get("overall_positioning", ""),
-            differentiation_strategy=result.get("differentiation_strategy", {}),
+            differentiation_strategy=diff_strategy,
             action_plan=action_plan,
             risk_assessment=result.get("risk_assessment", ""),
             product_analysis_summary=result.get("product_analysis_summary", ""),
@@ -478,8 +502,9 @@ class StrategyAgent(BaseAgent):
         def parse_quadrant(q_data: dict | None) -> SWOTQuadrant:
             if not q_data or not isinstance(q_data, dict):
                 return SWOTQuadrant()
+            items = self._flatten_strings(q_data.get("items", []))
             return SWOTQuadrant(
-                items=q_data.get("items", []),
+                items=items,
                 citations=q_data.get("citations", []),
             )
 
@@ -493,10 +518,10 @@ class StrategyAgent(BaseAgent):
             opportunities=parse_quadrant(data.get("opportunities")),
             threats=parse_quadrant(data.get("threats")),
             cross_strategies=SWOTCrossStrategy(
-                so=cross.get("so", []),
-                wo=cross.get("wo", []),
-                st=cross.get("st", []),
-                wt=cross.get("wt", []),
+                so=self._flatten_strings(cross.get("so", [])),
+                wo=self._flatten_strings(cross.get("wo", [])),
+                st=self._flatten_strings(cross.get("st", [])),
+                wt=self._flatten_strings(cross.get("wt", [])),
             ),
         )
 
@@ -1350,14 +1375,23 @@ class StrategyAgent(BaseAgent):
             if market_analysis.user_reputation:
                 rep_cards = ""
                 for name, rep in market_analysis.user_reputation.items():
-                    kw_tags = ""
-                    for kw in (rep.keywords or [])[:5]:
-                        kw_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(kw)}</span>'
+                    # 正面关键词（绿色标签）
+                    pos_tags = ""
+                    for kw in (rep.positive_keywords or [])[:3]:
+                        pos_tags += f'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">✓ {esc(kw)}</span>'
+                    # 负面关键词（红色标签）
+                    neg_tags = ""
+                    for kw in (rep.negative_keywords or [])[:3]:
+                        neg_tags += f'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">✗ {esc(kw)}</span>'
+                    # 兼容旧格式
+                    if not pos_tags and not neg_tags:
+                        for kw in (rep.keywords or [])[:5]:
+                            pos_tags += f'<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px;">{esc(kw)}</span>'
+
                     rep_cards += f'''
                     <div style="background:#f8fafc;border-radius:10px;padding:14px;flex:1;min-width:150px;max-width:100%;box-sizing:border-box;overflow:hidden;">
-                        <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}</div>
-                        <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
-                        <div>{kw_tags}</div>
+                        <div style="font-weight:600;font-size:14px;margin-bottom:8px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}{cite_sup(rep.citations)}</div>
+                        <div>{pos_tags}{neg_tags}</div>
                     </div>'''
                 reputation_html = f'''
                 <div style="margin-top:20px;">

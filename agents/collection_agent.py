@@ -313,6 +313,13 @@ class CollectionAgent(BaseAgent):
                 )
                 # 程序化幻觉校验：清空搜索文本中完全不存在的数字内容
                 self._validate_against_source(data, all_text)
+
+                # 补充搜索：对所有空文本字段做补充搜索
+                data, extra_cites3 = self._supplement_empty_fields(
+                    entity_name, product_name, data, citations
+                )
+                citations.extend(extra_cites3)
+
                 return data
             else:
                 self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
@@ -427,6 +434,13 @@ class CollectionAgent(BaseAgent):
                     citations=citations,
                 )
                 self._validate_against_source(data, all_text)
+
+                # 补充搜索：对所有空文本字段做补充搜索
+                data, extra_cites3 = await self._async_supplement_empty_fields(
+                    entity_name, product_name, data, citations
+                )
+                citations.extend(extra_cites3)
+
                 return data
             self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
 
@@ -707,6 +721,174 @@ class CollectionAgent(BaseAgent):
 
         return market_share, extra_cites
 
+    async def _async_supplement_empty_fields(
+        self,
+        entity_name: str,
+        product_name: str,
+        data: 'CompetitorData',
+        existing_cites: list,
+    ) -> tuple:
+        """
+        对所有空文本字段做补充搜索。
+        在首次采集后调用，确保每个字段都有数据。
+        """
+        # 检查哪些字段为空
+        empty_fields = []
+        field_queries = {
+            "strengths": [f"{entity_name} 竞争优势 核心优势 行业地位"],
+            "weaknesses": [f"{entity_name} 劣势 不足 用户吐槽 差评"],
+            "channels": [f"{entity_name} 渠道策略 推广方式 合作伙伴 生态"],
+            "user_reviews": [f"{entity_name} 用户评价 口碑 评分 好评 差评"],
+            "market_share": [f"{entity_name} 市场份额 用户规模 DAU MAU 市占率"],
+        }
+
+        for field_name in ["strengths", "weaknesses", "channels", "user_reviews", "market_share"]:
+            val = getattr(data, field_name, "")
+            if not val or not str(val).strip() or len(str(val).strip()) < 10:
+                empty_fields.append(field_name)
+
+        if not empty_fields:
+            return data, []
+
+        self._log(f"   📝 {entity_name} 有{len(empty_fields)}个空字段，执行补充搜索: {empty_fields}")
+
+        all_extra_text = ""
+        extra_cites = []
+        cite_counter = len(existing_cites)
+
+        # 为空字段执行搜索
+        for field_name in empty_fields:
+            queries = field_queries.get(field_name, [f"{entity_name} {field_name}"])
+            for query in queries:
+                try:
+                    result = await self.search_client.async_search(query)
+                    text = SearchClient.extract_text(result) if result else ""
+                    if text:
+                        all_extra_text += f"\n--- 补充搜索({field_name}): {query} ---\n{text[:1500]}\n"
+                    for ref in result.get("references", []):
+                        ref_url = ref.get("url", "")
+                        ref_title = ref.get("title", "")
+                        if not ref_url and not ref_title:
+                            continue
+                        extra_cites.append(Citation(
+                            id=f"{entity_name}:sup_{field_name}_{cite_counter}:r{cite_counter}",
+                            title=ref_title,
+                            url=ref_url,
+                            snippet=ref.get("content", "") or ref.get("summary", ""),
+                            site_name=ref.get("site_name", ""),
+                            query=query,
+                            competitor=entity_name,
+                        ))
+                        cite_counter += 1
+                except Exception as e:
+                    self._log(f"   ⚠️ 补充搜索失败: {query} | {e}")
+
+        # 用LLM从补充搜索结果中提取
+        if all_extra_text and config.ENABLE_LLM:
+            prompts = load_prompts("collection_agent")
+            prompt = prompts["prompt_collect"].format(
+                product_name=product_name,
+                product_description="",
+                competitor_name=entity_name,
+                search_results=all_extra_text[:8000],
+            )
+            prompt += "\n\n### 重要：本次是补充搜索\n只提取搜索结果中明确写到的信息，不要编造。搜索结果中没有的信息留空。"
+
+            result = await self.async_ask_llm_json(prompt, max_tokens=4096, temperature=0)
+            if result:
+                for field_name in empty_fields:
+                    new_val = result.get(field_name, "")
+                    if new_val and isinstance(new_val, str) and len(new_val.strip()) > 10:
+                        setattr(data, field_name, new_val)
+                        self._log(f"   ✅ {entity_name}.{field_name} 补充成功")
+                    elif field_name == "market_share" and new_val:
+                        setattr(data, field_name, new_val)
+                        self._log(f"   ✅ {entity_name}.{field_name} 补充成功")
+
+        return data, extra_cites
+
+    def _supplement_empty_fields(
+        self,
+        entity_name: str,
+        product_name: str,
+        data: 'CompetitorData',
+        existing_cites: list,
+    ) -> tuple:
+        """
+        同步版本：对所有空文本字段做补充搜索。
+        """
+        empty_fields = []
+        field_queries = {
+            "strengths": [f"{entity_name} 竞争优势 核心优势 行业地位"],
+            "weaknesses": [f"{entity_name} 劣势 不足 用户吐槽 差评"],
+            "channels": [f"{entity_name} 渠道策略 推广方式 合作伙伴 生态"],
+            "user_reviews": [f"{entity_name} 用户评价 口碑 评分 好评 差评"],
+            "market_share": [f"{entity_name} 市场份额 用户规模 DAU MAU 市占率"],
+        }
+
+        for field_name in ["strengths", "weaknesses", "channels", "user_reviews", "market_share"]:
+            val = getattr(data, field_name, "")
+            if not val or not str(val).strip() or len(str(val).strip()) < 10:
+                empty_fields.append(field_name)
+
+        if not empty_fields:
+            return data, []
+
+        self._log(f"   📝 {entity_name} 有{len(empty_fields)}个空字段，执行补充搜索: {empty_fields}")
+
+        all_extra_text = ""
+        extra_cites = []
+        cite_counter = len(existing_cites)
+
+        for field_name in empty_fields:
+            queries = field_queries.get(field_name, [f"{entity_name} {field_name}"])
+            for query in queries:
+                try:
+                    result = self.search_client.search(query)
+                    text = SearchClient.extract_text(result) if result else ""
+                    if text:
+                        all_extra_text += f"\n--- 补充搜索({field_name}): {query} ---\n{text[:1500]}\n"
+                    for ref in result.get("references", []):
+                        ref_url = ref.get("url", "")
+                        ref_title = ref.get("title", "")
+                        if not ref_url and not ref_title:
+                            continue
+                        extra_cites.append(Citation(
+                            id=f"{entity_name}:sup_{field_name}_{cite_counter}:r{cite_counter}",
+                            title=ref_title,
+                            url=ref_url,
+                            snippet=ref.get("content", "") or ref.get("summary", ""),
+                            site_name=ref.get("site_name", ""),
+                            query=query,
+                            competitor=entity_name,
+                        ))
+                        cite_counter += 1
+                except Exception as e:
+                    self._log(f"   ⚠️ 补充搜索失败: {query} | {e}")
+
+        if all_extra_text and config.ENABLE_LLM:
+            prompts = load_prompts("collection_agent")
+            prompt = prompts["prompt_collect"].format(
+                product_name=product_name,
+                product_description="",
+                competitor_name=entity_name,
+                search_results=all_extra_text[:8000],
+            )
+            prompt += "\n\n### 重要：本次是补充搜索\n只提取搜索结果中明确写到的信息，不要编造。搜索结果中没有的信息留空。"
+
+            result = self.ask_llm_json(prompt, max_tokens=4096, temperature=0)
+            if result:
+                for field_name in empty_fields:
+                    new_val = result.get(field_name, "")
+                    if new_val and isinstance(new_val, str) and len(new_val.strip()) > 10:
+                        setattr(data, field_name, new_val)
+                        self._log(f"   ✅ {entity_name}.{field_name} 补充成功")
+                    elif field_name == "market_share" and new_val:
+                        setattr(data, field_name, new_val)
+                        self._log(f"   ✅ {entity_name}.{field_name} 补充成功")
+
+        return data, extra_cites
+
     def supplement_missing_fields(self, product_name: str,
                                    competitors_data: dict[str, 'CompetitorData'],
                                    missing_fields: dict[str, list[str]]) -> dict[str, 'CompetitorData']:
@@ -856,6 +1038,12 @@ class CollectionAgent(BaseAgent):
                     # 补充引用
                     data.citations.extend(extra_cites)
 
+            # 将补搜文本追加到 _last_search_texts，确保后续质检能验证补搜结果
+            if all_extra_text and comp_name in self._last_search_texts:
+                self._last_search_texts[comp_name] += all_extra_text
+            elif all_extra_text:
+                self._last_search_texts[comp_name] = all_extra_text
+
         return competitors_data
 
     async def async_supplement_missing_fields(self, product_name: str,
@@ -988,5 +1176,11 @@ class CollectionAgent(BaseAgent):
                                     self._log(f"   ✅ {comp_name}.{field_name} 二次补充{status}")
 
                     data.citations.extend(extra_cites)
+
+            # 将补搜文本追加到 _last_search_texts，确保后续质检能验证补搜结果
+            if all_extra_text and comp_name in self._last_search_texts:
+                self._last_search_texts[comp_name] += all_extra_text
+            elif all_extra_text:
+                self._last_search_texts[comp_name] = all_extra_text
 
         return competitors_data

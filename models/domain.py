@@ -186,8 +186,9 @@ class MarketShareItem:
 @dataclass
 class UserReputation:
     """用户口碑"""
-    score: str = ""                         # 评分
-    keywords: list[str] = field(default_factory=list)  # 关键词
+    positive_keywords: list[str] = field(default_factory=list)  # 正面关键词
+    negative_keywords: list[str] = field(default_factory=list)  # 负面关键词
+    keywords: list[str] = field(default_factory=list)  # 兼容旧格式的关键词
     citations: list[str] = field(default_factory=list)     # 引用 ID 列表
 
 
@@ -275,7 +276,11 @@ class QATimeline:
             self.total_retries += 1
 
     def all_passed(self) -> bool:
-        return all(c.passed or c.degraded for c in self.checks)
+        """检查所有阶段是否最终通过（只看每个阶段的最后一次检查）"""
+        last_checks = self._last_attempt_per_phase()
+        if not last_checks:
+            return True
+        return all(c.passed or c.degraded for c in last_checks)
 
     def get_accuracy_rate(self) -> float:
         """全局准确率：各阶段最后一轮检查的 accuracy_rate 加权平均"""

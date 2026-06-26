@@ -16,6 +16,7 @@ import PipelineGraph from '../components/PipelineGraph';
 import AgentDetail from '../components/AgentDetail';
 import QATimeline from '../components/QATimeline';
 import LlmLogs from '../components/LlmLogs';
+import InterventionModal from '../components/InterventionModal';
 
 const { Title, Text } = Typography;
 
@@ -75,7 +76,8 @@ export default function TaskDetail() {
   const [selectedPhase, setSelectedPhase] = useState(null);
   const {
     events, nodeStates, progress, currentMessage,
-    qaResults, qaSummaries, taskStatus, llmLogsKey, handleEvent, AGENT_PHASE_MAP,
+    qaResults, qaSummaries, taskStatus, llmLogsKey,
+    intervention, setIntervention, handleEvent, AGENT_PHASE_MAP,
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
@@ -167,11 +169,11 @@ export default function TaskDetail() {
   };
 
   const statusColor = {
-    pending: 'default', running: 'processing', completed: 'success', failed: 'error',
+    pending: 'default', running: 'processing', completed: 'success', completed_degraded: 'warning', failed: 'error',
   }[taskStatus] || 'default';
 
   const statusText = {
-    pending: '等待中', running: '运行中', completed: '已完成', failed: '失败',
+    pending: '等待中', running: '运行中', completed: '已完成', completed_degraded: '降级通过', failed: '失败',
   }[taskStatus] || taskStatus;
   const graphQaSummaries = Object.keys(qaSummaries).length > 0 ? qaSummaries : persistedQaSummaries;
   const timelineQaResults = qaResults.length > 0 ? qaResults : persistedQaResults;
@@ -238,11 +240,12 @@ export default function TaskDetail() {
               <Space style={{ marginTop: 4 }}>
                 {taskInfo.use_rule_engine && <Tag color="purple">规则引擎模式</Tag>}
                 {taskInfo.skip_qa && <Tag color="orange">跳过质检</Tag>}
+                {taskInfo.enable_human_review && <Tag color="cyan">人工审核</Tag>}
               </Space>
             )}
           </Col>
           <Col>
-            {taskStatus === 'completed' && (
+            {(taskStatus === 'completed' || taskStatus === 'completed_degraded') && (
               <Button
                 type="primary"
                 icon={<FileTextOutlined />}
@@ -376,6 +379,18 @@ export default function TaskDetail() {
         artifactData={selectedPhase ? artifactCache[selectedPhase] : undefined}
         qaArtifactData={artifactCache.qa}
         onArtifactLoaded={cacheArtifact}
+      />
+
+      {/* 人工介入审核弹窗 */}
+      <InterventionModal
+        taskId={taskId}
+        intervention={intervention}
+        onSubmit={() => {
+          setIntervention(null);
+          // 刷新相关数据
+          refreshQa();
+          loadTaskInfo();
+        }}
       />
     </div>
   );

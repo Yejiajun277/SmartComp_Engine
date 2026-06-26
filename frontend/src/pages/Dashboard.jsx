@@ -11,6 +11,7 @@ const STATUS_MAP = {
   pending: { color: 'default', text: '等待中' },
   running: { color: 'processing', text: '运行中' },
   completed: { color: 'success', text: '已完成' },
+  completed_degraded: { color: 'warning', text: '降级通过' },
   failed: { color: 'error', text: '失败' },
 };
 
@@ -79,6 +80,7 @@ export default function Dashboard() {
         values.maxCompetitors,
         values.skipQa,
         values.useRuleEngine,
+        values.humanReview,
       );
       saveRecentTask({
         id: result.task_id,
@@ -162,6 +164,9 @@ export default function Dashboard() {
                           <Tag color={status.color} style={{ marginLeft: 8 }}>
                             {status.text}
                           </Tag>
+                          {task.enable_human_review && (
+                            <Tag color="cyan" style={{ marginLeft: 4 }}>人工审核</Tag>
+                          )}
                         </span>
                       }
                       description={

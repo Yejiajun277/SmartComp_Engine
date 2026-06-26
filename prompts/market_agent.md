@@ -51,8 +51,8 @@
     "growth_trends": "整体市场增长趋势分析",
     "user_reputation": {{
         "竞品名1": {{
-            "score": "评分（如8.5/10）",
-            "keywords": ["正面关键词1", "负面关键词1"],
+            "positive_keywords": ["正面关键词1", "正面关键词2"],
+            "negative_keywords": ["负面关键词1", "负面关键词2"],
             "citations": ["竞品名:q0:r0"]
         }}
     }},

@@ -24,6 +24,7 @@ class TaskState:
     max_competitors: int
     skip_qa: bool
     use_rule_engine: bool = False
+    enable_human_review: bool = False
     status: str = "pending"  # pending | running | completed | failed
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -34,6 +35,10 @@ class TaskState:
     report_json: dict | None = None
     llm_logs: list[dict] = field(default_factory=list)
     error: str | None = None
+    # 人工介入状态
+    pending_intervention: str | None = None  # competitor_confirm | data_review | None
+    _intervention_event: asyncio.Event | None = field(default=None, repr=False)
+    _intervention_response: dict | None = field(default=None, repr=False)
 
 
 class _DateTimeEncoder(json.JSONEncoder):
@@ -59,6 +64,7 @@ class TaskManager:
             "max_competitors": task.max_competitors,
             "skip_qa": task.skip_qa,
             "use_rule_engine": task.use_rule_engine,
+            "enable_human_review": task.enable_human_review,
             "status": task.status,
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "finished_at": task.finished_at.isoformat() if task.finished_at else None,
@@ -69,6 +75,7 @@ class TaskManager:
             "report_json": task.report_json,
             "llm_logs": task.llm_logs,
             "error": task.error,
+            "pending_intervention": task.pending_intervention,
         }
         path = _TASKS_DIR / f"{task.id}.json"
         try:
@@ -96,6 +103,7 @@ class TaskManager:
                     max_competitors=data["max_competitors"],
                     skip_qa=data["skip_qa"],
                     use_rule_engine=data.get("use_rule_engine", False),
+                    enable_human_review=data.get("enable_human_review", False),
                     status=data["status"],
                     started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
                     finished_at=datetime.fromisoformat(data["finished_at"]) if data.get("finished_at") else None,
@@ -106,6 +114,7 @@ class TaskManager:
                     report_json=data.get("report_json"),
                     llm_logs=data.get("llm_logs", []),
                     error=data.get("error"),
+                    pending_intervention=data.get("pending_intervention"),
                 )
                 # Tasks that were running/pending when the process exited are effectively failed
                 if task.status in ("running", "pending"):
@@ -133,6 +142,7 @@ class TaskManager:
                     max_competitors=data["max_competitors"],
                     skip_qa=data["skip_qa"],
                     use_rule_engine=data.get("use_rule_engine", False),
+                    enable_human_review=data.get("enable_human_review", False),
                     status=data["status"],
                     started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
                     finished_at=datetime.fromisoformat(data["finished_at"]) if data.get("finished_at") else None,
@@ -143,6 +153,7 @@ class TaskManager:
                     report_json=data.get("report_json"),
                     llm_logs=data.get("llm_logs", []),
                     error=data.get("error"),
+                    pending_intervention=data.get("pending_intervention"),
                 )
             except Exception:
                 continue
@@ -163,7 +174,8 @@ class TaskManager:
             self._save_task(task)
 
     async def submit(self, product_description: str, max_competitors: int,
-                     skip_qa: bool, use_rule_engine: bool = False) -> str:
+                     skip_qa: bool, use_rule_engine: bool = False,
+                     enable_human_review: bool = False) -> str:
         if not use_rule_engine:
             import config as app_config
             use_rule_engine = not bool(app_config.MIMO_API_KEY)
@@ -175,11 +187,12 @@ class TaskManager:
             max_competitors=max_competitors,
             skip_qa=skip_qa,
             use_rule_engine=use_rule_engine,
+            enable_human_review=enable_human_review,
         )
         self._tasks[task_id] = task
         self._save_task(task)
         asyncio.create_task(self._run_task(task_id, product_description, max_competitors,
-                                            skip_qa, use_rule_engine))
+                                            skip_qa, use_rule_engine, enable_human_review))
         return task_id
 
     def get(self, task_id: str) -> TaskState | None:
@@ -216,8 +229,54 @@ class TaskManager:
         self._sync_tasks_from_disk()
         return sorted(self._tasks.values(), key=lambda t: t.started_at or datetime.min, reverse=True)
 
+    # ── 人工介入管理 ──
+
+    def set_pending_intervention(self, task_id: str, intervention_type: str,
+                                 payload: dict) -> None:
+        """工作流节点到达介入点时调用：存储待审核数据，创建等待事件。"""
+        task = self._tasks.get(task_id)
+        if not task:
+            return
+        task.pending_intervention = intervention_type
+        task._intervention_event = asyncio.Event()
+        task._intervention_response = None
+        self._save_task(task)
+
+    def get_pending_intervention(self, task_id: str) -> dict | None:
+        """前端轮询获取当前待审核数据。"""
+        task = self._tasks.get(task_id)
+        if not task or not task.pending_intervention:
+            return None
+        return {
+            "type": task.pending_intervention,
+            "task_id": task_id,
+        }
+
+    async def submit_intervention_response(self, task_id: str,
+                                           response: dict) -> bool:
+        """前端提交用户决策：填充响应数据，唤醒等待的工作流节点。"""
+        task = self._tasks.get(task_id)
+        if not task or not task._intervention_event:
+            return False
+        task._intervention_response = response
+        task.pending_intervention = None
+        self._save_task(task)
+        task._intervention_event.set()
+        return True
+
+    async def wait_for_intervention(self, task_id: str) -> dict:
+        """工作流节点调用：阻塞等待用户决策，返回响应数据。"""
+        task = self._tasks.get(task_id)
+        if not task:
+            return {"action": "approve"}
+        if task._intervention_event is None:
+            return {"action": "approve"}
+        await task._intervention_event.wait()
+        return task._intervention_response or {"action": "approve"}
+
     async def _run_task(self, task_id: str, product_description: str,
-                        max_competitors: int, skip_qa: bool, use_rule_engine: bool) -> None:
+                        max_competitors: int, skip_qa: bool, use_rule_engine: bool,
+                        enable_human_review: bool = False) -> None:
         async with self._semaphore:
             task = self._tasks[task_id]
             task.status = "running"
@@ -245,6 +304,7 @@ class TaskManager:
                 import config as app_config
                 app_config.SKIP_QA = skip_qa
                 app_config.ENABLE_LLM = not use_rule_engine
+                app_config.ENABLE_HUMAN_REVIEW = enable_human_review
 
                 from core.orchestrator import Orchestrator
                 orchestrator = Orchestrator()
@@ -299,6 +359,7 @@ class TaskManager:
                     report = await orchestrator.analyze(
                         product_description, max_competitors,
                         event_bus=self._event_bus, task_id=task_id,
+                        task_manager=self,
                     )
                 finally:
                     log_sync_task.cancel()
@@ -307,7 +368,9 @@ class TaskManager:
                     except asyncio.CancelledError:
                         pass
 
-                task.status = "completed"
+                # 检查编排器返回的状态（可能是 completed 或 completed_degraded）
+                orchestrator_status = getattr(orchestrator, '_last_status', 'completed')
+                task.status = orchestrator_status if orchestrator_status in ('completed', 'completed_degraded') else 'completed'
                 task.finished_at = datetime.now()
                 task.progress = 1.0
                 task.current_agent = None
@@ -349,12 +412,13 @@ class TaskManager:
                     task_id=task_id,
                     agent="Orchestrator",
                     phase="finalize",
-                    status="completed",
+                    status=task.status,
                     progress=1.0,
-                    message="分析完成",
+                    message="降级通过" if task.status == "completed_degraded" else "分析完成",
                     data={
                         "llm_calls": len(task.llm_logs),
                         "rule_engine_mode": use_rule_engine,
+                        "degraded": task.status == "completed_degraded",
                     },
                 ))
             except Exception as exc:

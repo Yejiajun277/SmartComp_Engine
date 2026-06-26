@@ -105,6 +105,7 @@ export function useTask() {
   const [qaResults, setQaResults] = useState([]);
   const [taskStatus, setTaskStatus] = useState('pending');
   const [llmLogsKey, setLlmLogsKey] = useState(0);
+  const [intervention, setIntervention] = useState(null);
 
   const handleEvent = useCallback((event) => {
     console.log('[useTask] handleEvent:', event.type, event.phase, event.progress);
@@ -163,12 +164,35 @@ export function useTask() {
       setLlmLogsKey(prev => prev + 1);
     }
 
+    // Handle intervention events
+    if (event.type === 'intervention_required') {
+      setIntervention({
+        type: event.data?.intervention_type || event.phase,
+        message: event.message,
+        data: event.data,
+      });
+    } else if (event.type === 'intervention_submitted') {
+      setIntervention(null);
+    }
+
     // Handle task completion
     if (event.type === 'task_started') {
       setTaskStatus('running');
     } else if (event.type === 'task_completed') {
-      setTaskStatus('completed');
+      // 检查是否是降级通过
+      const isDegraded = event.data?.degraded || event.status === 'completed_degraded';
+      setTaskStatus(isDegraded ? 'completed_degraded' : 'completed');
       setProgress(1.0);
+      // 兜底：任务完成时，所有仍在 waiting 的节点自动标记为 completed
+      setNodeStates(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          if (updated[key] === 'waiting') {
+            updated[key] = 'completed';
+          }
+        });
+        return updated;
+      });
     } else if (event.type === 'task_failed') {
       setTaskStatus('failed');
     }
@@ -182,6 +206,7 @@ export function useTask() {
     setQaResults([]);
     setTaskStatus('pending');
     setLlmLogsKey(0);
+    setIntervention(null);
   }, []);
 
   return {
@@ -193,6 +218,8 @@ export function useTask() {
     qaSummaries: summarizeQaResults(qaResults),
     taskStatus,
     llmLogsKey,
+    intervention,
+    setIntervention,
     handleEvent,
     reset,
     AGENT_PHASE_MAP,
