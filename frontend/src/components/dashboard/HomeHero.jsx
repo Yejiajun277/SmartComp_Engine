@@ -4,7 +4,7 @@ const PROOF_POINTS = [
   '结论保留引用与修正链',
 ];
 
-const EXAMPLES = ['飞书', 'Notion', '小米汽车'];
+const EXAMPLES = ['飞书', '小米汽车', 'IPhone17', '蜜雪冰城', 'NIKE'];
 
 const AGENT_NODES = [
   { key: 'discovery', label: '发现', className: 'agent-map-node-discovery' },
@@ -22,7 +22,7 @@ export default function HomeHero({ onExampleSelect }) {
         <span className="section-eyebrow">可核验竞品策略生成引擎</span>
         <h1 id="home-hero-title">
           把竞品分析交给一支
-          <span>会互相质检的 Agent 团队</span>
+          <span>会互相质检的 Agent<br />团队</span>
         </h1>
         <p className="home-hero-lead">
           从竞争边界到行动策略，每一步都实时可见；被 QA 打回的结论会重做，最终报告保留可信引用链。

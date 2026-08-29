@@ -73,7 +73,7 @@ export default function TaskForm({
         >
           <Input
             autoComplete="off"
-            placeholder="例如：飞书文档、Notion、钉钉"
+            placeholder="例如：飞书、小米汽车、IPhone17"
             size="large"
           />
         </Form.Item>
