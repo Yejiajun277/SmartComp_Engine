@@ -67,20 +67,10 @@ export function mergeTasks(serverTasks = [], recentTasks = []) {
   const recentById = new Map(
     recentTasks.filter(task => task?.id).map(task => [task.id, task]),
   );
-  const serverIds = new Set();
 
-  const authoritativeTasks = serverTasks
+  return serverTasks
     .filter(task => task?.id)
-    .map((task) => {
-      serverIds.add(task.id);
-      return { ...(recentById.get(task.id) || {}), ...task };
-    });
-
-  const localOnlyTasks = recentTasks
-    .filter(task => task?.id && !serverIds.has(task.id))
-    .map(task => ({ ...task }));
-
-  return [...authoritativeTasks, ...localOnlyTasks];
+    .map(task => ({ ...(recentById.get(task.id) || {}), ...task }));
 }
 
 export function formatElapsed(startedAt, finishedAt) {

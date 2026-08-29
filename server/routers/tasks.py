@@ -78,9 +78,8 @@ async def get_task(task_id: str, request: Request):
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, request: Request):
     manager = _get_manager(request)
-    if not manager.delete(task_id):
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"ok": True}
+    deleted = manager.delete(task_id)
+    return {"ok": True, "already_absent": not deleted}
 
 
 @router.get("/{task_id}/report")

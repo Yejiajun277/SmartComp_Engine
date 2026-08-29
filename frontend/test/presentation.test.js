@@ -16,13 +16,13 @@ test('maps task states to user-facing labels and tones', () => {
   assert.deepEqual(getTaskStatusMeta('unknown'), { label: '等待中', tone: 'neutral' });
 });
 
-test('merges recent tasks with authoritative server fields', () => {
+test('merges local metadata only for tasks confirmed by the server', () => {
   const result = mergeTasks(
     [{ id: 'a', status: 'completed', product_description: '飞书' }],
     [{ id: 'a', status: 'pending' }, { id: 'b', status: 'pending' }],
   );
 
-  assert.equal(result.length, 2);
+  assert.equal(result.length, 1);
   assert.equal(result.find(item => item.id === 'a').status, 'completed');
 });
 
@@ -34,13 +34,13 @@ test('formats elapsed seconds and event labels', () => {
   );
 });
 
-test('keeps server task order and appends unmatched local tasks', () => {
+test('keeps server task order and drops unmatched local tasks', () => {
   const result = mergeTasks(
     [{ id: 'new', status: 'running' }, { id: 'old', status: 'completed' }],
     [{ id: 'local', status: 'pending' }, { id: 'old', status: 'pending' }],
   );
 
-  assert.deepEqual(result.map(item => item.id), ['new', 'old', 'local']);
+  assert.deepEqual(result.map(item => item.id), ['new', 'old']);
 });
 
 test('does not claim execution or QA modes when the task API omits them', () => {

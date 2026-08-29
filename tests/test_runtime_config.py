@@ -145,6 +145,18 @@ class TaskExecutionMetadataTests(unittest.TestCase):
         self.assertIsNone(summary["llm_model"])
 
 
+class TaskDeletionApiTests(unittest.TestCase):
+    def test_deleting_an_already_missing_task_is_idempotent(self):
+        with TestClient(app) as client:
+            response = client.delete("/api/tasks/already-missing-task")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "ok": True,
+            "already_absent": True,
+        })
+
+
 class TaskSubmissionMetadataTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_api_forces_rule_mode_before_task_is_saved(self):
         manager = TaskManager(EventBus())
