@@ -1,13 +1,28 @@
 import { useEffect } from 'react';
 import { Button, Collapse, Form, Input, InputNumber, Switch } from 'antd';
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { getRuntimeStatusMeta } from '../utils/runtime';
+import RuntimeStatus from './RuntimeStatus';
 
-export default function TaskForm({ initialProduct, onSubmit, loading }) {
+export default function TaskForm({
+  initialProduct,
+  onSubmit,
+  loading,
+  runtimeConfig,
+  runtimeLoading,
+}) {
   const [form] = Form.useForm();
+  const runtimeMeta = getRuntimeStatusMeta(runtimeConfig);
 
   useEffect(() => {
     if (initialProduct) form.setFieldValue('productDescription', initialProduct);
   }, [form, initialProduct]);
+
+  useEffect(() => {
+    if (runtimeMeta.forceRuleEngine) {
+      form.setFieldValue('useRuleEngine', true);
+    }
+  }, [form, runtimeMeta.forceRuleEngine]);
 
   const advancedSettings = (
     <div className="advanced-settings">
@@ -15,8 +30,9 @@ export default function TaskForm({ initialProduct, onSubmit, loading }) {
         name="useRuleEngine"
         label="规则引擎模式（不调用 LLM）"
         valuePropName="checked"
+        extra={runtimeMeta.forceRuleEngine ? '未检测到模型 API，当前已锁定为规则引擎' : null}
       >
-        <Switch />
+        <Switch disabled={runtimeMeta.forceRuleEngine} />
       </Form.Item>
       <Form.Item
         name="skipQa"
@@ -38,10 +54,15 @@ export default function TaskForm({ initialProduct, onSubmit, loading }) {
       <h2 id="task-launcher-title">启动分析任务</h2>
       <p>描述产品，系统将自动组建 Agent 团队并生成可核验策略报告。</p>
 
+      <RuntimeStatus config={runtimeConfig} loading={runtimeLoading} />
+
       <Form
         form={form}
         layout="vertical"
-        onFinish={onSubmit}
+        onFinish={(values) => onSubmit({
+          ...values,
+          useRuleEngine: runtimeMeta.forceRuleEngine || values.useRuleEngine,
+        })}
         initialValues={{ maxCompetitors: 5, skipQa: false, useRuleEngine: false }}
         requiredMark={false}
       >
@@ -85,7 +106,7 @@ export default function TaskForm({ initialProduct, onSubmit, loading }) {
             size="large"
             block
           >
-            组建 Agent 团队
+            {runtimeMeta.forceRuleEngine ? '使用规则引擎启动' : '组建 Agent 团队'}
           </Button>
         </Form.Item>
       </Form>

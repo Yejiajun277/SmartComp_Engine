@@ -24,6 +24,8 @@ class TaskState:
     max_competitors: int
     skip_qa: bool
     use_rule_engine: bool = False
+    llm_provider: str | None = None
+    llm_model: str | None = None
     status: str = "pending"  # pending | running | completed | failed
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -59,6 +61,8 @@ class TaskManager:
             "max_competitors": task.max_competitors,
             "skip_qa": task.skip_qa,
             "use_rule_engine": task.use_rule_engine,
+            "llm_provider": task.llm_provider,
+            "llm_model": task.llm_model,
             "status": task.status,
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "finished_at": task.finished_at.isoformat() if task.finished_at else None,
@@ -96,6 +100,8 @@ class TaskManager:
                     max_competitors=data["max_competitors"],
                     skip_qa=data["skip_qa"],
                     use_rule_engine=data.get("use_rule_engine", False),
+                    llm_provider=data.get("llm_provider"),
+                    llm_model=data.get("llm_model"),
                     status=data["status"],
                     started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
                     finished_at=datetime.fromisoformat(data["finished_at"]) if data.get("finished_at") else None,
@@ -133,6 +139,8 @@ class TaskManager:
                     max_competitors=data["max_competitors"],
                     skip_qa=data["skip_qa"],
                     use_rule_engine=data.get("use_rule_engine", False),
+                    llm_provider=data.get("llm_provider"),
+                    llm_model=data.get("llm_model"),
                     status=data["status"],
                     started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
                     finished_at=datetime.fromisoformat(data["finished_at"]) if data.get("finished_at") else None,
@@ -164,9 +172,10 @@ class TaskManager:
 
     async def submit(self, product_description: str, max_competitors: int,
                      skip_qa: bool, use_rule_engine: bool = False) -> str:
+        import config as app_config
+
         if not use_rule_engine:
-            import config as app_config
-            use_rule_engine = not bool(app_config.MIMO_API_KEY)
+            use_rule_engine = not bool(app_config.MIMO_API_KEY.strip())
 
         task_id = str(uuid.uuid4())[:8]
         task = TaskState(
@@ -175,6 +184,8 @@ class TaskManager:
             max_competitors=max_competitors,
             skip_qa=skip_qa,
             use_rule_engine=use_rule_engine,
+            llm_provider=None if use_rule_engine else app_config.LLM_PROVIDER,
+            llm_model=None if use_rule_engine else app_config.MIMO_MODEL,
         )
         self._tasks[task_id] = task
         self._save_task(task)

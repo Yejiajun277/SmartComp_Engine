@@ -1,3 +1,5 @@
+import { formatProviderName } from './runtime.js';
+
 const TASK_STATUS_META = {
   pending: { label: '等待中', tone: 'neutral' },
   queued: { label: '等待中', tone: 'neutral' },
@@ -14,10 +16,14 @@ export function getTaskStatusMeta(status) {
 }
 
 export function getTaskModeMeta(task = {}) {
+  const provider = formatProviderName(task?.llm_provider);
+  const configuredModel = task?.llm_model
+    ? [provider, task.llm_model].filter(Boolean).join(' · ')
+    : provider;
   const executionLabel = task?.use_rule_engine === true
     ? '规则引擎分析'
     : task?.use_rule_engine === false
-      ? '智能模型分析'
+      ? configuredModel || '智能模型分析'
       : '执行模式待同步';
   const qaLabel = task?.skip_qa === true
     ? '质量检查已关闭'

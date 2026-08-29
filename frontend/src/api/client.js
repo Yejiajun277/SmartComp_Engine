@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const api = axios.create({ baseURL: '/api' });
 
+export async function getRuntimeConfig() {
+  const { data } = await api.get('/runtime');
+  return data;
+}
+
 export async function submitTask(productDescription, maxCompetitors = 5, skipQa = false, useRuleEngine = false) {
   const { data } = await api.post('/tasks', {
     product_description: productDescription,

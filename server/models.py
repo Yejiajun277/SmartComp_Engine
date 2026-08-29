@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -49,10 +49,26 @@ class TaskCreateResponse(BaseModel):
     status: str
 
 
+class RuntimeProviderStatus(BaseModel):
+    configured: bool
+    provider: str
+    model: str | None = None
+
+
+class RuntimeConfigResponse(BaseModel):
+    llm: RuntimeProviderStatus
+    search: RuntimeProviderStatus
+    default_mode: Literal["model", "rule"]
+
+
 class TaskSummary(BaseModel):
     id: str
     product_description: str
     max_competitors: int
+    skip_qa: bool
+    use_rule_engine: bool
+    llm_provider: str | None = None
+    llm_model: str | None = None
     status: str
     current_agent: str | None = None
     progress: float = 0.0

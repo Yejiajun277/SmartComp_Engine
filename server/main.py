@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from server.routers import runtime as runtime_router
 from server.routers import tasks as tasks_router
 from server.routers import ws as ws_router
 from server.services.event_bus import EventBus
@@ -43,6 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(runtime_router.router)
 app.include_router(tasks_router.router)
 app.include_router(ws_router.router)
 

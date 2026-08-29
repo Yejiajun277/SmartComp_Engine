@@ -161,6 +161,63 @@
   transform: scaleX(1);
 }
 
+.runtime-status-compact {
+  display: inline-flex;
+  justify-self: end;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--sc-border);
+  border-radius: 12px;
+  color: var(--sc-muted);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.runtime-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #9aa5b4;
+  box-shadow: 0 0 0 4px rgba(154, 165, 180, 0.12);
+}
+
+.runtime-status-compact[data-tone='ready'] .runtime-status-dot {
+  background: var(--sc-mint);
+  box-shadow: 0 0 0 4px rgba(10, 168, 134, 0.12);
+}
+
+.runtime-status-compact[data-tone='warning'] .runtime-status-dot {
+  background: var(--sc-amber);
+  box-shadow: 0 0 0 4px rgba(216, 137, 21, 0.13);
+}
+
+.runtime-status-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.12;
+}
+
+.runtime-status-copy small {
+  margin-bottom: 3px;
+  color: #8792a2;
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.runtime-status-copy strong {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--sc-ink);
+  font-size: 11px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-content {
   min-height: calc(100vh - 68px);
   background: transparent;
@@ -585,10 +642,107 @@
 }
 
 .task-launcher > p {
-  margin: 10px 0 28px;
+  margin: 10px 0 18px;
   color: #aab5c5;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.runtime-status-panel {
+  margin: 0 0 24px;
+  padding: 15px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.runtime-status-panel[data-tone='ready'] {
+  border-color: rgba(88, 230, 194, 0.22);
+  background: rgba(10, 168, 134, 0.09);
+}
+
+.runtime-status-panel[data-tone='warning'] {
+  border-color: rgba(244, 177, 74, 0.25);
+  background: rgba(216, 137, 21, 0.09);
+}
+
+.runtime-status-panel header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.runtime-status-panel header > span:last-child {
+  display: grid;
+  line-height: 1.2;
+}
+
+.runtime-status-panel header small {
+  margin-bottom: 4px;
+  color: #7f8ca1;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.runtime-status-panel header strong {
+  color: #edf4ff;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.runtime-status-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: #9ba8ba;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.runtime-status-panel[data-tone='ready'] .runtime-status-icon {
+  color: var(--sc-mint-bright);
+  background: rgba(88, 230, 194, 0.1);
+}
+
+.runtime-status-panel[data-tone='warning'] .runtime-status-icon {
+  color: #f4b14a;
+  background: rgba(244, 177, 74, 0.1);
+}
+
+.runtime-status-panel > p {
+  margin: 11px 0 12px;
+  color: #a8b4c5;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.runtime-status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.runtime-status-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #b8c4d3;
+  background: rgba(4, 10, 20, 0.26);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.runtime-status-tags span[data-warning='true'] {
+  border-color: rgba(244, 177, 74, 0.2);
+  color: #f0b45b;
 }
 
 .task-launcher .ant-form-item {
@@ -913,7 +1067,9 @@
 
 @media (max-width: 767px) {
   .app-header {
-    grid-template-columns: 1fr;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
     min-height: 64px;
     padding: 0 16px;
   }
@@ -924,6 +1080,22 @@
 
   .brand-copy small {
     display: none;
+  }
+
+  .runtime-status-compact {
+    width: min(170px, 48vw);
+    flex: 0 1 170px;
+    max-width: 170px;
+    padding: 7px 9px;
+  }
+
+  .runtime-status-copy small {
+    display: none;
+  }
+
+  .runtime-status-copy strong {
+    max-width: calc(min(170px, 48vw) - 36px);
+    font-size: 10px;
   }
 
   .page-shell {

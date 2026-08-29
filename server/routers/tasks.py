@@ -20,6 +20,24 @@ def _get_manager(request):
     return request.app.state.task_manager
 
 
+def _build_task_summary(task) -> TaskSummary:
+    return TaskSummary(
+        id=task.id,
+        product_description=task.product_description,
+        max_competitors=task.max_competitors,
+        skip_qa=task.skip_qa,
+        use_rule_engine=task.use_rule_engine,
+        llm_provider=task.llm_provider,
+        llm_model=task.llm_model,
+        status=task.status,
+        current_agent=task.current_agent,
+        progress=task.progress,
+        started_at=task.started_at,
+        finished_at=task.finished_at,
+        error=task.error,
+    )
+
+
 @router.post("", response_model=TaskCreateResponse)
 async def create_task(body: TaskCreateRequest, request: Request):
     manager = _get_manager(request)
@@ -45,20 +63,7 @@ async def get_llm_logs(task_id: str, request: Request):
 async def list_tasks(request: Request):
     manager = _get_manager(request)
     tasks = manager.list_all()
-    return [
-        TaskSummary(
-            id=t.id,
-            product_description=t.product_description,
-            max_competitors=t.max_competitors,
-            status=t.status,
-            current_agent=t.current_agent,
-            progress=t.progress,
-            started_at=t.started_at,
-            finished_at=t.finished_at,
-            error=t.error,
-        )
-        for t in tasks
-    ]
+    return [_build_task_summary(task) for task in tasks]
 
 
 @router.get("/{task_id}", response_model=TaskSummary)
@@ -67,17 +72,7 @@ async def get_task(task_id: str, request: Request):
     task = manager.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskSummary(
-        id=task.id,
-        product_description=task.product_description,
-        max_competitors=task.max_competitors,
-        status=task.status,
-        current_agent=task.current_agent,
-        progress=task.progress,
-        started_at=task.started_at,
-        finished_at=task.finished_at,
-        error=task.error,
-    )
+    return _build_task_summary(task)
 
 
 @router.delete("/{task_id}")

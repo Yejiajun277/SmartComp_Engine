@@ -90,7 +90,7 @@ function TaskListItem({ task, status, onOpen, onDelete }) {
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ runtimeConfig, runtimeLoading }) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -166,6 +166,8 @@ export default function Dashboard() {
           initialProduct={selectedExample}
           onSubmit={handleSubmit}
           loading={submitting}
+          runtimeConfig={runtimeConfig}
+          runtimeLoading={runtimeLoading}
         />
       </section>
 

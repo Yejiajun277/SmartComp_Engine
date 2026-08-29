@@ -58,6 +58,19 @@ test('does not claim execution or QA modes when the task API omits them', () => 
   });
 });
 
+test('shows the exact model persisted for a model-backed task', () => {
+  assert.deepEqual(getTaskModeMeta({
+    use_rule_engine: false,
+    skip_qa: false,
+    llm_provider: 'mimo',
+    llm_model: 'mimo-v2.5-pro',
+  }), {
+    executionLabel: 'MiMo · mimo-v2.5-pro',
+    qaLabel: 'QualityAgent 已开启',
+    qaTone: 'neutral',
+  });
+});
+
 test('uses persisted task progress until a newer live update arrives', () => {
   assert.equal(resolveTaskProgress('running', 0, 0.42), 42);
   assert.equal(resolveTaskProgress('running', 0.58, 0.42), 58);

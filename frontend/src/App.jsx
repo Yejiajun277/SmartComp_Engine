@@ -1,14 +1,39 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, NavLink, Routes, Route } from 'react-router-dom';
 import { ConfigProvider, Layout, theme } from 'antd';
+import { getRuntimeConfig } from './api/client';
 import Dashboard from './pages/Dashboard';
 import TaskDetail from './pages/TaskDetail';
 import ReportView from './pages/ReportView';
 import BrandMark from './components/BrandMark';
+import RuntimeStatus from './components/RuntimeStatus';
 import './App.css';
 
 const { Header, Content } = Layout;
 
 export default function App() {
+  const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    getRuntimeConfig()
+      .then((config) => {
+        if (active) setRuntimeConfig(config);
+      })
+      .catch(() => {
+        if (active) setRuntimeConfig(null);
+      })
+      .finally(() => {
+        if (active) setRuntimeLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <ConfigProvider
       theme={{
@@ -35,10 +60,19 @@ export default function App() {
             <nav className="primary-nav" aria-label="主导航">
               <NavLink to="/" end>分析中心</NavLink>
             </nav>
+            <RuntimeStatus config={runtimeConfig} compact loading={runtimeLoading} />
           </Header>
           <Content className="app-content">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route
+                path="/"
+                element={(
+                  <Dashboard
+                    runtimeConfig={runtimeConfig}
+                    runtimeLoading={runtimeLoading}
+                  />
+                )}
+              />
               <Route path="/tasks/:taskId" element={<TaskDetail />} />
               <Route path="/tasks/:taskId/report" element={<ReportView />} />
             </Routes>
