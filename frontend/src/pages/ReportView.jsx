@@ -1,74 +1,179 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Typography, Button, Spin, Empty, Space } from 'antd';
-import { ArrowLeftOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Button, Empty, Spin } from 'antd';
+import {
+  ArrowLeftOutlined,
+  DownloadOutlined,
+  ExportOutlined,
+  FileDoneOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons';
 import { getReport } from '../api/client';
+import ReportOverview from '../components/report/ReportOverview';
+import { buildReportOverview } from '../utils/report';
 
-const { Title } = Typography;
+const REPORT_VIEWS = [
+  { key: 'overview', label: '决策简报' },
+  { key: 'full', label: '完整报告' },
+  { key: 'json', label: 'JSON 数据' },
+];
 
 export default function ReportView() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showJson, setShowJson] = useState(false);
+  const [view, setView] = useState('overview');
+  const [iframeLoading, setIframeLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     getReport(taskId)
-      .then(setReport)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!cancelled) setReport(data);
+      })
+      .catch(() => {
+        if (!cancelled) setReport(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [taskId]);
 
-  if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
-  if (!report) return <Empty description="报告不可用" />;
+  const handleViewChange = (nextView) => {
+    if (nextView === 'full') setIframeLoading(true);
+    setView(nextView);
+  };
 
   const handleDownloadJson = () => {
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${report.product_name || 'report'}.json`;
-    a.click();
+    const anchor = document.createElement('a');
+    const safeName = (report.product_name || 'report').replace(/[\\/:*?"<>|]/g, '-');
+    anchor.href = url;
+    anchor.download = `${safeName}.json`;
+    anchor.click();
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+  if (loading) {
+    return (
+      <main className="page-shell report-loading-state">
+        <Spin size="large" />
+        <p>正在装载策略报告…</p>
+      </main>
+    );
+  }
+
+  if (!report) {
+    return (
+      <main className="page-shell report-empty-state">
+        <Empty description="报告暂不可用" />
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/tasks/${taskId}`)}>
-          返回详情
+          返回工作台
         </Button>
-        <Space>
-          <Button
-            icon={<FileTextOutlined />}
-            onClick={() => setShowJson(!showJson)}
-          >
-            {showJson ? '查看 HTML 报告' : '查看 JSON 数据'}
-          </Button>
+      </main>
+    );
+  }
+
+  const overview = buildReportOverview(report);
+  const iframeUrl = `/api/tasks/${taskId}/report.html`;
+
+  return (
+    <main className="page-shell report-page">
+      <Button
+        className="workbench-back"
+        type="text"
+        icon={<ArrowLeftOutlined />}
+        onClick={() => navigate(`/tasks/${taskId}`)}
+      >
+        返回 Agent 工作台
+      </Button>
+
+      <header className="surface-card report-header">
+        <div className="report-heading-copy">
+          <span className="section-eyebrow">Strategy report</span>
+          <h1>{overview.productName}</h1>
+          <p>竞品策略分析报告 · 决策、证据与质量修正链</p>
+        </div>
+        <div className="report-heading-actions">
+          <span className="report-ready-pill"><FileDoneOutlined /> 报告已生成</span>
           <Button icon={<DownloadOutlined />} onClick={handleDownloadJson}>
             下载 JSON
           </Button>
-        </Space>
-      </div>
+        </div>
+      </header>
 
-      <Title level={2}>{report.product_name} - 竞品分析报告</Title>
+      <nav className="report-view-tabs" aria-label="报告视图">
+        <div role="tablist">
+          {REPORT_VIEWS.map(item => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === item.key}
+              className={view === item.key ? 'is-active' : ''}
+              key={item.key}
+              onClick={() => handleViewChange(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {view === 'full' && (
+          <a href={iframeUrl} target="_blank" rel="noreferrer">
+            <ExportOutlined /> 在新窗口打开
+          </a>
+        )}
+      </nav>
 
-      {showJson ? (
-        <Card>
-          <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '80vh', overflow: 'auto', fontSize: 13 }}>
-            {JSON.stringify(report, null, 2)}
-          </pre>
-        </Card>
-      ) : (
-        <Card bodyStyle={{ padding: 0 }}>
-          <iframe
-            src={`/api/tasks/${taskId}/report.html`}
-            title="竞品分析报告"
-            style={{ width: '100%', height: '80vh', border: 'none' }}
-          />
-        </Card>
+      {view === 'overview' && (
+        <ReportOverview report={report} onReadFull={() => handleViewChange('full')} />
       )}
-    </div>
+
+      {view === 'full' && (
+        <section className="surface-card full-report-panel" aria-labelledby="full-report-title">
+          <header>
+            <div>
+              <span className="section-eyebrow">Full analysis</span>
+              <h2 id="full-report-title">完整分析</h2>
+            </div>
+            <p>由 StrategyAgent 汇总生成的完整 HTML 报告</p>
+          </header>
+          <div className="report-iframe-wrap">
+            {iframeLoading && (
+              <div className="report-iframe-loading">
+                <Spin />
+                <span>正在载入完整报告…</span>
+              </div>
+            )}
+            <iframe
+              src={iframeUrl}
+              title={`${overview.productName} 竞品分析报告`}
+              onLoad={() => setIframeLoading(false)}
+            />
+          </div>
+          <p className="report-iframe-fallback">
+            如果嵌入内容未正常显示，请
+            <a href={iframeUrl} target="_blank" rel="noreferrer">在新窗口打开完整报告</a>。
+          </p>
+        </section>
+      )}
+
+      {view === 'json' && (
+        <section className="surface-card report-json-panel" aria-labelledby="report-json-title">
+          <header>
+            <div>
+              <span className="section-eyebrow">Structured data</span>
+              <h2 id="report-json-title"><FileTextOutlined /> JSON 数据</h2>
+            </div>
+            <p>供技术检查、二次处理与归档使用</p>
+          </header>
+          <pre>{JSON.stringify(report, null, 2)}</pre>
+        </section>
+      )}
+    </main>
   );
 }
