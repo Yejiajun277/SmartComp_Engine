@@ -111,6 +111,18 @@ export function shouldRefreshTerminalQa(event, taskId, refreshedTaskId) {
     && refreshedTaskId !== taskId;
 }
 
+export function shouldAcceptQaArtifactResponse({
+  taskId,
+  activeTaskId,
+  presentationMode,
+  requestGeneration,
+  latestRequestGeneration,
+}) {
+  return activeTaskId === taskId
+    && presentationMode === 'enabled'
+    && requestGeneration === latestRequestGeneration;
+}
+
 export function filterPresentationEvents(events = [], qaDisabled = false) {
   return qaDisabled ? events.filter(event => !event?.type?.startsWith('qa_')) : events;
 }

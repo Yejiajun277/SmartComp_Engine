@@ -26,6 +26,7 @@ import {
   getQaPresentationMode,
   selectTaskArtifactCache,
   selectTaskQaPresentationState,
+  shouldAcceptQaArtifactResponse,
   shouldLoadQaArtifact,
   shouldRefreshTerminalQa,
   updateTaskArtifactCache,
@@ -77,6 +78,7 @@ export default function TaskDetail() {
   const activeTaskIdRef = useRef(taskId);
   const qaLoadAttemptedForRef = useRef(null);
   const qaTerminalRefreshForRef = useRef(null);
+  const qaRequestGenerationRef = useRef(0);
   const qaPresentationModeRef = useRef('pending');
   const currentTaskInfo = taskInfo?.id === taskId ? taskInfo : null;
   const qaPresentationMode = getQaPresentationMode(taskId, currentTaskInfo);
@@ -91,6 +93,7 @@ export default function TaskDetail() {
     activeTaskIdRef.current = taskId;
     qaLoadAttemptedForRef.current = null;
     qaTerminalRefreshForRef.current = null;
+    qaRequestGenerationRef.current += 1;
     queueMicrotask(() => {
       setTaskInfo(null);
       setPersistedQaPresentation(createTaskQaPresentationState(taskId));
@@ -151,9 +154,17 @@ export default function TaskDetail() {
       return Promise.resolve(null);
     }
     qaLoadAttemptedForRef.current = taskId;
+    const requestGeneration = qaRequestGenerationRef.current + 1;
+    qaRequestGenerationRef.current = requestGeneration;
     return getArtifact(taskId, 'qa')
       .then((data) => {
-        if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
+        if (!shouldAcceptQaArtifactResponse({
+          taskId,
+          activeTaskId: activeTaskIdRef.current,
+          presentationMode: qaPresentationModeRef.current,
+          requestGeneration,
+          latestRequestGeneration: qaRequestGenerationRef.current,
+        })) return null;
         const checks = data?.checks || [];
         cacheArtifact('qa', data);
         setPersistedQaPresentation(previous => updateTaskQaPresentationState(previous, taskId, {
@@ -163,7 +174,13 @@ export default function TaskDetail() {
         return data;
       })
       .catch(() => {
-        if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
+        if (!shouldAcceptQaArtifactResponse({
+          taskId,
+          activeTaskId: activeTaskIdRef.current,
+          presentationMode: qaPresentationModeRef.current,
+          requestGeneration,
+          latestRequestGeneration: qaRequestGenerationRef.current,
+        })) return null;
         setPersistedQaPresentation(previous => updateTaskQaPresentationState(previous, taskId, {
           results: [],
           summaries: {},

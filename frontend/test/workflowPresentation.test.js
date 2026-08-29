@@ -196,3 +196,65 @@ test('a completed task forces its final QA refresh only once', () => {
     false,
   );
 });
+
+test('a later terminal QA request rejects an earlier response that resolves out of order', async () => {
+  assert.equal(typeof workflowPresentation.shouldAcceptQaArtifactResponse, 'function');
+
+  const taskId = 'task-current';
+  const renderedChecks = [];
+  let latestRequestGeneration = 1;
+  let resolveNormalRequest;
+  let resolveTerminalRequest;
+  const acceptResponse = (requestGeneration, checks) => {
+    if (workflowPresentation.shouldAcceptQaArtifactResponse({
+      taskId,
+      activeTaskId: taskId,
+      presentationMode: 'enabled',
+      requestGeneration,
+      latestRequestGeneration,
+    })) {
+      renderedChecks.push(checks);
+    }
+  };
+
+  const normalRequest = new Promise((resolve) => {
+    resolveNormalRequest = resolve;
+  }).then(() => acceptResponse(1, ['stale check']));
+
+  latestRequestGeneration = 2;
+  const terminalRequest = new Promise((resolve) => {
+    resolveTerminalRequest = resolve;
+  }).then(() => acceptResponse(2, ['final check']));
+
+  resolveTerminalRequest();
+  await terminalRequest;
+  resolveNormalRequest();
+  await normalRequest;
+
+  assert.deepEqual(renderedChecks, [['final check']]);
+});
+
+test('QA artifact responses require the active task with QA enabled', () => {
+  const request = {
+    taskId: 'task-current',
+    requestGeneration: 4,
+    latestRequestGeneration: 4,
+  };
+
+  assert.equal(
+    workflowPresentation.shouldAcceptQaArtifactResponse({
+      ...request,
+      activeTaskId: 'task-current',
+      presentationMode: 'disabled',
+    }),
+    false,
+  );
+  assert.equal(
+    workflowPresentation.shouldAcceptQaArtifactResponse({
+      ...request,
+      activeTaskId: 'task-next',
+      presentationMode: 'enabled',
+    }),
+    false,
+  );
+});
