@@ -100,9 +100,9 @@ export function getQaPresentationMode(taskId, taskInfo) {
   return taskInfo.skip_qa === true ? 'disabled' : 'enabled';
 }
 
-export function shouldLoadQaArtifact(taskId, taskInfo, attemptedTaskId) {
+export function shouldLoadQaArtifact(taskId, taskInfo, attemptedTaskId, force = false) {
   return getQaPresentationMode(taskId, taskInfo) === 'enabled'
-    && attemptedTaskId !== taskId;
+    && (force || attemptedTaskId !== taskId);
 }
 
 export function filterPresentationEvents(events = [], qaDisabled = false) {

@@ -168,6 +168,7 @@ test('only current task metadata explicitly enabling QA permits an artifact load
   assert.equal(shouldLoadQaArtifact('task-current', currentDisabled, null), false);
   assert.equal(shouldLoadQaArtifact('task-current', currentEnabled, null), true);
   assert.equal(shouldLoadQaArtifact('task-current', currentEnabled, 'task-current'), false);
+  assert.equal(shouldLoadQaArtifact('task-current', currentEnabled, 'task-current', true), true);
 });
 
 test('QA events are omitted from presentation only when QA is disabled', () => {

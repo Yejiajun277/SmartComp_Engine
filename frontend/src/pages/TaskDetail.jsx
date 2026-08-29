@@ -143,8 +143,8 @@ export default function TaskDetail() {
       .catch(() => null);
   }, [cacheArtifact, taskId]);
 
-  const refreshQa = useCallback(() => {
-    if (!shouldLoadQaArtifact(taskId, currentTaskInfo, qaLoadAttemptedForRef.current)) {
+  const refreshQa = useCallback((force = false) => {
+    if (!shouldLoadQaArtifact(taskId, currentTaskInfo, qaLoadAttemptedForRef.current, force)) {
       return Promise.resolve(null);
     }
     qaLoadAttemptedForRef.current = taskId;
@@ -201,7 +201,7 @@ export default function TaskDetail() {
       }
     }
     if (qaPresentationMode === 'enabled' && event.type === 'task_completed') {
-      refreshQa();
+      refreshQa(true);
     }
   }, [events, mergeQaResult, qaPresentationMode, refreshArtifact, refreshQa, taskId]);
 
