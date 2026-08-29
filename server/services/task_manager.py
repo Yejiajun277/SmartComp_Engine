@@ -50,6 +50,7 @@ class TaskManager:
         self._tasks: dict[str, TaskState] = {}
         self._event_bus = event_bus
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._runtime_config_lock = asyncio.Lock()
         self._load_tasks()
 
     def _save_task(self, task: TaskState) -> None:
@@ -172,10 +173,11 @@ class TaskManager:
 
     async def submit(self, product_description: str, max_competitors: int,
                      skip_qa: bool, use_rule_engine: bool = False) -> str:
-        import config as app_config
+        from core.llm_client import check_llm_backend
 
+        llm_backend = check_llm_backend()
         if not use_rule_engine:
-            use_rule_engine = not bool(app_config.MIMO_API_KEY.strip())
+            use_rule_engine = not llm_backend["available"]
 
         task_id = str(uuid.uuid4())[:8]
         task = TaskState(
@@ -184,8 +186,8 @@ class TaskManager:
             max_competitors=max_competitors,
             skip_qa=skip_qa,
             use_rule_engine=use_rule_engine,
-            llm_provider=None if use_rule_engine else app_config.LLM_PROVIDER,
-            llm_model=None if use_rule_engine else app_config.MIMO_MODEL,
+            llm_provider=None if use_rule_engine else llm_backend["provider"],
+            llm_model=None if use_rule_engine else llm_backend["model"],
         )
         self._tasks[task_id] = task
         self._save_task(task)
@@ -252,6 +254,9 @@ class TaskManager:
                 message=f"开始分析: {product_description} [{mode_msg}]",
             ))
 
+            # Agents read execution flags from the process-wide config module.
+            # Serialize this sensitive scope so concurrent tasks cannot flip modes.
+            await self._runtime_config_lock.acquire()
             try:
                 import config as app_config
                 app_config.SKIP_QA = skip_qa
@@ -384,7 +389,10 @@ class TaskManager:
                     message=f"分析失败: {exc}",
                 ))
             finally:
-                self._event_bus.remove_listener(self._on_workflow_event)
+                try:
+                    self._event_bus.remove_listener(self._on_workflow_event)
+                finally:
+                    self._runtime_config_lock.release()
 
     async def _sync_llm_logs_live(self, task: TaskState, orchestrator) -> None:
         """Periodically persist task state to disk while a task is running.

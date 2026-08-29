@@ -71,6 +71,14 @@ test('shows the exact model persisted for a model-backed task', () => {
   });
 });
 
+test('does not invent model details for a pre-metadata task', () => {
+  assert.deepEqual(getTaskModeMeta({ use_rule_engine: false, skip_qa: false }), {
+    executionLabel: '模型信息不可用（旧任务）',
+    qaLabel: 'QualityAgent 已开启',
+    qaTone: 'neutral',
+  });
+});
+
 test('uses persisted task progress until a newer live update arrives', () => {
   assert.equal(resolveTaskProgress('running', 0, 0.42), 42);
   assert.equal(resolveTaskProgress('running', 0.58, 0.42), 58);

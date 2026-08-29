@@ -363,7 +363,7 @@ def check_llm_backend() -> dict:
             "detail": f"未知的LLM_PROVIDER: {config.LLM_PROVIDER}",
         }
 
-    if not config.MIMO_API_KEY:
+    if not config.MIMO_API_KEY.strip():
         return {
             "provider": "mimo",
             "available": False,

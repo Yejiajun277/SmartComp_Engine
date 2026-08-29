@@ -23,7 +23,7 @@ export function getTaskModeMeta(task = {}) {
   const executionLabel = task?.use_rule_engine === true
     ? '规则引擎分析'
     : task?.use_rule_engine === false
-      ? configuredModel || '智能模型分析'
+      ? configuredModel || '模型信息不可用（旧任务）'
       : '执行模式待同步';
   const qaLabel = task?.skip_qa === true
     ? '质量检查已关闭'

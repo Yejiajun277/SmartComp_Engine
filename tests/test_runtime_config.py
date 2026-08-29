@@ -2,7 +2,9 @@
 """Runtime configuration API contract tests."""
 
 import asyncio
+import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
@@ -11,6 +13,7 @@ import config
 from server.main import app
 from server.routers import tasks as tasks_router
 from server.services.event_bus import EventBus
+import server.services.task_manager as task_manager_module
 from server.services.task_manager import TaskManager, TaskState
 
 
@@ -67,6 +70,39 @@ class RuntimeConfigApiTests(unittest.TestCase):
         serialized = response.text.lower()
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("super-secret", serialized)
+
+    def test_normalizes_supported_provider_aliases(self):
+        with (
+            patch.object(config, "MIMO_API_KEY", "configured-placeholder"),
+            patch.object(config, "MIMO_MODEL", "mimo-v2.5-pro"),
+            patch.object(config, "LLM_PROVIDER", "doubao"),
+            TestClient(app) as client,
+        ):
+            response = client.get("/api/runtime")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["llm"], {
+            "configured": True,
+            "provider": "mimo",
+            "model": "mimo-v2.5-pro",
+        })
+        self.assertEqual(response.json()["default_mode"], "model")
+
+    def test_rejects_an_unsupported_provider_even_when_a_key_exists(self):
+        with (
+            patch.object(config, "MIMO_API_KEY", "configured-placeholder"),
+            patch.object(config, "LLM_PROVIDER", "unsupported-provider"),
+            TestClient(app) as client,
+        ):
+            response = client.get("/api/runtime")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["llm"], {
+            "configured": False,
+            "provider": "unsupported-provider",
+            "model": None,
+        })
+        self.assertEqual(response.json()["default_mode"], "rule")
 
 
 class TaskExecutionMetadataTests(unittest.TestCase):
@@ -147,6 +183,105 @@ class TaskSubmissionMetadataTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(task.llm_provider, "mimo")
         self.assertEqual(task.llm_model, "mimo-v2.5-pro")
         run_task.assert_awaited_once()
+
+    async def test_unsupported_provider_forces_rule_mode(self):
+        manager = TaskManager(EventBus())
+        manager._tasks = {}
+
+        with (
+            patch.object(config, "MIMO_API_KEY", "configured-placeholder"),
+            patch.object(config, "LLM_PROVIDER", "unsupported-provider"),
+            patch.object(manager, "_save_task"),
+            patch.object(manager, "_run_task", new_callable=AsyncMock),
+        ):
+            task_id = await manager.submit("飞书", 5, False, False)
+            await asyncio.sleep(0)
+
+        task = manager.get(task_id)
+        self.assertTrue(task.use_rule_engine)
+        self.assertIsNone(task.llm_provider)
+        self.assertIsNone(task.llm_model)
+
+
+class ConcurrentExecutionModeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_opposite_modes_cannot_overwrite_each_others_runtime_config(self):
+        observations = []
+        original_sleep = asyncio.sleep
+
+        class FakeAgent:
+            on_log_added = None
+
+            def format_html_report(self, *args, **kwargs):
+                return "<html></html>"
+
+        class FakeOrchestrator:
+            def __init__(self):
+                self.discovery_agent = FakeAgent()
+                self.collection_agent = FakeAgent()
+                self.dimension_agent = FakeAgent()
+                self.product_agent = FakeAgent()
+                self.pricing_agent = FakeAgent()
+                self.market_agent = FakeAgent()
+                self.strategy_agent = FakeAgent()
+                self.quality_agent = FakeAgent()
+
+            async def analyze(self, product_description, *args, **kwargs):
+                observations.append((
+                    product_description,
+                    "start",
+                    config.ENABLE_LLM,
+                    config.SKIP_QA,
+                ))
+                await original_sleep(0.03)
+                observations.append((
+                    product_description,
+                    "end",
+                    config.ENABLE_LLM,
+                    config.SKIP_QA,
+                ))
+                return object()
+
+            def get_timings(self):
+                return {}
+
+        async def fast_startup_sleep(_delay):
+            await original_sleep(0)
+
+        manager = TaskManager(EventBus(), max_concurrent=2)
+        manager._tasks = {
+            "rule": TaskState("rule", "rule", 5, True, use_rule_engine=True),
+            "model": TaskState(
+                "model",
+                "model",
+                5,
+                False,
+                use_rule_engine=False,
+                llm_provider="mimo",
+                llm_model="mimo-v2.5-pro",
+            ),
+        }
+        fake_module = SimpleNamespace(Orchestrator=FakeOrchestrator)
+
+        with (
+            patch.dict(sys.modules, {"core.orchestrator": fake_module}),
+            patch.object(task_manager_module.asyncio, "sleep", fast_startup_sleep),
+            patch.object(manager, "_save_task"),
+            patch.object(manager._event_bus, "emit", new_callable=AsyncMock),
+            patch.object(manager, "_sync_llm_logs_live", new_callable=AsyncMock),
+            patch.object(config, "ENABLE_LLM", True),
+            patch.object(config, "SKIP_QA", False),
+        ):
+            rule_run = asyncio.create_task(manager._run_task("rule", "rule", 5, True, True))
+            await original_sleep(0.005)
+            model_run = asyncio.create_task(manager._run_task("model", "model", 5, False, False))
+            await asyncio.gather(rule_run, model_run)
+
+        self.assertEqual(observations, [
+            ("rule", "start", False, True),
+            ("rule", "end", False, True),
+            ("model", "start", True, False),
+            ("model", "end", True, False),
+        ])
 
 
 if __name__ == "__main__":
