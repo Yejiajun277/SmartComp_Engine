@@ -1,98 +1,47 @@
-import { Tag } from 'antd';
 import {
-  ClockCircleOutlined,
   CheckCircleOutlined,
-  ExclamationCircleOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
   LoadingOutlined,
+  RedoOutlined,
 } from '@ant-design/icons';
 
-const STATUS_STYLES = {
-  waiting: {
-    label: '未开始',
-    bg: '#f7f7f7',
-    border: '#d9d9d9',
-    icon: <ClockCircleOutlined />,
-    color: '#8c8c8c',
-    tagColor: 'default',
-  },
-  running: {
-    label: '执行中',
-    bg: '#e6f7ff',
-    border: '#1890ff',
-    icon: <LoadingOutlined spin />,
-    color: '#1890ff',
-    tagColor: 'processing',
-  },
-  completed: {
-    label: '已完成',
-    bg: '#f6ffed',
-    border: '#52c41a',
-    icon: <CheckCircleOutlined />,
-    color: '#52c41a',
-    tagColor: 'success',
-  },
-  retrying: {
-    label: '执行中',
-    bg: '#e6f7ff',
-    border: '#1890ff',
-    icon: <LoadingOutlined spin />,
-    color: '#1890ff',
-    tagColor: 'processing',
-  },
-  failed: {
-    label: '失败',
-    bg: '#fff2f0',
-    border: '#ff4d4f',
-    icon: <ExclamationCircleOutlined />,
-    color: '#ff4d4f',
-    tagColor: 'error',
-  },
+const STATUS_META = {
+  waiting: { label: '等待接力', icon: <ClockCircleOutlined /> },
+  running: { label: '正在分析', icon: <LoadingOutlined spin /> },
+  completed: { label: '分析完成', icon: <CheckCircleOutlined /> },
+  retrying: { label: 'QA 打回后重做', icon: <RedoOutlined spin /> },
+  failed: { label: '执行失败', icon: <CloseCircleOutlined /> },
 };
 
-const QA_TAG_COLOR = {
-  passed: 'success',
-  failed: 'error',
-  degraded: 'warning',
-  running: 'processing',
-  none: 'default',
-};
+export default function AgentNode({ label, agent, status = 'waiting', timing, onClick }) {
+  const meta = STATUS_META[status] || STATUS_META.waiting;
 
-export default function AgentNode({ label, agent, status = 'waiting', timing, qaStatus, onClick }) {
-  const s = STATUS_STYLES[status] || STATUS_STYLES.waiting;
-  const qaLabel = qaStatus?.label;
-  const qaColor = QA_TAG_COLOR[qaStatus?.status || 'none'] || 'default';
+  const handleKeyDown = (event) => {
+    if (!onClick || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    onClick();
+  };
 
   return (
-    <div
+    <article
+      className="agent-node"
+      data-status={status}
+      aria-label={`${label}，${agent}，${meta.label}`}
       onClick={onClick}
-      style={{
-        background: s.bg,
-        border: `2px solid ${s.border}`,
-        borderRadius: 12,
-        padding: '12px 16px',
-        cursor: onClick ? 'pointer' : 'default',
-        textAlign: 'center',
-        minWidth: 120,
-        transition: 'all 0.3s',
-        boxShadow: status === 'running' ? `0 0 12px ${s.border}40` : 'none',
-      }}
+      onKeyDown={handleKeyDown}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
-      <div style={{ fontSize: 20, marginBottom: 4, color: s.color }}>{s.icon}</div>
-      <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
-      <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{agent}</div>
-      <div style={{ marginTop: 8 }}>
-        <Tag color={s.tagColor} style={{ marginInlineEnd: 0 }}>
-          状态：{s.label}
-        </Tag>
+      <div className="agent-node-icon" aria-hidden="true">{meta.icon}</div>
+      <div className="agent-node-copy">
+        <strong>{label}</strong>
+        <small>{agent}</small>
       </div>
-      {qaLabel && (
-        <div style={{ marginTop: 8 }}>
-          <Tag color={qaColor} style={{ marginInlineEnd: 0 }}>
-            QA：{qaLabel}
-          </Tag>
-        </div>
-      )}
-      {timing && <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{timing}</div>}
-    </div>
+      <div className="agent-node-state">
+        <span>{meta.label}</span>
+        {timing && <small>{timing}</small>}
+      </div>
+    </article>
   );
 }
