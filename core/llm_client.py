@@ -35,9 +35,23 @@ def _normalize_provider(provider: str) -> str:
     return "mimo" if provider in aliases else provider
 
 
+def _response_format_is_unsupported(status_code: int, result: dict) -> bool:
+    """Detect compatibility errors from endpoints without JSON mode support."""
+    if status_code not in {400, 422}:
+        return False
+    try:
+        detail = json.dumps(result, ensure_ascii=False).lower()
+    except (TypeError, ValueError):
+        detail = str(result).lower()
+    return "response_format" in detail and any(
+        marker in detail
+        for marker in ("unsupported", "not support", "unknown", "unrecognized", "invalid")
+    )
+
+
 def _call_mimo(system_prompt: str, user_message: str,
                temperature: float, max_tokens: int,
-               agent_id: str) -> dict:
+               agent_id: str, json_mode: bool = False) -> dict:
     """调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
     import requests
     global _last_call_error, _last_finish_reason, _last_usage
@@ -63,12 +77,19 @@ def _call_mimo(system_prompt: str, user_message: str,
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    def post_completion():
+        with requests.Session() as session:
+            session.trust_env = config.MIMO_USE_SYSTEM_PROXY
+            return session.post(api_url, headers=headers, json=payload, timeout=300)
 
     for attempt in range(2):
         t0 = time.time()
         try:
             print(f"  [mimo] [{agent_id}] 🔄 调用 mimo (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
-            resp = requests.post(api_url, headers=headers, json=payload, timeout=300)
+            resp = post_completion()
             duration_ms = (time.time() - t0) * 1000
             result = resp.json()
 
@@ -81,6 +102,14 @@ def _call_mimo(system_prompt: str, user_message: str,
                 _last_finish_reason = ""
                 _last_usage = {}
                 print(f"  [mimo] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
+                if (
+                    attempt == 0
+                    and "response_format" in payload
+                    and _response_format_is_unsupported(resp.status_code, result)
+                ):
+                    payload.pop("response_format", None)
+                    print(f"  [mimo] [{agent_id}] ↩️ 当前接口不支持JSON模式，改用文本JSON兼容重试")
+                    continue
                 if attempt == 0:
                     time.sleep(1)
                     continue
@@ -149,7 +178,7 @@ def _call_mimo(system_prompt: str, user_message: str,
 
 async def _async_call_mimo(system_prompt: str, user_message: str,
                            temperature: float, max_tokens: int,
-                           agent_id: str) -> dict:
+                           agent_id: str, json_mode: bool = False) -> dict:
     """异步调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
     import httpx
     import ssl
@@ -182,8 +211,13 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
 
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(
+        timeout=300,
+        trust_env=config.MIMO_USE_SYSTEM_PROXY,
+    ) as client:
         for attempt in range(2):
             t0 = time.time()
             try:
@@ -201,6 +235,14 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
                     _last_finish_reason = ""
                     _last_usage = {}
                     print(f"  [mimo] [{agent_id}] ❌ API错误 (status={resp.status_code}, type={error_type}, code={error_code}): {str(message)[:500]}")
+                    if (
+                        attempt == 0
+                        and "response_format" in payload
+                        and _response_format_is_unsupported(resp.status_code, result)
+                    ):
+                        payload.pop("response_format", None)
+                        print(f"  [mimo] [{agent_id}] ↩️ 当前接口不支持JSON模式，改用文本JSON兼容重试")
+                        continue
                     if attempt == 0:
                         await asyncio.sleep(1)
                         continue
@@ -269,7 +311,7 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
 
 def llm_call(system_prompt: str, user_message: str,
              temperature: float = 0.3, max_tokens: int = 4096,
-             agent_id: str = "") -> dict:
+             agent_id: str = "", json_mode: bool = False) -> dict:
     """统一 LLM 调用入口。返回 dict，包含 content 和元数据。"""
     global _last_call_error
     _call_stats["total"] += 1
@@ -289,7 +331,14 @@ def llm_call(system_prompt: str, user_message: str,
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     try:
-        result = _call_mimo(system_prompt, user_message, temperature, max_tokens, agent_id)
+        result = _call_mimo(
+            system_prompt,
+            user_message,
+            temperature,
+            max_tokens,
+            agent_id,
+            json_mode=json_mode,
+        )
         if result["content"]:
             _call_stats["success"] += 1
             return result
@@ -311,7 +360,7 @@ def llm_call(system_prompt: str, user_message: str,
 
 async def async_llm_call(system_prompt: str, user_message: str,
                          temperature: float = 0.3, max_tokens: int = 4096,
-                         agent_id: str = "") -> dict:
+                         agent_id: str = "", json_mode: bool = False) -> dict:
     """统一异步 LLM 调用入口。返回 dict，包含 content 和元数据。"""
     global _last_call_error
     _call_stats["total"] += 1
@@ -331,7 +380,14 @@ async def async_llm_call(system_prompt: str, user_message: str,
         return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     try:
-        result = await _async_call_mimo(system_prompt, user_message, temperature, max_tokens, agent_id)
+        result = await _async_call_mimo(
+            system_prompt,
+            user_message,
+            temperature,
+            max_tokens,
+            agent_id,
+            json_mode=json_mode,
+        )
         if result["content"]:
             _call_stats["success"] += 1
             return result

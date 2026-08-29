@@ -50,6 +50,18 @@ class DiscoveryAgent(BaseAgent):
         # ── 步骤2: 执行搜索 ──
         search_results = await self._search(keywords)
         self._log(f"   搜索完成，获得{len(search_results)}组结果")
+        if config.ENABLE_LLM:
+            self._raise_if_search_unavailable(search_results)
+            if not self._has_search_content(search_results):
+                product_name = product_description.strip().split("，")[0].split(",")[0]
+                self._log("   ℹ️ 联网搜索成功，但未找到可用竞品")
+                return CompetitorList(
+                    product_name=product_name,
+                    competitors=[],
+                    search_keywords_used=[
+                        item.get("query", "") for item in search_results
+                    ],
+                )
 
         # ── 步骤3: 筛选竞品 ──
         competitor_list = await self._filter_competitors(
@@ -61,6 +73,30 @@ class DiscoveryAgent(BaseAgent):
             self._log(f"   • {c.name} ({c.relevance}): {c.brief[:40]}...")
 
         return competitor_list
+
+    @staticmethod
+    def _has_search_content(search_results: list[dict]) -> bool:
+        return any(
+            SearchClient.extract_text(item.get("result"))
+            for item in search_results
+            if item.get("result")
+        )
+
+    @classmethod
+    def _raise_if_search_unavailable(cls, search_results: list[dict]) -> None:
+        """阻止系统用占位竞品掩盖联网搜索的系统性故障。"""
+        if cls._has_search_content(search_results):
+            return
+        if any(not str(item.get("error", "")).strip() for item in search_results):
+            return
+
+        errors = [
+            str(item.get("error", "")).strip()
+            for item in search_results
+            if str(item.get("error", "")).strip()
+        ]
+        detail = errors[0][:240] if errors else "搜索服务未返回有效内容"
+        raise RuntimeError(f"联网搜索全部失败，无法发现真实竞品：{detail}")
 
     async def _generate_keywords(self, product_description: str) -> list[str]:
         """生成搜索关键词（LLM + 规则引擎降级）"""

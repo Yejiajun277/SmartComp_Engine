@@ -39,14 +39,15 @@ class BaseAgent(ABC):
 
     def ask_llm(self, user_message: str,
                 temperature: float = None,
-                max_tokens: int = None) -> str:
+                max_tokens: int = None,
+                json_mode: bool = False) -> str:
         """调用LLM做决策"""
         temp = temperature if temperature is not None else config.LLM_TEMPERATURE
         tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
 
         result = llm_call(self.system_prompt, user_message,
                           temperature=temp, max_tokens=tokens,
-                          agent_id=self.agent_id)
+                          agent_id=self.agent_id, json_mode=json_mode)
 
         content = result.get("content", "") if isinstance(result, dict) else (result or "")
         usage = result.get("usage", {}) if isinstance(result, dict) else {}
@@ -85,7 +86,12 @@ class BaseAgent(ABC):
                      temperature: float = None,
                      max_tokens: int = None) -> dict:
         """调用LLM并解析JSON返回"""
-        text = self.ask_llm(user_message, temperature, max_tokens)
+        text = self.ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -100,7 +106,12 @@ class BaseAgent(ABC):
                                  temperature: float = None,
                                  max_tokens: int = None) -> tuple[dict, str]:
         """调用LLM并解析JSON返回，附带失败原因"""
-        text = self.ask_llm(user_message, temperature, max_tokens)
+        text = self.ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -116,14 +127,15 @@ class BaseAgent(ABC):
 
     async def async_ask_llm(self, user_message: str,
                             temperature: float = None,
-                            max_tokens: int = None) -> str:
+                            max_tokens: int = None,
+                            json_mode: bool = False) -> str:
         """异步调用LLM做决策"""
         temp = temperature if temperature is not None else config.LLM_TEMPERATURE
         tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
 
         result = await async_llm_call(self.system_prompt, user_message,
                                       temperature=temp, max_tokens=tokens,
-                                      agent_id=self.agent_id)
+                                      agent_id=self.agent_id, json_mode=json_mode)
 
         content = result.get("content", "") if isinstance(result, dict) else (result or "")
 
@@ -157,7 +169,12 @@ class BaseAgent(ABC):
                                  temperature: float = None,
                                  max_tokens: int = None) -> dict:
         """异步调用LLM并解析JSON返回"""
-        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        text = await self.async_ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -171,7 +188,12 @@ class BaseAgent(ABC):
                                              temperature: float = None,
                                              max_tokens: int = None) -> tuple[dict, str]:
         """异步调用LLM并解析JSON返回，附带失败原因"""
-        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        text = await self.async_ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -188,7 +210,12 @@ class BaseAgent(ABC):
                                                         temperature: float = None,
                                                         max_tokens: int = None) -> tuple[dict, bool]:
         """异步调用LLM并解析JSON，同时检测输出是否被截断。"""
-        text = await self.async_ask_llm(user_message, temperature, max_tokens)
+        text = await self.async_ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         truncated = is_last_call_truncated()
 
         if text:
@@ -218,7 +245,12 @@ class BaseAgent(ABC):
             - parsed_dict: 解析成功返回dict，失败返回{}
             - was_truncated: True 表示 finish_reason=='length'，输出被截断
         """
-        text = self.ask_llm(user_message, temperature, max_tokens)
+        text = self.ask_llm(
+            user_message,
+            temperature,
+            max_tokens,
+            json_mode=True,
+        )
         truncated = is_last_call_truncated()
 
         if text:

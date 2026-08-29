@@ -176,6 +176,7 @@ def strategy_report():
                 action="Strengthen integrated workflow messaging.",
                 timeline="2 weeks",
                 expected_impact="Clearer differentiation",
+                citations=["CompA:source:1"],
             ),
             ActionItem(
                 priority="P1",
@@ -237,6 +238,9 @@ class FakeCollectionAgent:
         self.target_calls.append((product_description, product_name, feedback))
         return target_data()
 
+    async def async_collect_target_product(self, product_description, product_name, feedback=""):
+        return self.collect_target_product(product_description, product_name, feedback)
+
     async def run(self, product_description, competitors, feedback=""):
         self.run_feedbacks.append(feedback)
         return {c.name: competitor_data(c.name) for c in competitors.competitors}
@@ -247,6 +251,9 @@ class FakeCollectionAgent:
     def supplement_missing_fields(self, product_name, competitors_data, missing_fields):
         self.supplement_calls.append((product_name, dict(missing_fields)))
         return competitors_data
+
+    async def async_supplement_missing_fields(self, product_name, competitors_data, missing_fields):
+        return self.supplement_missing_fields(product_name, competitors_data, missing_fields)
 
 
 class FakeDimensionAgent:
@@ -364,6 +371,9 @@ class FakeQualityAgent:
         feedback = f"feedback:{result.phase}:{result.target_agent}:{result.attempt}"
         self.feedback_requests.append(feedback)
         return feedback
+
+    async def async_build_feedback(self, result):
+        return self.build_feedback(result)
 
     def extract_missing_fields(self, result, competitors_data=None):
         return dict(self.missing_fields)

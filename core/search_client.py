@@ -21,29 +21,74 @@ class SearchClient:
         self.recency = recency
         self.search_logs: list[dict] = []
 
+    @staticmethod
+    def _is_transient_error(error: Exception) -> bool:
+        """Return whether retrying a failed Tavily request can plausibly help."""
+        try:
+            import requests
+
+            if isinstance(
+                error,
+                (requests.exceptions.ConnectionError, requests.exceptions.Timeout),
+            ):
+                return True
+        except ImportError:
+            pass
+
+        if isinstance(error, (ConnectionError, TimeoutError)):
+            return True
+        if type(error).__name__ in {
+            "ConnectError",
+            "ConnectTimeout",
+            "ReadTimeout",
+            "RemoteProtocolError",
+            "SSLError",
+            "TimeoutError",
+        }:
+            return True
+
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code is None:
+            status_code = getattr(error, "status_code", None)
+        return isinstance(status_code, int) and (
+            status_code in {408, 425} or status_code >= 500
+        )
+
     def search(self, query: str, recency: str | None = None) -> dict:
         """
         执行一次联网搜索，并兼容旧的返回结构。
         """
-        if not self.api_key:
-            raise RuntimeError("TAVILY_API_KEY 未配置，无法执行联网搜索")
-
-        from tavily import TavilyClient
         from datetime import datetime
-
-        client = TavilyClient(api_key=self.api_key)
-
-        # 将 recency 映射为 Tavily 的 days 参数
-        days = self._recency_to_days(recency or self.recency)
 
         t0 = time.time()
         try:
-            response = client.search(
-                query=query,
-                max_results=5,
-                search_depth="advanced",
-                days=days,
-            )
+            if not self.api_key:
+                raise RuntimeError("TAVILY_API_KEY 未配置，无法执行联网搜索")
+
+            from tavily import TavilyClient
+
+            client = TavilyClient(api_key=self.api_key)
+
+            # 将 recency 映射为 Tavily 的 days 参数
+            days = self._recency_to_days(recency or self.recency)
+            for attempt in range(2):
+                try:
+                    response = client.search(
+                        query=query,
+                        max_results=5,
+                        search_depth="advanced",
+                        days=days,
+                    )
+                    break
+                except Exception as exc:
+                    if attempt == 1 or not self._is_transient_error(exc):
+                        raise
+                    print(
+                        "  [SearchClient] 搜索请求瞬时失败，0.5秒后重试: "
+                        f"{type(exc).__name__}: {str(exc)[:120]}"
+                    )
+                    time.sleep(0.5)
             duration_ms = (time.time() - t0) * 1000
             result = self._normalize_response(response)
             refs = result.get("references", [])
@@ -117,9 +162,6 @@ class SearchClient:
         """
         异步执行一次联网搜索（在线程池中运行同步 Tavily 客户端）。
         """
-        if not self.api_key:
-            raise RuntimeError("TAVILY_API_KEY 未配置，无法执行联网搜索")
-
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: self.search(query, recency))
 

@@ -244,6 +244,15 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(orch.discovery_agent.calls, 2)
 
+    async def test_node_retry_error_includes_the_root_cause(self):
+        nodes = AnalysisGraphNodes(make_orchestrator(), node_retries=0)
+
+        async def fail_with_search_error():
+            raise RuntimeError("TAVILY_API_KEY 未配置")
+
+        with self.assertRaisesRegex(RuntimeError, "TAVILY_API_KEY 未配置"):
+            await nodes._retry_node("discover_competitors", fail_with_search_error)
+
     async def test_collection_quality_excessive_hallucination_event_does_not_crash(self):
         orch = make_orchestrator()
         orch.quality_agent = ExcessiveHallucinationQualityAgent()

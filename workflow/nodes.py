@@ -65,7 +65,12 @@ class AnalysisGraphNodes:
                     break
                 await asyncio.sleep(min(0.2 * (attempt + 1), 1.0))
         assert last_error is not None
-        raise RuntimeError(f"node '{name}' failed after {self.node_retries + 1} attempts") from last_error
+        detail = str(last_error).strip().replace("\r", " ").replace("\n", " ")
+        detail = detail[:500] or type(last_error).__name__
+        raise RuntimeError(
+            f"node '{name}' failed after {self.node_retries + 1} attempts: "
+            f"{type(last_error).__name__}: {detail}"
+        ) from last_error
 
     async def _emit(self, state: AnalysisState, event_type, agent: str, phase: str,
                     progress: float = 0.0, message: str = "", data: dict = None) -> None:

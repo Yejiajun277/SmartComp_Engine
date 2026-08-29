@@ -42,6 +42,10 @@ MIMO_MODEL = os.environ.get(
     "MIMO_MODEL",
     "mimo-v2.5-pro",
 )
+MIMO_USE_SYSTEM_PROXY = os.environ.get(
+    "MIMO_USE_SYSTEM_PROXY",
+    "false",
+).lower() in {"1", "true", "yes", "on"}
 
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
