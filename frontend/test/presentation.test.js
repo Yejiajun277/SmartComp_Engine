@@ -30,3 +30,12 @@ test('formats elapsed seconds and event labels', () => {
     /MarketAgent/,
   );
 });
+
+test('keeps server task order and appends unmatched local tasks', () => {
+  const result = mergeTasks(
+    [{ id: 'new', status: 'running' }, { id: 'old', status: 'completed' }],
+    [{ id: 'local', status: 'pending' }, { id: 'old', status: 'pending' }],
+  );
+
+  assert.deepEqual(result.map(item => item.id), ['new', 'old', 'local']);
+});

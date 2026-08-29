@@ -12,15 +12,15 @@ export default function App() {
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#55d9ff',
-          colorInfo: '#55d9ff',
-          colorSuccess: '#62e6b1',
-          colorWarning: '#ffbd59',
-          colorError: '#ff6b72',
-          colorBgBase: '#050b14',
-          colorTextBase: '#f4f8ff',
+          colorPrimary: '#176bff',
+          colorInfo: '#176bff',
+          colorSuccess: '#0aa886',
+          colorWarning: '#d88915',
+          colorError: '#e5484d',
+          colorBgBase: '#f5f7f8',
+          colorTextBase: '#111827',
           borderRadius: 12,
           fontFamily: "Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
         },
@@ -35,10 +35,6 @@ export default function App() {
             <nav className="primary-nav" aria-label="主导航">
               <NavLink to="/" end>分析中心</NavLink>
             </nav>
-            <span className="mode-pill">
-              <span className="mode-dot" aria-hidden="true" />
-              教学 / 比赛模式
-            </span>
           </Header>
           <Content className="app-content">
             <Routes>

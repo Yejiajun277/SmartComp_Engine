@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-competition-ui-design.md`
 
+**User feedback override (2026-08-29):** Render this as a normal product, with no “教学 / 比赛模式” label. Replace the originally planned full dark command-center palette with a light, spacious strategy-studio system: mist background, white reading surfaces, ink typography, electric blue/green state accents, and one restrained dark launcher surface. This override takes precedence over dark palette snippets below.
+
 ## Global Constraints
 
 - Baseline is commit `5236690` from `final_work`; do not merge `newest`.

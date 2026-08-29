@@ -14,18 +14,23 @@ export function getTaskStatusMeta(status) {
 }
 
 export function mergeTasks(serverTasks = [], recentTasks = []) {
-  const mergedById = new Map();
+  const recentById = new Map(
+    recentTasks.filter(task => task?.id).map(task => [task.id, task]),
+  );
+  const serverIds = new Set();
 
-  recentTasks.forEach((task) => {
-    if (task?.id) mergedById.set(task.id, { ...task });
-  });
+  const authoritativeTasks = serverTasks
+    .filter(task => task?.id)
+    .map((task) => {
+      serverIds.add(task.id);
+      return { ...(recentById.get(task.id) || {}), ...task };
+    });
 
-  serverTasks.forEach((task) => {
-    if (!task?.id) return;
-    mergedById.set(task.id, { ...(mergedById.get(task.id) || {}), ...task });
-  });
+  const localOnlyTasks = recentTasks
+    .filter(task => task?.id && !serverIds.has(task.id))
+    .map(task => ({ ...task }));
 
-  return Array.from(mergedById.values());
+  return [...authoritativeTasks, ...localOnlyTasks];
 }
 
 export function formatElapsed(startedAt, finishedAt) {

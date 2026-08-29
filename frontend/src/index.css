@@ -6,8 +6,8 @@
 
 html {
   min-width: 320px;
-  color-scheme: dark;
-  background: #050b14;
+  color-scheme: light;
+  background: #f4f7f7;
   font-family: Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,8 +17,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  color: #f4f8ff;
-  background: #050b14;
+  overflow-x: hidden;
+  color: #111827;
+  background: #f4f7f7;
 }
 
 button,
@@ -40,12 +41,12 @@ svg {
 }
 
 ::selection {
-  color: #031019;
-  background: #55d9ff;
+  color: #ffffff;
+  background: #176bff;
 }
 
 :focus-visible {
-  outline: 2px solid #55d9ff;
+  outline: 2px solid #176bff;
   outline-offset: 3px;
 }
 
