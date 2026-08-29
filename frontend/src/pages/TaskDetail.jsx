@@ -18,22 +18,19 @@ import QATimeline from '../components/QATimeline';
 import LiveActivityRail from '../components/workbench/LiveActivityRail';
 import QualityCockpit from '../components/workbench/QualityCockpit';
 import QualityDisabledNotice from '../components/workbench/QualityDisabledNotice';
-import { filterPresentationEvents, getQaPresentationMode } from '../utils/workflowPresentation';
-import { mergeQaSummaries } from '../utils/taskEvents';
+import {
+  filterPresentationEvents,
+  getQaPresentationMode,
+  normalizeNodeStateForTask,
+  shouldLoadQaArtifact,
+} from '../utils/workflowPresentation';
+import { buildQaSummaries, mergeQaSummaries } from '../utils/taskEvents';
 import {
   getTaskModeMeta,
   getTaskStatusMeta,
   resolveTaskProgress,
   resolveTaskStatus,
 } from '../utils/presentation';
-
-const QA_PHASE_TO_NODE = {
-  collection: 'collection',
-  product: 'product_analysis',
-  pricing: 'pricing_analysis',
-  market: 'market_analysis',
-  strategy: 'strategy',
-};
 
 const AGENT_TO_PHASE = {
   DiscoveryAgent: 'discovery',
@@ -44,47 +41,6 @@ const AGENT_TO_PHASE = {
   MarketAgent: 'market_analysis',
   StrategyAgent: 'strategy',
 };
-
-function summarizeQaChecks(checks = []) {
-  const summaries = {};
-
-  checks.forEach((check) => {
-    const nodeKey = QA_PHASE_TO_NODE[check.phase];
-    if (!nodeKey) return;
-
-    const current = summaries[nodeKey] || { retryCount: 0 };
-    if (check.running) {
-      summaries[nodeKey] = {
-        ...current,
-        phase: check.phase,
-        label: '质检中',
-        status: 'running',
-        score: check.score,
-      };
-      return;
-    }
-
-    const retryCount = current.retryCount + (
-      check.passed === false && !check.degraded ? 1 : 0
-    );
-    const status = check.degraded ? 'degraded' : check.passed ? 'passed' : 'failed';
-    const label = check.degraded
-      ? `降级通过 · 打回 ${retryCount} 次`
-      : check.passed
-        ? `通过${check.score != null ? ` · ${Math.round(check.score)} 分` : ''}`
-        : `未通过 · 打回 ${retryCount} 次`;
-
-    summaries[nodeKey] = {
-      phase: check.phase,
-      label,
-      status,
-      score: check.score,
-      retryCount,
-    };
-  });
-
-  return summaries;
-}
 
 export default function TaskDetail() {
   const { taskId } = useParams();
@@ -183,7 +139,7 @@ export default function TaskDetail() {
   }, [cacheArtifact, taskId]);
 
   const refreshQa = useCallback(() => {
-    if (qaPresentationMode !== 'enabled' || qaLoadAttemptedForRef.current === taskId) {
+    if (!shouldLoadQaArtifact(taskId, currentTaskInfo, qaLoadAttemptedForRef.current)) {
       return Promise.resolve(null);
     }
     qaLoadAttemptedForRef.current = taskId;
@@ -193,7 +149,7 @@ export default function TaskDetail() {
         const checks = data?.checks || [];
         cacheArtifact('qa', data);
         setPersistedQaResults(checks);
-        setPersistedQaSummaries(summarizeQaChecks(checks));
+        setPersistedQaSummaries(buildQaSummaries(checks));
         return data;
       })
       .catch(() => {
@@ -202,7 +158,7 @@ export default function TaskDetail() {
         setPersistedQaSummaries({});
         return null;
       });
-  }, [cacheArtifact, qaPresentationMode, taskId]);
+  }, [cacheArtifact, currentTaskInfo, taskId]);
 
   useEffect(() => {
     loadTaskInfo();
@@ -253,7 +209,13 @@ export default function TaskDetail() {
     ? artifactCache.qa.checks
     : timelineQaResults;
   const presentationEvents = filterPresentationEvents(events, qaPresentationBlocked);
-  const graphNodeStates = { ...nodeStates };
+  const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
+  const graphNodeStates = Object.fromEntries(
+    Object.entries(nodeStates).map(([phase, state]) => [
+      phase,
+      normalizeNodeStateForTask(state, resolvedTaskStatus),
+    ]),
+  );
   const currentPhase = AGENT_TO_PHASE[currentTaskInfo?.current_agent];
 
   if (
@@ -265,7 +227,6 @@ export default function TaskDetail() {
     graphNodeStates[currentPhase] = 'running';
   }
 
-  const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
   const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
   const taskModeMeta = getTaskModeMeta(currentTaskInfo);
   const progressPercent = resolveTaskProgress(

@@ -18,12 +18,18 @@ function isTerminalQaSummary(summary = {}) {
 }
 
 function hasHigherAttempt(live = {}, persisted = {}) {
-  const liveAttempt = Number(live.attempt);
-  const persistedAttempt = Number(persisted.attempt);
+  const liveAttempt = getKnownAttempt(live.attempt);
+  const persistedAttempt = getKnownAttempt(persisted.attempt);
 
-  return Number.isFinite(liveAttempt)
-    && Number.isFinite(persistedAttempt)
+  return liveAttempt !== null
+    && persistedAttempt !== null
     && liveAttempt > persistedAttempt;
+}
+
+function getKnownAttempt(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const attempt = Number(value);
+  return Number.isFinite(attempt) ? attempt : null;
 }
 
 export function mergeQaSummaries(persisted = {}, live = {}) {
@@ -81,4 +87,57 @@ export function appendUniqueEvent(events = [], incoming) {
 
   const isReplay = events.some(event => getEventIdentity(event) === incomingIdentity);
   return isReplay ? events : [...events, incoming];
+}
+const QA_PHASE_TO_NODE = {
+  collection: 'collection',
+  product: 'product_analysis',
+  pricing: 'pricing_analysis',
+  market: 'market_analysis',
+  strategy: 'strategy',
+};
+
+export function buildQaSummaries(results = []) {
+  const summaries = {};
+
+  results.forEach((result) => {
+    const nodeKey = QA_PHASE_TO_NODE[result?.phase];
+    if (!nodeKey) return;
+
+    const current = summaries[nodeKey] || { retryCount: 0, checks: [] };
+    const checks = [...current.checks, result];
+    if (result.running) {
+      summaries[nodeKey] = {
+        phase: result.phase,
+        label: '质检中',
+        status: 'running',
+        score: result.score,
+        attempt: result.attempt,
+        retryCount: current.retryCount,
+        checks,
+      };
+      return;
+    }
+
+    const retryCount = current.retryCount + (
+      result.passed === false && !result.degraded ? 1 : 0
+    );
+    const status = result.degraded ? 'degraded' : result.passed ? 'passed' : 'failed';
+    const label = result.degraded
+      ? `降级通过 · 打回 ${retryCount} 次`
+      : result.passed
+        ? `通过${result.score != null ? ` · ${Math.round(result.score)} 分` : ''}`
+        : `未通过 · 打回 ${retryCount} 次`;
+
+    summaries[nodeKey] = {
+      phase: result.phase,
+      label,
+      status,
+      score: result.score,
+      attempt: result.attempt,
+      retryCount,
+      checks,
+    };
+  });
+
+  return summaries;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Collapse, Drawer, Spin, Tabs, Typography } from 'antd';
 import { getArtifact } from '../api/client';
+import { selectTaskScopedArtifact, selectTaskScopedQaArtifact } from '../utils/workflowPresentation';
 import QATimeline from './QATimeline';
 
 const { Text } = Typography;
@@ -162,8 +163,8 @@ export default function AgentDetail({
   qaDisabled = false,
   onArtifactLoaded,
 }) {
-  const [loadedArtifact, setLoadedArtifact] = useState({ phase: null, data: null });
-  const [loadedQaData, setLoadedQaData] = useState(null);
+  const [loadedArtifact, setLoadedArtifact] = useState({ taskId: null, phase: null, data: null });
+  const [loadedQaData, setLoadedQaData] = useState({ taskId: null, data: null });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -181,18 +182,20 @@ export default function AgentDetail({
     let cancelled = false;
     Promise.resolve()
       .then(() => {
-        if (!cancelled) setLoading(true);
+        if (cancelled) return null;
+        setLoading(true);
         return Promise.allSettled([
           needsArtifact ? getArtifact(taskId, phase) : Promise.resolve(artifactData),
           needsQa ? getArtifact(taskId, 'qa') : Promise.resolve(qaArtifactData),
         ]);
       })
-      .then(([artifactResult, qaResult]) => {
-        if (cancelled) return;
+      .then((results) => {
+        if (cancelled || !results) return;
+        const [artifactResult, qaResult] = results;
         const nextData = artifactResult.status === 'fulfilled' ? artifactResult.value : null;
         const nextQaData = qaResult.status === 'fulfilled' ? qaResult.value : null;
-        setLoadedArtifact({ phase, data: nextData });
-        setLoadedQaData(nextQaData);
+        setLoadedArtifact({ taskId, phase, data: nextData });
+        setLoadedQaData({ taskId, data: nextQaData });
         if (nextData) onArtifactLoaded?.(phase, nextData);
         if (nextQaData) onArtifactLoaded?.('qa', nextQaData);
       })
@@ -207,8 +210,10 @@ export default function AgentDetail({
 
   const displayData = artifactData !== undefined
     ? artifactData
-    : loadedArtifact.phase === phase ? loadedArtifact.data : null;
-  const displayQaData = qaDisabled ? null : (qaArtifactData !== undefined ? qaArtifactData : loadedQaData);
+    : selectTaskScopedArtifact(loadedArtifact, taskId, phase);
+  const displayQaData = qaDisabled
+    ? null
+    : (qaArtifactData !== undefined ? qaArtifactData : selectTaskScopedQaArtifact(loadedQaData, taskId));
   const qaChecks = qaDisabled ? [] : getQaChecks(displayQaData, phase);
   const emptyText = nodeStatus === 'running'
     ? 'Agent 执行中，完成后会自动显示阶段结论'

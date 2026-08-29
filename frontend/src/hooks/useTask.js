@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { appendUniqueEvent, upsertQaResult } from '../utils/taskEvents';
+import { appendUniqueEvent, buildQaSummaries, upsertQaResult } from '../utils/taskEvents';
 
 const AGENT_PHASE_MAP = {
   discovery: { label: '竞品发现', agent: 'DiscoveryAgent' },
@@ -29,47 +29,6 @@ const QA_PHASE_TO_NODE = {
   market: 'market_analysis',
   strategy: 'strategy',
 };
-
-function summarizeQaResults(results) {
-  const summaries = {};
-
-  results.forEach((result) => {
-    const phase = result.phase;
-    const nodeKey = QA_PHASE_TO_NODE[phase];
-    if (!nodeKey) return;
-
-    const current = summaries[nodeKey] || { retryCount: 0, checks: [] };
-    if (result.running) {
-      summaries[nodeKey] = {
-        phase,
-        label: '质检中',
-        status: 'running',
-        score: result.score,
-        retryCount: current.retryCount,
-        checks: [...current.checks, result],
-      };
-      return;
-    }
-
-    const failedCount = current.retryCount + (result.passed ? 0 : 1);
-    const label = result.degraded
-      ? `降级通过，打回 ${failedCount} 次`
-      : result.passed
-        ? `通过${result.score != null ? ` ${Math.round(result.score)}分` : ''}`
-        : `未通过，打回 ${failedCount} 次`;
-
-    summaries[nodeKey] = {
-      phase,
-      label,
-      status: result.degraded ? 'degraded' : result.passed ? 'passed' : 'failed',
-      score: result.score,
-      retryCount: failedCount,
-      checks: [...current.checks, result],
-    };
-  });
-
-  return summaries;
-}
 
 function normalizeQaResult(event) {
   const fromPayload = event.data?.qa_result;
@@ -185,7 +144,7 @@ export function useTask() {
     progress,
     currentMessage,
     qaResults,
-    qaSummaries: summarizeQaResults(qaResults),
+    qaSummaries: buildQaSummaries(qaResults),
     taskStatus,
     llmLogsKey,
     handleEvent,

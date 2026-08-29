@@ -8,19 +8,30 @@ export function deriveStageStatus(
   if (taskStatus === 'completed' && !checkpointHasRisk) return 'completed';
   const states = agentKeys.map(key => nodeStates[key] || 'waiting');
   if (states.includes('failed')) return 'failed';
+  if (checkpointStatus === 'failed') return 'failed';
+  if (checkpointStatus === 'degraded') return 'degraded';
+  if (checkpointStatus === 'running') return 'running';
   if (states.includes('retrying')) return 'retrying';
   if (states.includes('running')) return 'running';
   const agentStatus = states.length > 0 && states.every(state => state === 'completed')
     ? 'completed'
     : 'waiting';
-
-  if (checkpointStatus === 'disabled' || checkpointStatus === 'waiting' || checkpointStatus === 'passed') {
-    return agentStatus;
-  }
-  if (checkpointStatus === 'failed') return 'failed';
-  if (checkpointStatus === 'degraded') return 'degraded';
-  if (checkpointStatus === 'running') return 'running';
   return agentStatus;
+}
+
+export function normalizeNodeStateForTask(nodeState = 'waiting', taskStatus) {
+  if (taskStatus !== 'completed') return nodeState;
+  return nodeState === 'failed' ? 'failed' : 'completed';
+}
+
+export function selectTaskScopedArtifact(artifact, taskId, phase) {
+  if (!artifact || artifact.taskId !== taskId || artifact.phase !== phase) return null;
+  return artifact.data;
+}
+
+export function selectTaskScopedQaArtifact(artifact, taskId) {
+  if (!artifact || artifact.taskId !== taskId) return null;
+  return artifact.data;
 }
 
 export function getQaPresentationMode(taskId, taskInfo) {

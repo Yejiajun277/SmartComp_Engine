@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendUniqueEvent,
+  buildQaSummaries,
   mergeQaSummaries,
   upsertQaResult,
 } from '../src/utils/taskEvents.js';
@@ -57,4 +58,31 @@ test('persisted terminal QA does not regress to a replayed start from the same a
   );
 
   assert.equal(result.strategy.status, 'passed');
+});
+
+test('a higher live QA attempt replaces a persisted terminal summary', () => {
+  const persisted = buildQaSummaries([
+    { phase: 'collection', attempt: 1, passed: true, score: 90 },
+  ]);
+  const live = buildQaSummaries([
+    { phase: 'collection', attempt: 2, running: true },
+  ]);
+
+  const merged = mergeQaSummaries(persisted, live);
+
+  assert.equal(merged.collection.status, 'running');
+  assert.equal(merged.collection.attempt, 2);
+});
+
+test('same or unknown QA attempts cannot downgrade a persisted terminal summary', () => {
+  const persisted = buildQaSummaries([
+    { phase: 'strategy', attempt: 1, passed: true },
+  ]);
+
+  [1, undefined, null, ''].forEach((attempt) => {
+    const live = buildQaSummaries([{ phase: 'strategy', attempt, running: true }]);
+    const merged = mergeQaSummaries(persisted, live);
+    assert.equal(merged.strategy.status, 'passed');
+    assert.equal(merged.strategy.attempt, 1);
+  });
 });
