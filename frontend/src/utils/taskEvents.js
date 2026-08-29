@@ -7,6 +7,11 @@ function getQaAttemptKey(result = {}) {
   ].join('::');
 }
 
+export function shouldAcceptTaskEvent(event, taskId, connectionClosed = false) {
+  if (connectionClosed || !taskId || !event || event.type === 'ping') return false;
+  return event.task_id === taskId;
+}
+
 function getQaResultRank(result = {}) {
   if (result.running) return 0;
   if (result.degraded || result.passed) return 2;

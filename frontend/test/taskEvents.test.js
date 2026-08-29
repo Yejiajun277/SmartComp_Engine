@@ -4,8 +4,19 @@ import {
   appendUniqueEvent,
   buildQaSummaries,
   mergeQaSummaries,
+  shouldAcceptTaskEvent,
   upsertQaResult,
 } from '../src/utils/taskEvents.js';
+
+test('accepts websocket events only for the active task and an open connection', () => {
+  const currentEvent = { task_id: 'task-current', type: 'qa_check_passed' };
+
+  assert.equal(shouldAcceptTaskEvent(currentEvent, 'task-current', false), true);
+  assert.equal(shouldAcceptTaskEvent(currentEvent, 'task-previous', false), false);
+  assert.equal(shouldAcceptTaskEvent(currentEvent, 'task-current', true), false);
+  assert.equal(shouldAcceptTaskEvent({ type: 'qa_check_passed' }, 'task-current', false), false);
+  assert.equal(shouldAcceptTaskEvent({ type: 'ping' }, 'task-current', false), false);
+});
 
 test('replaces a failed QA attempt with its degraded final state', () => {
   const failed = { phase: 'strategy', attempt: 3, passed: false, degraded: false };

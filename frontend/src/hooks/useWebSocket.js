@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { shouldAcceptTaskEvent } from '../utils/taskEvents';
 
 export function useWebSocket(taskId, onEvent) {
   const wsRef = useRef(null);
@@ -31,7 +32,7 @@ export function useWebSocket(taskId, onEvent) {
       ws.onmessage = (msg) => {
         try {
           const event = JSON.parse(msg.data);
-          if (event.type === 'ping') return;
+          if (!shouldAcceptTaskEvent(event, taskId, closed)) return;
           console.log('[WS] received:', event.type, event.agent, event.phase);
           onEventRef.current?.(event);
           // Stop reconnecting once task reaches terminal state
@@ -44,8 +45,9 @@ export function useWebSocket(taskId, onEvent) {
       };
 
       ws.onclose = () => {
+        if (closed) return;
         setConnected(false);
-        if (!closed && !finished) {
+        if (!finished) {
           setTimeout(connect, 2000);
         }
       };

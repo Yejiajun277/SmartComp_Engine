@@ -30,7 +30,7 @@ import {
   updateTaskArtifactCache,
   updateTaskQaPresentationState,
 } from '../utils/workflowPresentation';
-import { buildQaSummaries, mergeQaSummaries } from '../utils/taskEvents';
+import { buildQaSummaries, mergeQaSummaries, shouldAcceptTaskEvent } from '../utils/taskEvents';
 import {
   getTaskModeMeta,
   getTaskStatusMeta,
@@ -186,7 +186,7 @@ export default function TaskDetail() {
 
   useEffect(() => {
     const event = events[events.length - 1];
-    if (!event) return;
+    if (!shouldAcceptTaskEvent(event, taskId)) return;
     if (qaPresentationMode === 'pending') return;
 
     if (event.type === 'agent_completed') {
@@ -203,7 +203,7 @@ export default function TaskDetail() {
     if (qaPresentationMode === 'enabled' && event.type === 'task_completed') {
       refreshQa();
     }
-  }, [events, mergeQaResult, qaPresentationMode, refreshArtifact, refreshQa]);
+  }, [events, mergeQaResult, qaPresentationMode, refreshArtifact, refreshQa, taskId]);
 
   const handleNodeClick = (phase) => {
     setSelectedPhase(phase);
