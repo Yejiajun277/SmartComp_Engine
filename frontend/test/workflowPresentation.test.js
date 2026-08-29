@@ -258,3 +258,24 @@ test('QA artifact responses require the active task with QA enabled', () => {
     false,
   );
 });
+
+test('a detail drawer requests a missing QA artifact only through the parent refresh path', () => {
+  assert.equal(typeof workflowPresentation.shouldRequestQaArtifactFromParent, 'function');
+
+  assert.equal(
+    workflowPresentation.shouldRequestQaArtifactFromParent(false, undefined, () => null),
+    true,
+  );
+  assert.equal(
+    workflowPresentation.shouldRequestQaArtifactFromParent(true, undefined, () => null),
+    false,
+  );
+  assert.equal(
+    workflowPresentation.shouldRequestQaArtifactFromParent(false, { checks: [] }, () => null),
+    false,
+  );
+  assert.equal(
+    workflowPresentation.shouldRequestQaArtifactFromParent(false, undefined, undefined),
+    false,
+  );
+});

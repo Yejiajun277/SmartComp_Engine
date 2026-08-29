@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Collapse, Drawer, Spin, Tabs, Typography } from 'antd';
 import { getArtifact } from '../api/client';
-import { selectTaskScopedArtifact, selectTaskScopedQaArtifact } from '../utils/workflowPresentation';
+import {
+  selectTaskScopedArtifact,
+  selectTaskScopedQaArtifact,
+  shouldRequestQaArtifactFromParent,
+} from '../utils/workflowPresentation';
 import QATimeline from './QATimeline';
 
 const { Text } = Typography;
@@ -162,6 +166,7 @@ export default function AgentDetail({
   qaArtifactData,
   qaDisabled = false,
   onArtifactLoaded,
+  onQaArtifactRequested,
 }) {
   const [loadedArtifact, setLoadedArtifact] = useState({ taskId: null, phase: null, data: null });
   const [loadedQaData, setLoadedQaData] = useState({ taskId: null, data: null });
@@ -173,7 +178,11 @@ export default function AgentDetail({
       return undefined;
     }
     const needsArtifact = artifactData === undefined;
-    const needsQa = !qaDisabled && qaArtifactData === undefined;
+    const needsQa = shouldRequestQaArtifactFromParent(
+      qaDisabled,
+      qaArtifactData,
+      onQaArtifactRequested,
+    );
     if (!needsArtifact && !needsQa) {
       queueMicrotask(() => setLoading(false));
       return undefined;
@@ -186,7 +195,7 @@ export default function AgentDetail({
         setLoading(true);
         return Promise.allSettled([
           needsArtifact ? getArtifact(taskId, phase) : Promise.resolve(artifactData),
-          needsQa ? getArtifact(taskId, 'qa') : Promise.resolve(qaArtifactData),
+          needsQa ? onQaArtifactRequested() : Promise.resolve(qaArtifactData),
         ]);
       })
       .then((results) => {
@@ -197,7 +206,6 @@ export default function AgentDetail({
         setLoadedArtifact({ taskId, phase, data: nextData });
         setLoadedQaData({ taskId, data: nextQaData });
         if (nextData) onArtifactLoaded?.(phase, nextData);
-        if (nextQaData) onArtifactLoaded?.('qa', nextQaData);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -206,7 +214,16 @@ export default function AgentDetail({
     return () => {
       cancelled = true;
     };
-  }, [artifactData, onArtifactLoaded, open, phase, qaArtifactData, qaDisabled, taskId]);
+  }, [
+    artifactData,
+    onArtifactLoaded,
+    onQaArtifactRequested,
+    open,
+    phase,
+    qaArtifactData,
+    qaDisabled,
+    taskId,
+  ]);
 
   const displayData = artifactData !== undefined
     ? artifactData

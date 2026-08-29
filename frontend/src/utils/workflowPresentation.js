@@ -105,6 +105,10 @@ export function shouldLoadQaArtifact(taskId, taskInfo, attemptedTaskId, force = 
     && (force || attemptedTaskId !== taskId);
 }
 
+export function shouldRequestQaArtifactFromParent(qaDisabled, qaArtifactData, parentQaLoader) {
+  return !qaDisabled && qaArtifactData === undefined && typeof parentQaLoader === 'function';
+}
+
 export function shouldRefreshTerminalQa(event, taskId, refreshedTaskId) {
   return event?.type === 'task_completed'
     && event.task_id === taskId

@@ -406,6 +406,7 @@ export default function TaskDetail() {
         qaArtifactData={qaPresentationBlocked ? undefined : taskArtifacts.qa}
         qaDisabled={qaPresentationBlocked}
         onArtifactLoaded={cacheArtifact}
+        onQaArtifactRequested={refreshQa}
       />
     </main>
   );
