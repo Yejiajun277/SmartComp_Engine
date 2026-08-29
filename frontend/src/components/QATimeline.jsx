@@ -1,101 +1,144 @@
-import { Timeline, Tag, Typography } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ExclamationCircleOutlined,
   LoadingOutlined,
+  SafetyCertificateOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 
-const { Text, Paragraph } = Typography;
+const PHASE_LABELS = {
+  collection: '证据采集',
+  product: '功能分析',
+  pricing: '定价分析',
+  market: '市场分析',
+  strategy: '策略报告',
+};
 
 function getStatusMeta(result) {
-  if (result.running) return { text: '质检中', color: 'processing' };
-  if (result.degraded) return { text: '降级通过', color: 'warning' };
-  if (result.passed) return { text: '通过', color: 'success' };
-  return { text: '未通过', color: 'error' };
+  if (result.running) {
+    return { label: '质检中', tone: 'running', icon: <LoadingOutlined spin /> };
+  }
+  if (result.degraded) {
+    return { label: '降级通过', tone: 'degraded', icon: <WarningOutlined /> };
+  }
+  if (result.passed) {
+    return { label: '通过', tone: 'passed', icon: <CheckCircleOutlined /> };
+  }
+  return { label: '已打回', tone: 'failed', icon: <CloseCircleOutlined /> };
 }
 
 function getIssueText(issue) {
   if (!issue) return '';
   const field = issue.field ? `${issue.field}：` : '';
-  return `${field}${issue.description || issue.suggestion || issue.category || ''}`;
+  return `${field}${issue.description || issue.suggestion || issue.category || '待修正问题'}`;
 }
 
-function trimText(text, limit = 120) {
+function trimText(text, limit = 140) {
   if (!text) return '';
-  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+  return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
 
-export default function QATimeline({ results }) {
-  if (!results || results.length === 0) {
-    return <Text type="secondary">暂无质检记录</Text>;
+function groupResults(results) {
+  const groups = new Map();
+
+  results.forEach((result, index) => {
+    const key = result.target_agent || result.phase || 'QualityAgent';
+    const current = groups.get(key) || [];
+    current.push({ ...result, sourceIndex: index });
+    groups.set(key, current);
+  });
+
+  return Array.from(groups, ([key, entries]) => ({ key, entries }));
+}
+
+function getCorrectionStory(result, attempt) {
+  if (result.running) return `第 ${attempt} 轮质量检查正在进行`;
+  if (result.degraded) return `第 ${attempt} 轮保留风险后降级通过`;
+  if (result.passed) return `第 ${attempt} 轮检查通过，可以进入下一阶段`;
+  return `发现问题 → 已反馈给 ${result.target_agent || '对应 Agent'} → 第 ${attempt} 轮修正`;
+}
+
+export default function QATimeline({ results = [] }) {
+  if (results.length === 0) {
+    return (
+      <div className="qa-timeline-empty">
+        <SafetyCertificateOutlined />
+        <p>暂无质检记录，QualityAgent 将在关键阶段开始检查。</p>
+      </div>
+    );
   }
 
   return (
-    <Timeline
-      items={results.map((r, index) => {
-        const status = getStatusMeta(r);
-        const issues = r.issues || [];
-        const primaryIssues = issues.slice(0, 2);
-        const title = [
-          r.target_agent,
-          r.phase,
-          r.attempt != null ? `第 ${r.attempt} 次` : '',
-        ].filter(Boolean).join(' · ');
-
-        return {
-          dot: r.running
-            ? <LoadingOutlined style={{ color: '#1890ff' }} />
-            : r.degraded
-            ? <ExclamationCircleOutlined style={{ color: '#fa8c16' }} />
-            : r.passed
-            ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            : <CloseCircleOutlined style={{ color: '#ff4d4f' }} />,
-          children: (
+    <div className="qa-correction-groups">
+      {groupResults(results).map(group => (
+        <section className="qa-correction-group" key={group.key}>
+          <header>
             <div>
-              <div style={{ marginBottom: 6 }}>
-                <Text strong>{title || r.message || `质检记录 ${index + 1}`}</Text>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Tag color={status.color}>{status.text}</Tag>
-                {r.score != null && <Text type="secondary">分数：{Math.round(r.score)}</Text>}
-                {issues.length > 0 && <Text type="secondary">问题数：{issues.length}</Text>}
-                {r.hallucination_status && (
-                  <Text type="secondary">幻觉检测：{r.hallucination_status}</Text>
-                )}
-              </div>
-
-              {r.message && !r.target_agent && (
-                <Paragraph style={{ margin: '6px 0 0' }}>{r.message}</Paragraph>
-              )}
-
-              {primaryIssues.length > 0 && (
-                <ul style={{ margin: '8px 0 0 18px', padding: 0 }}>
-                  {primaryIssues.map((issue, issueIndex) => (
-                    <li key={`${issue.field || 'issue'}-${issueIndex}`} style={{ marginBottom: 4 }}>
-                      <Text>{getIssueText(issue)}</Text>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {issues.length > primaryIssues.length && (
-                <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-                  还有 {issues.length - primaryIssues.length} 条问题
-                </Text>
-              )}
-
-              {r.feedback_to_agent && (
-                <Paragraph style={{ margin: '8px 0 0' }}>
-                  <Text type="secondary">反馈：</Text>
-                  {trimText(r.feedback_to_agent)}
-                </Paragraph>
-              )}
+              <strong>{group.key}</strong>
+              <span>{PHASE_LABELS[group.entries[0]?.phase] || group.entries[0]?.phase || '质量检查'}</span>
             </div>
-          ),
-        };
-      })}
-    />
+            <small>{group.entries.length} 轮</small>
+          </header>
+
+          <ol>
+            {group.entries.map((result, groupIndex) => {
+              const status = getStatusMeta(result);
+              const issues = Array.isArray(result.issues) ? result.issues : [];
+              const primaryIssues = issues.slice(0, 2);
+              const attempt = result.attempt ?? groupIndex + 1;
+
+              return (
+                <li
+                  className="qa-correction-item"
+                  data-status={status.tone}
+                  key={`${result.phase || 'qa'}-${result.attempt ?? result.sourceIndex}`}
+                >
+                  <span className="qa-correction-icon" aria-hidden="true">{status.icon}</span>
+                  <div className="qa-correction-body">
+                    <div className="qa-correction-title">
+                      <strong>{getCorrectionStory(result, attempt)}</strong>
+                      <span>{status.label}</span>
+                    </div>
+
+                    <div className="qa-correction-meta">
+                      {result.score != null && <span>得分 {Math.round(result.score)}</span>}
+                      <span>问题 {issues.length}</span>
+                      {result.hallucination_status && (
+                        <span>事实检查 {result.hallucination_status}</span>
+                      )}
+                    </div>
+
+                    {primaryIssues.length > 0 && (
+                      <ul className="qa-issue-list">
+                        {primaryIssues.map((issue, issueIndex) => (
+                          <li key={`${issue.field || 'issue'}-${issueIndex}`}>
+                            {getIssueText(issue)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {issues.length > primaryIssues.length && (
+                      <p className="qa-more-issues">另有 {issues.length - primaryIssues.length} 条问题已保留在完整记录中</p>
+                    )}
+
+                    {result.feedback_to_agent && (
+                      <blockquote>
+                        <span>反馈</span>
+                        {trimText(result.feedback_to_agent)}
+                      </blockquote>
+                    )}
+
+                    {result.message && !result.feedback_to_agent && (
+                      <p className="qa-result-message">{trimText(result.message)}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ))}
+    </div>
   );
 }
