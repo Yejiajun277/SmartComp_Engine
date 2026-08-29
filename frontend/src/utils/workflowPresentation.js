@@ -105,6 +105,15 @@ export function shouldLoadQaArtifact(taskId, taskInfo, attemptedTaskId, force = 
     && (force || attemptedTaskId !== taskId);
 }
 
+export function shouldLoadQaArtifactFromCurrentTask(
+  taskId,
+  currentTaskInfoRef,
+  attemptedTaskId,
+  force = false,
+) {
+  return shouldLoadQaArtifact(taskId, currentTaskInfoRef?.current, attemptedTaskId, force);
+}
+
 export function shouldRequestQaArtifactFromParent(qaDisabled, qaArtifactData, parentQaLoader) {
   return !qaDisabled && qaArtifactData === undefined && typeof parentQaLoader === 'function';
 }

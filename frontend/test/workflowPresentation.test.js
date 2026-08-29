@@ -279,3 +279,38 @@ test('a detail drawer requests a missing QA artifact only through the parent ref
     false,
   );
 });
+
+test('a QA refresh reads the latest task metadata without changing its task scope', () => {
+  assert.equal(typeof workflowPresentation.shouldLoadQaArtifactFromCurrentTask, 'function');
+
+  const currentTaskInfoRef = { current: { id: 'task-current', skip_qa: true } };
+
+  assert.equal(
+    workflowPresentation.shouldLoadQaArtifactFromCurrentTask(
+      'task-current',
+      currentTaskInfoRef,
+      null,
+    ),
+    false,
+  );
+
+  currentTaskInfoRef.current = { id: 'task-current', skip_qa: false };
+  assert.equal(
+    workflowPresentation.shouldLoadQaArtifactFromCurrentTask(
+      'task-current',
+      currentTaskInfoRef,
+      null,
+    ),
+    true,
+  );
+
+  currentTaskInfoRef.current = { id: 'task-next', skip_qa: false };
+  assert.equal(
+    workflowPresentation.shouldLoadQaArtifactFromCurrentTask(
+      'task-current',
+      currentTaskInfoRef,
+      null,
+    ),
+    false,
+  );
+});

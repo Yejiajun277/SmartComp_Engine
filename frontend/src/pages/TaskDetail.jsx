@@ -27,7 +27,7 @@ import {
   selectTaskArtifactCache,
   selectTaskQaPresentationState,
   shouldAcceptQaArtifactResponse,
-  shouldLoadQaArtifact,
+  shouldLoadQaArtifactFromCurrentTask,
   shouldRefreshTerminalQa,
   updateTaskArtifactCache,
   updateTaskQaPresentationState,
@@ -76,6 +76,7 @@ export default function TaskDetail() {
 
   const { connected } = useWebSocket(taskId, handleEvent);
   const activeTaskIdRef = useRef(taskId);
+  const currentTaskInfoRef = useRef(null);
   const qaLoadAttemptedForRef = useRef(null);
   const qaTerminalRefreshForRef = useRef(null);
   const qaRequestGenerationRef = useRef(0);
@@ -91,9 +92,11 @@ export default function TaskDetail() {
 
   useEffect(() => {
     activeTaskIdRef.current = taskId;
+    currentTaskInfoRef.current = null;
     qaLoadAttemptedForRef.current = null;
     qaTerminalRefreshForRef.current = null;
     qaRequestGenerationRef.current += 1;
+    qaPresentationModeRef.current = 'pending';
     queueMicrotask(() => {
       setTaskInfo(null);
       setPersistedQaPresentation(createTaskQaPresentationState(taskId));
@@ -108,6 +111,8 @@ export default function TaskDetail() {
     getTask(taskId)
       .then((data) => {
         if (data?.id !== taskId || activeTaskIdRef.current !== taskId) return null;
+        currentTaskInfoRef.current = data;
+        qaPresentationModeRef.current = getQaPresentationMode(taskId, data);
         setTaskInfo(data);
         return data;
       })
@@ -150,7 +155,12 @@ export default function TaskDetail() {
   }, [cacheArtifact, taskId]);
 
   const refreshQa = useCallback((force = false) => {
-    if (!shouldLoadQaArtifact(taskId, currentTaskInfo, qaLoadAttemptedForRef.current, force)) {
+    if (!shouldLoadQaArtifactFromCurrentTask(
+      taskId,
+      currentTaskInfoRef,
+      qaLoadAttemptedForRef.current,
+      force,
+    )) {
       return Promise.resolve(null);
     }
     qaLoadAttemptedForRef.current = taskId;
@@ -187,7 +197,7 @@ export default function TaskDetail() {
         }));
         return null;
       });
-  }, [cacheArtifact, currentTaskInfo, taskId]);
+  }, [cacheArtifact, taskId]);
 
   useEffect(() => {
     loadTaskInfo();
