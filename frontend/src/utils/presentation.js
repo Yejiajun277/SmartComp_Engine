@@ -1,0 +1,72 @@
+const TASK_STATUS_META = {
+  pending: { label: '等待中', tone: 'neutral' },
+  queued: { label: '等待中', tone: 'neutral' },
+  running: { label: '分析中', tone: 'running' },
+  retrying: { label: '重新校验', tone: 'warning' },
+  completed: { label: '已交付', tone: 'success' },
+  degraded: { label: '降级交付', tone: 'warning' },
+  failed: { label: '未完成', tone: 'danger' },
+  cancelled: { label: '已取消', tone: 'neutral' },
+};
+
+export function getTaskStatusMeta(status) {
+  return TASK_STATUS_META[status] || TASK_STATUS_META.pending;
+}
+
+export function mergeTasks(serverTasks = [], recentTasks = []) {
+  const mergedById = new Map();
+
+  recentTasks.forEach((task) => {
+    if (task?.id) mergedById.set(task.id, { ...task });
+  });
+
+  serverTasks.forEach((task) => {
+    if (!task?.id) return;
+    mergedById.set(task.id, { ...(mergedById.get(task.id) || {}), ...task });
+  });
+
+  return Array.from(mergedById.values());
+}
+
+export function formatElapsed(startedAt, finishedAt) {
+  if (!startedAt) return '尚未开始';
+
+  const started = new Date(startedAt).getTime();
+  const finished = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+  if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) {
+    return '耗时待确认';
+  }
+
+  const totalSeconds = Math.max(0, Math.round((finished - started) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}时${minutes}分`;
+  if (minutes > 0) return `${minutes}分${seconds}秒`;
+  return `${seconds}秒`;
+}
+
+function getEventSubject(event = {}) {
+  return event.data?.target_agent
+    || event.agent
+    || event.phase
+    || event.data?.phase
+    || '当前环节';
+}
+
+export function getEventLabel(event = {}) {
+  const subject = getEventSubject(event);
+  const labels = {
+    agent_started: `${subject} 开始工作`,
+    agent_completed: `${subject} 已完成分析`,
+    qa_check_started: `QualityAgent 正在检查 ${subject}`,
+    qa_check_failed: `${subject} 未通过质检，等待修正`,
+    qa_check_passed: `${subject} 已通过质检`,
+    qa_retrying: `${subject} 正在根据质检意见重做`,
+    task_completed: '策略报告已经生成',
+    task_failed: '任务未完成，请查看异常信息',
+  };
+
+  return labels[event.type] || event.message || `${subject} 状态已更新`;
+}
