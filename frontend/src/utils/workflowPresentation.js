@@ -4,7 +4,8 @@ export function deriveStageStatus(
   taskStatus,
   checkpointStatus = 'waiting',
 ) {
-  if (taskStatus === 'completed') return 'completed';
+  const checkpointHasRisk = ['running', 'failed', 'degraded'].includes(checkpointStatus);
+  if (taskStatus === 'completed' && !checkpointHasRisk) return 'completed';
   const states = agentKeys.map(key => nodeStates[key] || 'waiting');
   if (states.includes('failed')) return 'failed';
   if (states.includes('retrying')) return 'retrying';

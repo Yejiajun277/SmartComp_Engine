@@ -26,6 +26,18 @@ test('QA checkpoint state becomes the visible state of a completed business stag
   assert.equal(deriveStageStatus(['collection'], completedAgent, undefined, 'disabled'), 'completed');
 });
 
+test('completed tasks still surface a checkpoint risk while safe checkpoints stay completed', () => {
+  const completedAgent = { strategy: 'completed' };
+
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'running'), 'running');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'failed'), 'failed');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'degraded'), 'degraded');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'passed'), 'completed');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'disabled'), 'completed');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed', 'waiting'), 'completed');
+  assert.equal(deriveStageStatus(['strategy'], completedAgent, 'completed'), 'completed');
+});
+
 test('only current task metadata explicitly enabling QA permits an artifact load', () => {
   const currentEnabled = { id: 'task-current', skip_qa: false };
   const currentDisabled = { id: 'task-current', skip_qa: true };
