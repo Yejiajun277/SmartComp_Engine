@@ -159,6 +159,7 @@ export default function AgentDetail({
   nodeStatus,
   artifactData,
   qaArtifactData,
+  qaDisabled = false,
   onArtifactLoaded,
 }) {
   const [loadedArtifact, setLoadedArtifact] = useState({ phase: null, data: null });
@@ -168,7 +169,7 @@ export default function AgentDetail({
   useEffect(() => {
     if (!open || !taskId || !phase) return undefined;
     const needsArtifact = artifactData === undefined;
-    const needsQa = qaArtifactData === undefined;
+    const needsQa = !qaDisabled && qaArtifactData === undefined;
     if (!needsArtifact && !needsQa) return undefined;
 
     let cancelled = false;
@@ -196,13 +197,13 @@ export default function AgentDetail({
     return () => {
       cancelled = true;
     };
-  }, [artifactData, onArtifactLoaded, open, phase, qaArtifactData, taskId]);
+  }, [artifactData, onArtifactLoaded, open, phase, qaArtifactData, qaDisabled, taskId]);
 
   const displayData = artifactData !== undefined
     ? artifactData
     : loadedArtifact.phase === phase ? loadedArtifact.data : null;
-  const displayQaData = qaArtifactData !== undefined ? qaArtifactData : loadedQaData;
-  const qaChecks = getQaChecks(displayQaData, phase);
+  const displayQaData = qaDisabled ? null : (qaArtifactData !== undefined ? qaArtifactData : loadedQaData);
+  const qaChecks = qaDisabled ? [] : getQaChecks(displayQaData, phase);
   const emptyText = nodeStatus === 'running'
     ? 'Agent 执行中，完成后会自动显示阶段结论'
     : nodeStatus === 'waiting'
@@ -217,8 +218,10 @@ export default function AgentDetail({
     },
     {
       key: 'quality',
-      label: `质量反馈${qaChecks.length > 0 ? ` ${qaChecks.length}` : ''}`,
-      children: qaChecks.length > 0
+      label: qaDisabled ? '质量反馈 · 已关闭' : `质量反馈${qaChecks.length > 0 ? ` ${qaChecks.length}` : ''}`,
+      children: qaDisabled
+        ? <Text type="secondary">本任务已关闭 QA 检查；业务 Agent 直接继续，未生成质量评分。</Text>
+        : qaChecks.length > 0
         ? <QATimeline results={qaChecks} />
         : <Text type="secondary">该阶段暂无质检记录</Text>,
     },

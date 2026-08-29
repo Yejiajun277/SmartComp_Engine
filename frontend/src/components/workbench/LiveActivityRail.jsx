@@ -7,6 +7,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { getEventLabel } from '../../utils/presentation';
+import { filterPresentationEvents } from '../../utils/workflowPresentation';
 
 const IGNORED_EVENT_TYPES = new Set(['ping', 'pong', 'heartbeat']);
 
@@ -35,8 +36,8 @@ function formatProgress(value) {
   return Math.round(numeric <= 1 ? numeric * 100 : numeric);
 }
 
-export default function LiveActivityRail({ events = [], currentMessage, connected }) {
-  const recentEvents = events
+export default function LiveActivityRail({ events = [], currentMessage, connected, qaDisabled = false }) {
+  const recentEvents = filterPresentationEvents(events, qaDisabled)
     .filter(event => event && !IGNORED_EVENT_TYPES.has(event.type))
     .slice(-6)
     .reverse();

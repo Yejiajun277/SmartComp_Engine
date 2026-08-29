@@ -10,7 +10,7 @@ const STATUS_META = {
   waiting: { label: '等待接力', icon: <ClockCircleOutlined /> },
   running: { label: '正在分析', icon: <LoadingOutlined spin /> },
   completed: { label: '分析完成', icon: <CheckCircleOutlined /> },
-  retrying: { label: 'QA 打回后重做', icon: <RedoOutlined spin /> },
+  retrying: { label: '重试 / 降级处理', icon: <RedoOutlined spin /> },
   failed: { label: '执行失败', icon: <CloseCircleOutlined /> },
 };
 
@@ -38,7 +38,7 @@ export default function AgentNode({ label, agent, status = 'waiting', timing, on
         <strong>{label}</strong>
         <small>{agent}</small>
       </div>
-      <div className="agent-node-state">
+      <div className="agent-node-state" data-status={status}>
         <span>{meta.label}</span>
         {timing && <small>{timing}</small>}
       </div>

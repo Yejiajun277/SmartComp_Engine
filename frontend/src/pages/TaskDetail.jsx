@@ -17,6 +17,9 @@ import PipelineGraph from '../components/PipelineGraph';
 import QATimeline from '../components/QATimeline';
 import LiveActivityRail from '../components/workbench/LiveActivityRail';
 import QualityCockpit from '../components/workbench/QualityCockpit';
+import QualityDisabledNotice from '../components/workbench/QualityDisabledNotice';
+import { filterPresentationEvents } from '../utils/workflowPresentation';
+import { mergeQaSummaries } from '../utils/taskEvents';
 import {
   getTaskModeMeta,
   getTaskStatusMeta,
@@ -106,6 +109,7 @@ export default function TaskDetail() {
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
+  const qaDisabled = taskInfo?.skip_qa === true;
 
   const loadTaskInfo = useCallback(() => (
     getTask(taskId).then(setTaskInfo).catch(() => null)
@@ -145,8 +149,9 @@ export default function TaskDetail() {
       .catch(() => null);
   }, [cacheArtifact, taskId]);
 
-  const refreshQa = useCallback(() => (
-    getArtifact(taskId, 'qa')
+  const refreshQa = useCallback(() => {
+    if (qaDisabled) return Promise.resolve(null);
+    return getArtifact(taskId, 'qa')
       .then((data) => {
         const checks = data?.checks || [];
         cacheArtifact('qa', data);
@@ -158,13 +163,17 @@ export default function TaskDetail() {
         setPersistedQaResults([]);
         setPersistedQaSummaries({});
         return null;
-      })
-  ), [cacheArtifact, taskId]);
+      });
+  }, [cacheArtifact, qaDisabled, taskId]);
 
   useEffect(() => {
     loadTaskInfo();
+  }, [loadTaskInfo]);
+
+  useEffect(() => {
+    if (!taskInfo || qaDisabled) return;
     refreshQa();
-  }, [loadTaskInfo, refreshQa]);
+  }, [qaDisabled, refreshQa, taskInfo]);
 
   useEffect(() => {
     if (!taskId) return undefined;
@@ -179,7 +188,7 @@ export default function TaskDetail() {
     if (event.type === 'agent_completed') {
       refreshArtifact(event.phase);
     }
-    if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
+    if (!qaDisabled && (event.type === 'qa_check_passed' || event.type === 'qa_check_failed')) {
       const qaResult = event.data?.qa_result;
       if (qaResult) {
         queueMicrotask(() => mergeQaResult(qaResult));
@@ -187,23 +196,24 @@ export default function TaskDetail() {
         refreshQa();
       }
     }
-    if (event.type === 'task_completed') {
+    if (!qaDisabled && event.type === 'task_completed') {
       refreshQa();
     }
-  }, [events, mergeQaResult, refreshArtifact, refreshQa]);
+  }, [events, mergeQaResult, qaDisabled, refreshArtifact, refreshQa]);
 
   const handleNodeClick = (phase) => {
     setSelectedPhase(phase);
     setDetailOpen(true);
   };
 
-  const graphQaSummaries = Object.keys(qaSummaries).length > 0
-    ? qaSummaries
-    : persistedQaSummaries;
-  const timelineQaResults = qaResults.length > 0 ? qaResults : persistedQaResults;
+  const graphQaSummaries = qaDisabled
+    ? {}
+    : mergeQaSummaries(persistedQaSummaries, qaSummaries);
+  const timelineQaResults = qaDisabled ? [] : (qaResults.length > 0 ? qaResults : persistedQaResults);
   const cockpitChecks = artifactCache.qa?.checks?.length > 0
     ? artifactCache.qa.checks
     : timelineQaResults;
+  const presentationEvents = filterPresentationEvents(events, qaDisabled);
   const graphNodeStates = { ...nodeStates };
   const currentPhase = AGENT_TO_PHASE[taskInfo?.current_agent];
 
@@ -227,6 +237,9 @@ export default function TaskDetail() {
   const currentAgent = taskInfo?.current_agent
     || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
     || '等待调度';
+  const presentationCurrentMessage = qaDisabled
+    ? presentationEvents.at(-1)?.message || '业务 Agent 正在推进工作流'
+    : currentMessage;
 
   return (
     <main className="page-shell workbench-page">
@@ -244,7 +257,7 @@ export default function TaskDetail() {
           <div className="mission-title-copy">
             <span className="section-eyebrow">Live agent mission</span>
             <h1>{taskInfo?.product_description || taskId}</h1>
-            <p>{currentMessage || '等待 Agent 团队更新进度'}</p>
+            <p>{presentationCurrentMessage || '等待 Agent 团队更新进度'}</p>
           </div>
           <div className="mission-actions">
             <span className={`status-pill status-${taskStatusMeta.tone}`}>
@@ -306,30 +319,37 @@ export default function TaskDetail() {
           <PipelineGraph
             nodeStates={graphNodeStates}
             qaSummaries={graphQaSummaries}
+            taskStatus={resolvedTaskStatus}
+            qaDisabled={qaDisabled}
             onNodeClick={handleNodeClick}
           />
         </section>
 
         <LiveActivityRail
-          events={events}
-          currentMessage={currentMessage}
+          events={presentationEvents}
+          currentMessage={presentationCurrentMessage}
           connected={connected}
+          qaDisabled={qaDisabled}
         />
       </section>
 
-      <section className="quality-grid">
-        <QualityCockpit checks={cockpitChecks} />
-        <section className="surface-card qa-timeline-panel" aria-labelledby="qa-timeline-title">
-          <header>
-            <div>
-              <span className="section-eyebrow">Correction trail</span>
-              <h2 id="qa-timeline-title">QA 修正记录</h2>
-            </div>
-            <span>{timelineQaResults.length} 条记录</span>
-          </header>
-          <QATimeline results={timelineQaResults} />
+      {qaDisabled ? (
+        <QualityDisabledNotice />
+      ) : (
+        <section className="quality-grid">
+          <QualityCockpit checks={cockpitChecks} />
+          <section className="surface-card qa-timeline-panel" aria-labelledby="qa-timeline-title">
+            <header>
+              <div>
+                <span className="section-eyebrow">Correction trail</span>
+                <h2 id="qa-timeline-title">QA 修正记录</h2>
+              </div>
+              <span>{timelineQaResults.length} 条记录</span>
+            </header>
+            <QATimeline results={timelineQaResults} />
+          </section>
         </section>
-      </section>
+      )}
 
       <section className="technical-trace" aria-label="技术追溯">
         <Collapse
@@ -358,7 +378,8 @@ export default function TaskDetail() {
         agentLabel={selectedPhase ? AGENT_PHASE_MAP[selectedPhase]?.label : ''}
         nodeStatus={selectedPhase ? graphNodeStates[selectedPhase] : undefined}
         artifactData={selectedPhase ? artifactCache[selectedPhase] : undefined}
-        qaArtifactData={artifactCache.qa}
+        qaArtifactData={qaDisabled ? undefined : artifactCache.qa}
+        qaDisabled={qaDisabled}
         onArtifactLoaded={cacheArtifact}
       />
     </main>

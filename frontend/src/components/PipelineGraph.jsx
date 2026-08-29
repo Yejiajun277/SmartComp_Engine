@@ -1,133 +1,138 @@
-import { ArrowDownOutlined, ArrowRightOutlined, BranchesOutlined } from '@ant-design/icons';
+import { ArrowDownOutlined, BranchesOutlined } from '@ant-design/icons';
 import AgentNode from './AgentNode';
 import QAGate from './QAGate';
-import { getGateState } from '../utils/quality';
+import { deriveStageStatus } from '../utils/workflowPresentation';
 
-const PIPELINE = [
-  { type: 'agent', key: 'discovery', label: '竞品发现', agent: 'DiscoveryAgent' },
-  { type: 'agent', key: 'collection', label: '证据采集', agent: 'CollectionAgent' },
-  { type: 'qa', key: 'qa_collection', label: '采集质量门', targets: ['collection'] },
-  { type: 'agent', key: 'dimension', label: '维度配置', agent: 'DimensionAgent' },
+const STAGES = [
   {
-    type: 'parallel',
-    key: 'parallel_analysis',
-    nodes: [
-      { key: 'product_analysis', label: '功能分析', agent: 'ProductAgent' },
-      { key: 'pricing_analysis', label: '定价分析', agent: 'PricingAgent' },
-      { key: 'market_analysis', label: '市场分析', agent: 'MarketAgent' },
+    number: 1,
+    key: 'discovery_collection',
+    title: '发现竞品并建立证据',
+    purpose: '先识别直接竞争者，再补全可追溯的市场与产品证据。',
+    deliverable: '竞品清单与证据集',
+    agents: [
+      { key: 'discovery', label: '竞品发现', agent: 'DiscoveryAgent' },
+      { key: 'collection', label: '证据采集', agent: 'CollectionAgent' },
     ],
+    checkpoint: { label: '证据完整性检查', targets: ['collection'] },
   },
   {
-    type: 'qa',
-    key: 'qa_analysis',
-    label: '三维分析质量门',
-    targets: ['product_analysis', 'pricing_analysis', 'market_analysis'],
+    number: 2,
+    key: 'dimension',
+    title: '定义分析框架',
+    purpose: '将已收集的证据整理为后续研判可复用的分析维度。',
+    deliverable: '分析维度配置',
+    agents: [{ key: 'dimension', label: '维度配置', agent: 'DimensionAgent' }],
   },
-  { type: 'agent', key: 'strategy', label: '策略综合', agent: 'StrategyAgent' },
-  { type: 'qa', key: 'qa_strategy', label: '交付质量门', targets: ['strategy'] },
+  {
+    number: 3,
+    key: 'analysis',
+    title: '并行分析竞争态势',
+    purpose: '围绕产品、定价和市场位置同步形成三条独立判断。',
+    deliverable: '三维竞争分析',
+    parallel: true,
+    agents: [
+      { key: 'product_analysis', label: '产品与功能', agent: 'ProductAgent' },
+      { key: 'pricing_analysis', label: '定价与套餐', agent: 'PricingAgent' },
+      { key: 'market_analysis', label: '市场与定位', agent: 'MarketAgent' },
+    ],
+    checkpoint: {
+      label: '三维结论检查',
+      targets: ['product_analysis', 'pricing_analysis', 'market_analysis'],
+    },
+  },
+  {
+    number: 4,
+    key: 'strategy',
+    title: '形成策略报告',
+    purpose: '综合证据和三维分析，输出可执行的竞争策略与行动优先级。',
+    deliverable: '竞争策略报告',
+    agents: [{ key: 'strategy', label: '策略综合', agent: 'StrategyAgent' }],
+    checkpoint: { label: '交付一致性检查', targets: ['strategy'] },
+  },
 ];
 
 function formatTiming(value) {
   return Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}s` : undefined;
 }
 
-function stageIsComplete(stage, nodeStates, qaSummaries) {
-  if (stage.type === 'agent') return nodeStates[stage.key] === 'completed';
-  if (stage.type === 'parallel') {
-    return stage.nodes.every(node => nodeStates[node.key] === 'completed');
-  }
-  const status = getGateState(stage.targets, qaSummaries).status;
-  return status === 'passed' || status === 'degraded';
-}
-
-function PipelineConnector({ active }) {
+function StageConnector({ status }) {
   return (
-    <span className="pipeline-connector" data-active={active} aria-hidden="true">
+    <div className="stage-connector" data-status={status} aria-hidden="true">
       <i />
-      <ArrowRightOutlined />
-    </span>
+      <ArrowDownOutlined />
+    </div>
   );
 }
 
-function ParallelGroup({ stage, nodeStates, timings, onNodeClick }) {
-  const statuses = stage.nodes.map(node => nodeStates[node.key] || 'waiting');
-  const groupStatus = statuses.includes('failed')
-    ? 'failed'
-    : statuses.some(status => status === 'running' || status === 'retrying')
-      ? 'running'
-      : statuses.every(status => status === 'completed')
-        ? 'completed'
-        : 'waiting';
+function StageAgents({ stage, nodeStates, timings, onNodeClick }) {
+  const className = stage.parallel
+    ? 'stage-agent-grid stage-agent-grid-parallel'
+    : `stage-agent-grid stage-agent-grid-${stage.agents.length}`;
 
   return (
-    <section className="parallel-agent-group" data-status={groupStatus}>
-      <header>
-        <span><BranchesOutlined /> PARALLEL TRACK</span>
-        <strong>三路并行研判</strong>
-      </header>
-      <div className="parallel-agent-nodes">
-        {stage.nodes.map(node => (
-          <AgentNode
-            key={node.key}
-            label={node.label}
-            agent={node.agent}
-            status={nodeStates[node.key] || 'waiting'}
-            timing={formatTiming(timings?.[node.key])}
-            onClick={() => onNodeClick?.(node.key)}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PipelineStage({ stage, nodeStates, qaSummaries, timings, onNodeClick }) {
-  if (stage.type === 'parallel') {
-    return (
-      <ParallelGroup
-        stage={stage}
-        nodeStates={nodeStates}
-        timings={timings}
-        onNodeClick={onNodeClick}
-      />
-    );
-  }
-
-  if (stage.type === 'qa') {
-    return <QAGate label={stage.label} targets={stage.targets} qaSummaries={qaSummaries} />;
-  }
-
-  return (
-    <AgentNode
-      label={stage.label}
-      agent={stage.agent}
-      status={nodeStates[stage.key] || 'waiting'}
-      timing={formatTiming(timings?.[stage.key])}
-      onClick={() => onNodeClick?.(stage.key)}
-    />
-  );
-}
-
-function PipelineRow({ stages, nodeStates, qaSummaries, timings, onNodeClick }) {
-  return (
-    <div className="pipeline-row">
-      {stages.map((stage, index) => (
-        <div className="pipeline-row-item" key={stage.key}>
-          {index > 0 && (
-            <PipelineConnector
-              active={stageIsComplete(stages[index - 1], nodeStates, qaSummaries)}
-            />
-          )}
-          <PipelineStage
-            stage={stage}
-            nodeStates={nodeStates}
-            qaSummaries={qaSummaries}
-            timings={timings}
-            onNodeClick={onNodeClick}
-          />
-        </div>
+    <div className={className}>
+      {stage.parallel && <span className="stage-parallel-label"><BranchesOutlined /> 三路并行</span>}
+      {stage.agents.map((agent) => (
+        <AgentNode
+          key={agent.key}
+          label={agent.label}
+          agent={agent.agent}
+          status={nodeStates[agent.key] || 'waiting'}
+          timing={formatTiming(timings?.[agent.key])}
+          onClick={() => onNodeClick?.(agent.key)}
+        />
       ))}
     </div>
+  );
+}
+
+function WorkflowStage({ stage, nodeStates, qaSummaries, timings, taskStatus, qaDisabled, onNodeClick }) {
+  const status = deriveStageStatus(
+    stage.agents.map(agent => agent.key),
+    nodeStates,
+    taskStatus,
+  );
+  const statusLabel = {
+    completed: '已完成',
+    running: '进行中',
+    retrying: '重试中',
+    failed: '需处理',
+    waiting: '等待中',
+  }[status] || '等待中';
+
+  return (
+    <section className="workflow-stage" data-status={status} aria-labelledby={`stage-${stage.key}-title`}>
+      <div className="workflow-stage-rail" aria-hidden="true">
+        <span className="workflow-stage-index">{stage.number}</span>
+      </div>
+      <div className="workflow-stage-panel">
+        <header className="workflow-stage-header">
+          <div>
+            <span className="workflow-stage-kicker">阶段 {stage.number}</span>
+            <h3 id={`stage-${stage.key}-title`}>{stage.title}</h3>
+            <p>{stage.purpose}</p>
+          </div>
+          <span className="workflow-stage-status">{statusLabel}</span>
+        </header>
+        <div className="workflow-stage-deliverable">
+          <span>阶段产物</span>
+          <strong>{stage.deliverable}</strong>
+        </div>
+        <StageAgents stage={stage} nodeStates={nodeStates} timings={timings} onNodeClick={onNodeClick} />
+        {stage.checkpoint && (
+          <div className="stage-checkpoint">
+            <span>QA checkpoint</span>
+            <QAGate
+              label={stage.checkpoint.label}
+              targets={stage.checkpoint.targets}
+              qaSummaries={qaSummaries}
+              disabled={qaDisabled}
+            />
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -135,59 +140,41 @@ export default function PipelineGraph({
   nodeStates = {},
   qaSummaries = {},
   timings = {},
+  taskStatus,
+  qaDisabled = false,
   onNodeClick,
 }) {
-  const primaryStages = PIPELINE.slice(0, 4);
-  const analysisStages = PIPELINE.slice(4, 6);
-  const deliveryStages = PIPELINE.slice(6);
-
   return (
-    <div className="pipeline-graph">
-      <div className="pipeline-legend">
-        <span><i className="legend-agent" /> 业务 Agent</span>
-        <span><i className="legend-gate" /> QualityAgent 质量门</span>
-        <span><i className="legend-return" /> 打回后重做</span>
+    <div className="pipeline-graph pipeline-stage-flow">
+      <div className="pipeline-legend" aria-label="状态说明">
+        <span><i className="legend-waiting" /> 等待</span>
+        <span><i className="legend-running" /> 运行</span>
+        <span><i className="legend-completed" /> 完成</span>
+        <span><i className="legend-retrying" /> 重试 / 降级</span>
+        <span><i className="legend-failed" /> 失败</span>
+        {qaDisabled && <span><i className="legend-disabled" /> QA 已关闭</span>}
       </div>
-
-      <PipelineRow
-        stages={primaryStages}
-        nodeStates={nodeStates}
-        qaSummaries={qaSummaries}
-        timings={timings}
-        onNodeClick={onNodeClick}
-      />
-
-      <div
-        className="pipeline-row-bridge"
-        data-active={stageIsComplete(primaryStages.at(-1), nodeStates, qaSummaries)}
-      >
-        <span>维度确认后进入并行研判</span>
-        <ArrowDownOutlined />
-      </div>
-
-      <PipelineRow
-        stages={analysisStages}
-        nodeStates={nodeStates}
-        qaSummaries={qaSummaries}
-        timings={timings}
-        onNodeClick={onNodeClick}
-      />
-
-      <div
-        className="pipeline-row-bridge"
-        data-active={stageIsComplete(analysisStages.at(-1), nodeStates, qaSummaries)}
-      >
-        <span>质量门通过后形成最终策略</span>
-        <ArrowDownOutlined />
-      </div>
-
-      <PipelineRow
-        stages={deliveryStages}
-        nodeStates={nodeStates}
-        qaSummaries={qaSummaries}
-        timings={timings}
-        onNodeClick={onNodeClick}
-      />
+      {STAGES.map((stage, index) => {
+        const status = deriveStageStatus(
+          stage.agents.map(agent => agent.key),
+          nodeStates,
+          taskStatus,
+        );
+        return (
+          <div className="workflow-stage-flow-item" key={stage.key}>
+            <WorkflowStage
+              stage={stage}
+              nodeStates={nodeStates}
+              qaSummaries={qaSummaries}
+              timings={timings}
+              taskStatus={taskStatus}
+              qaDisabled={qaDisabled}
+              onNodeClick={onNodeClick}
+            />
+            {index < STAGES.length - 1 && <StageConnector status={status} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
