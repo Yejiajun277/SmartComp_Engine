@@ -167,10 +167,16 @@ export default function AgentDetail({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open || !taskId || !phase) return undefined;
+    if (!open || !taskId || !phase) {
+      queueMicrotask(() => setLoading(false));
+      return undefined;
+    }
     const needsArtifact = artifactData === undefined;
     const needsQa = !qaDisabled && qaArtifactData === undefined;
-    if (!needsArtifact && !needsQa) return undefined;
+    if (!needsArtifact && !needsQa) {
+      queueMicrotask(() => setLoading(false));
+      return undefined;
+    }
 
     let cancelled = false;
     Promise.resolve()

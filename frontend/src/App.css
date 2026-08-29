@@ -41,6 +41,9 @@
 .workflow-stage-flow-item {
   --stage-color: #aeb9c7;
   --stage-soft: #f5f7f9;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .workflow-stage-flow-item:has(.workflow-stage[data-status='running']),
@@ -56,7 +59,9 @@
 }
 
 .workflow-stage-flow-item:has(.workflow-stage[data-status='retrying']),
-.workflow-stage-flow-item:has(.stage-connector[data-status='retrying']) {
+.workflow-stage-flow-item:has(.stage-connector[data-status='retrying']),
+.workflow-stage-flow-item:has(.workflow-stage[data-status='degraded']),
+.workflow-stage-flow-item:has(.stage-connector[data-status='degraded']) {
   --stage-color: var(--sc-amber);
   --stage-soft: #fffaf1;
 }
@@ -69,9 +74,11 @@
 
 .workflow-stage {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 48px) minmax(0, 1fr);
   gap: 14px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .workflow-stage-rail {
@@ -95,6 +102,9 @@
 
 .workflow-stage-panel {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 17px;
   border: 1px solid var(--stage-color);
   border-radius: 17px;
@@ -166,6 +176,9 @@
 .stage-agent-grid {
   display: grid;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .stage-agent-grid-1 { grid-template-columns: minmax(0, 360px); }
@@ -178,6 +191,9 @@
 
 .stage-parallel-label { position: absolute; top: 0; left: 0; }
 .stage-agent-grid .agent-node { min-height: 108px; }
+.stage-agent-grid .agent-node,
+.workflow-stage-panel > *,
+.stage-checkpoint .qa-gate > * { min-width: 0; }
 .stage-agent-grid .agent-node[data-status='running'] { animation: active-agent-pulse 2.4s ease-in-out infinite; }
 
 .stage-checkpoint {
@@ -186,6 +202,9 @@
   margin-top: 13px;
   padding-top: 13px;
   border-top: 1px solid var(--stage-color);
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .stage-checkpoint .qa-gate {
@@ -193,6 +212,10 @@
   padding: 12px;
   border-color: var(--stage-color);
   background: #fff;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .stage-checkpoint .qa-gate-result { color: var(--stage-color); }
@@ -225,6 +248,7 @@
 .stage-connector[data-status='running'] { color: var(--sc-blue); }
 .stage-connector[data-status='completed'] { color: var(--sc-mint); }
 .stage-connector[data-status='retrying'] { color: var(--sc-amber); }
+.stage-connector[data-status='degraded'] { color: var(--sc-amber); }
 .stage-connector[data-status='failed'] { color: var(--sc-danger); }
 
 .quality-disabled-notice {

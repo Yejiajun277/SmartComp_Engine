@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Collapse, Progress } from 'antd';
 import {
@@ -18,7 +18,7 @@ import QATimeline from '../components/QATimeline';
 import LiveActivityRail from '../components/workbench/LiveActivityRail';
 import QualityCockpit from '../components/workbench/QualityCockpit';
 import QualityDisabledNotice from '../components/workbench/QualityDisabledNotice';
-import { filterPresentationEvents } from '../utils/workflowPresentation';
+import { filterPresentationEvents, getQaPresentationMode } from '../utils/workflowPresentation';
 import { mergeQaSummaries } from '../utils/taskEvents';
 import {
   getTaskModeMeta,
@@ -105,14 +105,45 @@ export default function TaskDetail() {
     taskStatus,
     llmLogsKey,
     handleEvent,
+    reset,
     AGENT_PHASE_MAP,
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
-  const qaDisabled = taskInfo?.skip_qa === true;
+  const activeTaskIdRef = useRef(taskId);
+  const qaLoadAttemptedForRef = useRef(null);
+  const qaPresentationModeRef = useRef('pending');
+  const currentTaskInfo = taskInfo?.id === taskId ? taskInfo : null;
+  const qaPresentationMode = getQaPresentationMode(taskId, currentTaskInfo);
+  const qaDisabled = qaPresentationMode === 'disabled';
+  const qaPresentationBlocked = qaPresentationMode !== 'enabled';
+
+  useEffect(() => {
+    qaPresentationModeRef.current = qaPresentationMode;
+  }, [qaPresentationMode]);
+
+  useEffect(() => {
+    activeTaskIdRef.current = taskId;
+    qaLoadAttemptedForRef.current = null;
+    queueMicrotask(() => {
+      setTaskInfo(null);
+      setPersistedQaResults([]);
+      setPersistedQaSummaries({});
+      setArtifactCache({});
+      setSelectedPhase(null);
+      setDetailOpen(false);
+      reset();
+    });
+  }, [reset, taskId]);
 
   const loadTaskInfo = useCallback(() => (
-    getTask(taskId).then(setTaskInfo).catch(() => null)
+    getTask(taskId)
+      .then((data) => {
+        if (data?.id !== taskId || activeTaskIdRef.current !== taskId) return null;
+        setTaskInfo(data);
+        return data;
+      })
+      .catch(() => null)
   ), [taskId]);
 
   const cacheArtifact = useCallback((phase, data) => {
@@ -120,6 +151,7 @@ export default function TaskDetail() {
   }, []);
 
   const mergeQaResult = useCallback((qaResult) => {
+    if (qaPresentationModeRef.current !== 'enabled') return;
     setArtifactCache((previous) => {
       const previousChecks = previous.qa?.checks || [];
       const checks = [
@@ -143,6 +175,7 @@ export default function TaskDetail() {
     if (!phase) return Promise.resolve(null);
     return getArtifact(taskId, phase)
       .then((data) => {
+        if (activeTaskIdRef.current !== taskId) return null;
         cacheArtifact(phase, data);
         return data;
       })
@@ -150,9 +183,13 @@ export default function TaskDetail() {
   }, [cacheArtifact, taskId]);
 
   const refreshQa = useCallback(() => {
-    if (qaDisabled) return Promise.resolve(null);
+    if (qaPresentationMode !== 'enabled' || qaLoadAttemptedForRef.current === taskId) {
+      return Promise.resolve(null);
+    }
+    qaLoadAttemptedForRef.current = taskId;
     return getArtifact(taskId, 'qa')
       .then((data) => {
+        if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
         const checks = data?.checks || [];
         cacheArtifact('qa', data);
         setPersistedQaResults(checks);
@@ -160,20 +197,21 @@ export default function TaskDetail() {
         return data;
       })
       .catch(() => {
+        if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
         setPersistedQaResults([]);
         setPersistedQaSummaries({});
         return null;
       });
-  }, [cacheArtifact, qaDisabled, taskId]);
+  }, [cacheArtifact, qaPresentationMode, taskId]);
 
   useEffect(() => {
     loadTaskInfo();
   }, [loadTaskInfo]);
 
   useEffect(() => {
-    if (!taskInfo || qaDisabled) return;
+    if (qaPresentationMode !== 'enabled') return;
     refreshQa();
-  }, [qaDisabled, refreshQa, taskInfo]);
+  }, [qaPresentationMode, refreshQa]);
 
   useEffect(() => {
     if (!taskId) return undefined;
@@ -184,11 +222,12 @@ export default function TaskDetail() {
   useEffect(() => {
     const event = events[events.length - 1];
     if (!event) return;
+    if (qaPresentationMode === 'pending') return;
 
     if (event.type === 'agent_completed') {
       refreshArtifact(event.phase);
     }
-    if (!qaDisabled && (event.type === 'qa_check_passed' || event.type === 'qa_check_failed')) {
+    if (qaPresentationMode === 'enabled' && (event.type === 'qa_check_passed' || event.type === 'qa_check_failed')) {
       const qaResult = event.data?.qa_result;
       if (qaResult) {
         queueMicrotask(() => mergeQaResult(qaResult));
@@ -196,29 +235,29 @@ export default function TaskDetail() {
         refreshQa();
       }
     }
-    if (!qaDisabled && event.type === 'task_completed') {
+    if (qaPresentationMode === 'enabled' && event.type === 'task_completed') {
       refreshQa();
     }
-  }, [events, mergeQaResult, qaDisabled, refreshArtifact, refreshQa]);
+  }, [events, mergeQaResult, qaPresentationMode, refreshArtifact, refreshQa]);
 
   const handleNodeClick = (phase) => {
     setSelectedPhase(phase);
     setDetailOpen(true);
   };
 
-  const graphQaSummaries = qaDisabled
+  const graphQaSummaries = qaPresentationBlocked
     ? {}
     : mergeQaSummaries(persistedQaSummaries, qaSummaries);
-  const timelineQaResults = qaDisabled ? [] : (qaResults.length > 0 ? qaResults : persistedQaResults);
+  const timelineQaResults = qaPresentationBlocked ? [] : (qaResults.length > 0 ? qaResults : persistedQaResults);
   const cockpitChecks = artifactCache.qa?.checks?.length > 0
     ? artifactCache.qa.checks
     : timelineQaResults;
-  const presentationEvents = filterPresentationEvents(events, qaDisabled);
+  const presentationEvents = filterPresentationEvents(events, qaPresentationBlocked);
   const graphNodeStates = { ...nodeStates };
-  const currentPhase = AGENT_TO_PHASE[taskInfo?.current_agent];
+  const currentPhase = AGENT_TO_PHASE[currentTaskInfo?.current_agent];
 
   if (
-    taskInfo?.status === 'running'
+    currentTaskInfo?.status === 'running'
     && currentPhase
     && graphNodeStates[currentPhase] !== 'failed'
     && graphNodeStates[currentPhase] !== 'retrying'
@@ -226,18 +265,18 @@ export default function TaskDetail() {
     graphNodeStates[currentPhase] = 'running';
   }
 
-  const resolvedTaskStatus = resolveTaskStatus(taskStatus, taskInfo?.status);
+  const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
   const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
-  const taskModeMeta = getTaskModeMeta(taskInfo);
+  const taskModeMeta = getTaskModeMeta(currentTaskInfo);
   const progressPercent = resolveTaskProgress(
     resolvedTaskStatus,
     progress,
-    taskInfo?.progress,
+    currentTaskInfo?.progress,
   );
-  const currentAgent = taskInfo?.current_agent
+  const currentAgent = currentTaskInfo?.current_agent
     || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
     || '等待调度';
-  const presentationCurrentMessage = qaDisabled
+  const presentationCurrentMessage = qaPresentationBlocked
     ? presentationEvents.at(-1)?.message || '业务 Agent 正在推进工作流'
     : currentMessage;
 
@@ -256,7 +295,7 @@ export default function TaskDetail() {
         <div className="mission-title-row">
           <div className="mission-title-copy">
             <span className="section-eyebrow">Live agent mission</span>
-            <h1>{taskInfo?.product_description || taskId}</h1>
+            <h1>{currentTaskInfo?.product_description || taskId}</h1>
             <p>{presentationCurrentMessage || '等待 Agent 团队更新进度'}</p>
           </div>
           <div className="mission-actions">
@@ -292,7 +331,7 @@ export default function TaskDetail() {
           </span>
         </div>
 
-        {taskInfo?.error && <p className="mission-error">{taskInfo.error}</p>}
+        {currentTaskInfo?.error && <p className="mission-error">{currentTaskInfo.error}</p>}
 
         <div className="mission-progress-row">
           <span>任务总进度</span>
@@ -378,8 +417,8 @@ export default function TaskDetail() {
         agentLabel={selectedPhase ? AGENT_PHASE_MAP[selectedPhase]?.label : ''}
         nodeStatus={selectedPhase ? graphNodeStates[selectedPhase] : undefined}
         artifactData={selectedPhase ? artifactCache[selectedPhase] : undefined}
-        qaArtifactData={qaDisabled ? undefined : artifactCache.qa}
-        qaDisabled={qaDisabled}
+        qaArtifactData={qaPresentationBlocked ? undefined : artifactCache.qa}
+        qaDisabled={qaPresentationBlocked}
         onArtifactLoaded={cacheArtifact}
       />
     </main>

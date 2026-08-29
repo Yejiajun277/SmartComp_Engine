@@ -1,6 +1,7 @@
 import { ArrowDownOutlined, BranchesOutlined } from '@ant-design/icons';
 import AgentNode from './AgentNode';
 import QAGate from './QAGate';
+import { getGateState } from '../utils/quality';
 import { deriveStageStatus } from '../utils/workflowPresentation';
 
 const STAGES = [
@@ -56,6 +57,18 @@ function formatTiming(value) {
   return Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}s` : undefined;
 }
 
+function resolveWorkflowStageStatus(stage, nodeStates, qaSummaries, taskStatus, qaDisabled) {
+  const checkpointStatus = stage.checkpoint
+    ? getGateState(stage.checkpoint.targets, qaSummaries, { disabled: qaDisabled }).status
+    : 'waiting';
+  return deriveStageStatus(
+    stage.agents.map(agent => agent.key),
+    nodeStates,
+    taskStatus,
+    checkpointStatus,
+  );
+}
+
 function StageConnector({ status }) {
   return (
     <div className="stage-connector" data-status={status} aria-hidden="true">
@@ -88,15 +101,12 @@ function StageAgents({ stage, nodeStates, timings, onNodeClick }) {
 }
 
 function WorkflowStage({ stage, nodeStates, qaSummaries, timings, taskStatus, qaDisabled, onNodeClick }) {
-  const status = deriveStageStatus(
-    stage.agents.map(agent => agent.key),
-    nodeStates,
-    taskStatus,
-  );
+  const status = resolveWorkflowStageStatus(stage, nodeStates, qaSummaries, taskStatus, qaDisabled);
   const statusLabel = {
     completed: '已完成',
     running: '进行中',
     retrying: '重试中',
+    degraded: '降级交付',
     failed: '需处理',
     waiting: '等待中',
   }[status] || '等待中';
@@ -155,10 +165,12 @@ export default function PipelineGraph({
         {qaDisabled && <span><i className="legend-disabled" /> QA 已关闭</span>}
       </div>
       {STAGES.map((stage, index) => {
-        const status = deriveStageStatus(
-          stage.agents.map(agent => agent.key),
+        const status = resolveWorkflowStageStatus(
+          stage,
           nodeStates,
+          qaSummaries,
           taskStatus,
+          qaDisabled,
         );
         return (
           <div className="workflow-stage-flow-item" key={stage.key}>
