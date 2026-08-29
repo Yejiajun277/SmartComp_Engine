@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendUniqueEvent,
+  mergeQaSummaries,
   upsertQaResult,
 } from '../src/utils/taskEvents.js';
 
@@ -47,4 +48,13 @@ test('deduplicates replayed workflow history by stable event identity', () => {
   };
 
   assert.equal(appendUniqueEvent(appendUniqueEvent([], event), { ...event }).length, 1);
+});
+
+test('persisted terminal QA does not regress to a replayed start from the same attempt', () => {
+  const result = mergeQaSummaries(
+    { strategy: { status: 'passed', attempt: 1 } },
+    { strategy: { status: 'running', attempt: 1 } },
+  );
+
+  assert.equal(result.strategy.status, 'passed');
 });

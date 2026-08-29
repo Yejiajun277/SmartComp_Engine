@@ -54,7 +54,17 @@ export function aggregateQuality(checks = []) {
   };
 }
 
-export function getGateState(targetKeys = [], qaSummaries = {}) {
+export function getGateState(targetKeys = [], qaSummaries = {}, { disabled = false } = {}) {
+  if (disabled) {
+    return {
+      status: 'disabled',
+      label: '质量检查已关闭',
+      score: null,
+      retryCount: 0,
+      targets: targetKeys,
+    };
+  }
+
   const summaries = targetKeys
     .map(target => ({ target, summary: qaSummaries?.[target] }))
     .filter(item => item.summary);

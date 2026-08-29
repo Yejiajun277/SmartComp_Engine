@@ -3,12 +3,14 @@ import {
   HourglassOutlined,
   LoadingOutlined,
   SafetyCertificateOutlined,
+  StopOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { getGateState } from '../utils/quality';
 
 const GATE_META = {
   waiting: { icon: <HourglassOutlined />, title: '等待质检' },
+  disabled: { icon: <StopOutlined />, title: '质量检查已关闭' },
   running: { icon: <LoadingOutlined spin />, title: 'QualityAgent 正在检查' },
   failed: { icon: <WarningOutlined />, title: '需要修正' },
   degraded: { icon: <SafetyCertificateOutlined />, title: '降级交付' },
@@ -23,8 +25,8 @@ const TARGET_AGENT_NAMES = {
   strategy: 'StrategyAgent',
 };
 
-export default function QAGate({ label, targets, qaSummaries }) {
-  const state = getGateState(targets, qaSummaries);
+export default function QAGate({ label, targets, qaSummaries, disabled = false }) {
+  const state = getGateState(targets, qaSummaries, { disabled });
   const meta = GATE_META[state.status] || GATE_META.waiting;
   const targetNames = targets.map(target => TARGET_AGENT_NAMES[target] || target);
 

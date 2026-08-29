@@ -58,3 +58,13 @@ test('prioritizes running, failed, degraded, then passed gate states', () => {
     'passed',
   );
 });
+
+test('disabled QA overrides stale running summaries', () => {
+  const result = getGateState(
+    ['strategy'],
+    { strategy: { status: 'running', attempt: 1 } },
+    { disabled: true },
+  );
+
+  assert.equal(result.status, 'disabled');
+});

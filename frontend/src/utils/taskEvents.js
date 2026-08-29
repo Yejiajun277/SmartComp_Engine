@@ -13,6 +13,40 @@ function getQaResultRank(result = {}) {
   return 1;
 }
 
+function isTerminalQaSummary(summary = {}) {
+  return ['failed', 'degraded', 'passed'].includes(summary.status);
+}
+
+function hasHigherAttempt(live = {}, persisted = {}) {
+  const liveAttempt = Number(live.attempt);
+  const persistedAttempt = Number(persisted.attempt);
+
+  return Number.isFinite(liveAttempt)
+    && Number.isFinite(persistedAttempt)
+    && liveAttempt > persistedAttempt;
+}
+
+export function mergeQaSummaries(persisted = {}, live = {}) {
+  const merged = { ...persisted };
+
+  Object.entries(live || {}).forEach(([target, liveSummary]) => {
+    const persistedSummary = persisted?.[target];
+
+    if (
+      persistedSummary
+      && isTerminalQaSummary(persistedSummary)
+      && liveSummary?.status === 'running'
+      && !hasHigherAttempt(liveSummary, persistedSummary)
+    ) {
+      return;
+    }
+
+    merged[target] = liveSummary;
+  });
+
+  return merged;
+}
+
 export function upsertQaResult(results = [], incoming) {
   if (!incoming) return results;
   const incomingKey = getQaAttemptKey(incoming);
