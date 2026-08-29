@@ -95,6 +95,36 @@ test('a task-scoped cache is empty for a different route and rejects stale write
   assert.equal(afterStaleWrite, taskTwoWithArtifact);
 });
 
+test('a task-scoped persisted QA presentation is empty for a new route and rejects stale writes', () => {
+  assert.equal(typeof workflowPresentation.createTaskQaPresentationState, 'function');
+  assert.equal(typeof workflowPresentation.selectTaskQaPresentationState, 'function');
+  assert.equal(typeof workflowPresentation.updateTaskQaPresentationState, 'function');
+
+  const taskOneState = workflowPresentation.updateTaskQaPresentationState(
+    workflowPresentation.createTaskQaPresentationState('task-one'),
+    'task-one',
+    {
+      results: [{ phase: 'strategy', passed: true }],
+      summaries: { strategy: { status: 'passed' } },
+    },
+  );
+  const taskTwoState = workflowPresentation.createTaskQaPresentationState('task-two');
+  const afterStaleWrite = workflowPresentation.updateTaskQaPresentationState(
+    taskTwoState,
+    'task-one',
+    {
+      results: [{ phase: 'collection', passed: false }],
+      summaries: { collection: { status: 'failed' } },
+    },
+  );
+
+  assert.deepEqual(
+    workflowPresentation.selectTaskQaPresentationState(taskOneState, 'task-two'),
+    { results: [], summaries: {} },
+  );
+  assert.equal(afterStaleWrite, taskTwoState);
+});
+
 test('task-scoped artifact selectors reject data from a previous task or phase', () => {
   const artifact = { taskId: 'task-one', phase: 'strategy', data: { summary: 'old' } };
   const qaArtifact = { taskId: 'task-one', data: { checks: [] } };

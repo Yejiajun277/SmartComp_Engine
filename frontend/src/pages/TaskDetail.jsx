@@ -21,11 +21,14 @@ import QualityDisabledNotice from '../components/workbench/QualityDisabledNotice
 import {
   buildPresentationNodeStates,
   createTaskArtifactCache,
+  createTaskQaPresentationState,
   filterPresentationEvents,
   getQaPresentationMode,
   selectTaskArtifactCache,
+  selectTaskQaPresentationState,
   shouldLoadQaArtifact,
   updateTaskArtifactCache,
+  updateTaskQaPresentationState,
 } from '../utils/workflowPresentation';
 import { buildQaSummaries, mergeQaSummaries } from '../utils/taskEvents';
 import {
@@ -49,8 +52,9 @@ export default function TaskDetail() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const [taskInfo, setTaskInfo] = useState(null);
-  const [persistedQaResults, setPersistedQaResults] = useState([]);
-  const [persistedQaSummaries, setPersistedQaSummaries] = useState({});
+  const [persistedQaPresentation, setPersistedQaPresentation] = useState(
+    () => createTaskQaPresentationState(taskId),
+  );
   const [artifactCache, setArtifactCache] = useState(() => createTaskArtifactCache(taskId));
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
@@ -86,8 +90,7 @@ export default function TaskDetail() {
     qaLoadAttemptedForRef.current = null;
     queueMicrotask(() => {
       setTaskInfo(null);
-      setPersistedQaResults([]);
-      setPersistedQaSummaries({});
+      setPersistedQaPresentation(createTaskQaPresentationState(taskId));
       setArtifactCache(createTaskArtifactCache(taskId));
       setSelectedPhase(null);
       setDetailOpen(false);
@@ -150,14 +153,18 @@ export default function TaskDetail() {
         if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
         const checks = data?.checks || [];
         cacheArtifact('qa', data);
-        setPersistedQaResults(checks);
-        setPersistedQaSummaries(buildQaSummaries(checks));
+        setPersistedQaPresentation(previous => updateTaskQaPresentationState(previous, taskId, {
+          results: checks,
+          summaries: buildQaSummaries(checks),
+        }));
         return data;
       })
       .catch(() => {
         if (activeTaskIdRef.current !== taskId || qaPresentationModeRef.current !== 'enabled') return null;
-        setPersistedQaResults([]);
-        setPersistedQaSummaries({});
+        setPersistedQaPresentation(previous => updateTaskQaPresentationState(previous, taskId, {
+          results: [],
+          summaries: {},
+        }));
         return null;
       });
   }, [cacheArtifact, currentTaskInfo, taskId]);
@@ -203,10 +210,11 @@ export default function TaskDetail() {
     setDetailOpen(true);
   };
 
+  const persistedQa = selectTaskQaPresentationState(persistedQaPresentation, taskId);
   const graphQaSummaries = qaPresentationBlocked
     ? {}
-    : mergeQaSummaries(persistedQaSummaries, qaSummaries);
-  const timelineQaResults = qaPresentationBlocked ? [] : (qaResults.length > 0 ? qaResults : persistedQaResults);
+    : mergeQaSummaries(persistedQa.summaries, qaSummaries);
+  const timelineQaResults = qaPresentationBlocked ? [] : (qaResults.length > 0 ? qaResults : persistedQa.results);
   const taskArtifacts = selectTaskArtifactCache(artifactCache, taskId);
   const cockpitChecks = taskArtifacts.qa?.checks?.length > 0
     ? taskArtifacts.qa.checks

@@ -64,6 +64,27 @@ export function updateTaskArtifactCache(cache, taskId, phase, data) {
   };
 }
 
+export function createTaskQaPresentationState(taskId) {
+  return { taskId, results: [], summaries: {} };
+}
+
+export function selectTaskQaPresentationState(state, taskId) {
+  if (!state || state.taskId !== taskId) return { results: [], summaries: {} };
+  return {
+    results: state.results || [],
+    summaries: state.summaries || {},
+  };
+}
+
+export function updateTaskQaPresentationState(state, taskId, presentation) {
+  if (!state || state.taskId !== taskId) return state;
+  return {
+    ...state,
+    results: presentation.results || [],
+    summaries: presentation.summaries || {},
+  };
+}
+
 export function selectTaskScopedArtifact(artifact, taskId, phase) {
   if (!artifact || artifact.taskId !== taskId || artifact.phase !== phase) return null;
   return artifact.data;
