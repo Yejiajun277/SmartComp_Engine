@@ -24,6 +24,46 @@ export function normalizeNodeStateForTask(nodeState = 'waiting', taskStatus) {
   return nodeState === 'failed' ? 'failed' : 'completed';
 }
 
+export function buildPresentationNodeStates(nodeStates = {}, taskStatus, currentPhase) {
+  const displayNodeStates = Object.fromEntries(
+    Object.entries(nodeStates).map(([phase, state]) => [
+      phase,
+      normalizeNodeStateForTask(state, taskStatus),
+    ]),
+  );
+
+  if (
+    taskStatus === 'running'
+    && currentPhase
+    && displayNodeStates[currentPhase] !== 'failed'
+    && displayNodeStates[currentPhase] !== 'retrying'
+  ) {
+    displayNodeStates[currentPhase] = 'running';
+  }
+
+  return displayNodeStates;
+}
+
+export function createTaskArtifactCache(taskId) {
+  return { taskId, artifacts: {} };
+}
+
+export function selectTaskArtifactCache(cache, taskId) {
+  if (!cache || cache.taskId !== taskId) return {};
+  return cache.artifacts || {};
+}
+
+export function updateTaskArtifactCache(cache, taskId, phase, data) {
+  if (!cache || cache.taskId !== taskId) return cache;
+  return {
+    ...cache,
+    artifacts: {
+      ...cache.artifacts,
+      [phase]: data,
+    },
+  };
+}
+
 export function selectTaskScopedArtifact(artifact, taskId, phase) {
   if (!artifact || artifact.taskId !== taskId || artifact.phase !== phase) return null;
   return artifact.data;

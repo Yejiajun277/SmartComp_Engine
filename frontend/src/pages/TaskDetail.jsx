@@ -19,10 +19,13 @@ import LiveActivityRail from '../components/workbench/LiveActivityRail';
 import QualityCockpit from '../components/workbench/QualityCockpit';
 import QualityDisabledNotice from '../components/workbench/QualityDisabledNotice';
 import {
+  buildPresentationNodeStates,
+  createTaskArtifactCache,
   filterPresentationEvents,
   getQaPresentationMode,
-  normalizeNodeStateForTask,
+  selectTaskArtifactCache,
   shouldLoadQaArtifact,
+  updateTaskArtifactCache,
 } from '../utils/workflowPresentation';
 import { buildQaSummaries, mergeQaSummaries } from '../utils/taskEvents';
 import {
@@ -48,7 +51,7 @@ export default function TaskDetail() {
   const [taskInfo, setTaskInfo] = useState(null);
   const [persistedQaResults, setPersistedQaResults] = useState([]);
   const [persistedQaSummaries, setPersistedQaSummaries] = useState({});
-  const [artifactCache, setArtifactCache] = useState({});
+  const [artifactCache, setArtifactCache] = useState(() => createTaskArtifactCache(taskId));
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
   const {
@@ -85,7 +88,7 @@ export default function TaskDetail() {
       setTaskInfo(null);
       setPersistedQaResults([]);
       setPersistedQaSummaries({});
-      setArtifactCache({});
+      setArtifactCache(createTaskArtifactCache(taskId));
       setSelectedPhase(null);
       setDetailOpen(false);
       reset();
@@ -103,13 +106,15 @@ export default function TaskDetail() {
   ), [taskId]);
 
   const cacheArtifact = useCallback((phase, data) => {
-    setArtifactCache(previous => ({ ...previous, [phase]: data }));
-  }, []);
+    setArtifactCache(previous => updateTaskArtifactCache(previous, taskId, phase, data));
+  }, [taskId]);
 
   const mergeQaResult = useCallback((qaResult) => {
     if (qaPresentationModeRef.current !== 'enabled') return;
     setArtifactCache((previous) => {
-      const previousChecks = previous.qa?.checks || [];
+      const artifacts = selectTaskArtifactCache(previous, taskId);
+      if (previous.taskId !== taskId) return previous;
+      const previousChecks = artifacts.qa?.checks || [];
       const checks = [
         ...previousChecks.filter(check => !(
           check.phase === qaResult.phase
@@ -117,15 +122,12 @@ export default function TaskDetail() {
         )),
         qaResult,
       ];
-      return {
-        ...previous,
-        qa: {
-          ...(previous.qa || {}),
+      return updateTaskArtifactCache(previous, taskId, 'qa', {
+          ...(artifacts.qa || {}),
           checks,
-        },
-      };
+      });
     });
-  }, []);
+  }, [taskId]);
 
   const refreshArtifact = useCallback((phase) => {
     if (!phase) return Promise.resolve(null);
@@ -205,27 +207,18 @@ export default function TaskDetail() {
     ? {}
     : mergeQaSummaries(persistedQaSummaries, qaSummaries);
   const timelineQaResults = qaPresentationBlocked ? [] : (qaResults.length > 0 ? qaResults : persistedQaResults);
-  const cockpitChecks = artifactCache.qa?.checks?.length > 0
-    ? artifactCache.qa.checks
+  const taskArtifacts = selectTaskArtifactCache(artifactCache, taskId);
+  const cockpitChecks = taskArtifacts.qa?.checks?.length > 0
+    ? taskArtifacts.qa.checks
     : timelineQaResults;
   const presentationEvents = filterPresentationEvents(events, qaPresentationBlocked);
   const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
-  const graphNodeStates = Object.fromEntries(
-    Object.entries(nodeStates).map(([phase, state]) => [
-      phase,
-      normalizeNodeStateForTask(state, resolvedTaskStatus),
-    ]),
-  );
   const currentPhase = AGENT_TO_PHASE[currentTaskInfo?.current_agent];
-
-  if (
-    currentTaskInfo?.status === 'running'
-    && currentPhase
-    && graphNodeStates[currentPhase] !== 'failed'
-    && graphNodeStates[currentPhase] !== 'retrying'
-  ) {
-    graphNodeStates[currentPhase] = 'running';
-  }
+  const graphNodeStates = buildPresentationNodeStates(
+    nodeStates,
+    resolvedTaskStatus,
+    currentPhase,
+  );
 
   const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
   const taskModeMeta = getTaskModeMeta(currentTaskInfo);
@@ -377,8 +370,8 @@ export default function TaskDetail() {
         onClose={() => setDetailOpen(false)}
         agentLabel={selectedPhase ? AGENT_PHASE_MAP[selectedPhase]?.label : ''}
         nodeStatus={selectedPhase ? graphNodeStates[selectedPhase] : undefined}
-        artifactData={selectedPhase ? artifactCache[selectedPhase] : undefined}
-        qaArtifactData={qaPresentationBlocked ? undefined : artifactCache.qa}
+        artifactData={selectedPhase ? taskArtifacts[selectedPhase] : undefined}
+        qaArtifactData={qaPresentationBlocked ? undefined : taskArtifacts.qa}
         qaDisabled={qaPresentationBlocked}
         onArtifactLoaded={cacheArtifact}
       />

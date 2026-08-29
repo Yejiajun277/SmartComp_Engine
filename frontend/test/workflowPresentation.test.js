@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as workflowPresentation from '../src/utils/workflowPresentation.js';
 import {
   deriveStageStatus,
   filterPresentationEvents,
@@ -34,6 +35,64 @@ test('completed tasks normalize non-failed node states without hiding a real fai
   assert.equal(normalizeNodeStateForTask('retrying', 'completed'), 'completed');
   assert.equal(normalizeNodeStateForTask('failed', 'completed'), 'failed');
   assert.equal(normalizeNodeStateForTask('running', 'running'), 'running');
+});
+
+test('a completed resolved task ignores a stale current-agent override', () => {
+  assert.equal(typeof workflowPresentation.buildPresentationNodeStates, 'function');
+
+  assert.deepEqual(
+    workflowPresentation.buildPresentationNodeStates(
+      { strategy: 'completed' },
+      'completed',
+      'strategy',
+    ),
+    { strategy: 'completed' },
+  );
+});
+
+test('a running resolved task marks its current agent as running without hiding a retry', () => {
+  assert.equal(typeof workflowPresentation.buildPresentationNodeStates, 'function');
+
+  assert.deepEqual(
+    workflowPresentation.buildPresentationNodeStates(
+      { strategy: 'waiting', collection: 'retrying' },
+      'running',
+      'strategy',
+    ),
+    { strategy: 'running', collection: 'retrying' },
+  );
+});
+
+test('a task-scoped cache is empty for a different route and rejects stale writes', () => {
+  assert.equal(typeof workflowPresentation.createTaskArtifactCache, 'function');
+  assert.equal(typeof workflowPresentation.selectTaskArtifactCache, 'function');
+  assert.equal(typeof workflowPresentation.updateTaskArtifactCache, 'function');
+
+  const taskOneCache = workflowPresentation.updateTaskArtifactCache(
+    workflowPresentation.createTaskArtifactCache('task-one'),
+    'task-one',
+    'strategy',
+    { summary: 'old' },
+  );
+  const taskTwoCache = workflowPresentation.createTaskArtifactCache('task-two');
+  const taskTwoWithArtifact = workflowPresentation.updateTaskArtifactCache(
+    taskTwoCache,
+    'task-two',
+    'strategy',
+    { summary: 'new' },
+  );
+  const afterStaleWrite = workflowPresentation.updateTaskArtifactCache(
+    taskTwoWithArtifact,
+    'task-one',
+    'collection',
+    { summary: 'stale' },
+  );
+
+  assert.deepEqual(workflowPresentation.selectTaskArtifactCache(taskOneCache, 'task-two'), {});
+  assert.deepEqual(workflowPresentation.selectTaskArtifactCache(taskTwoWithArtifact, 'task-two'), {
+    strategy: { summary: 'new' },
+  });
+  assert.equal(afterStaleWrite, taskTwoWithArtifact);
 });
 
 test('task-scoped artifact selectors reject data from a previous task or phase', () => {
