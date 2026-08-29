@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { appendUniqueEvent, upsertQaResult } from '../utils/taskEvents';
 
 const AGENT_PHASE_MAP = {
   discovery: { label: '竞品发现', agent: 'DiscoveryAgent' },
@@ -108,7 +109,7 @@ export function useTask() {
 
   const handleEvent = useCallback((event) => {
     console.log('[useTask] handleEvent:', event.type, event.phase, event.progress);
-    setEvents(prev => [...prev, event]);
+    setEvents(prev => appendUniqueEvent(prev, event));
 
     if (event.progress) setProgress(event.progress);
     if (event.message) setCurrentMessage(event.message);
@@ -127,25 +128,19 @@ export function useTask() {
 
     // Handle QA events
     if (event.type === 'qa_check_started') {
-      setQaResults(prev => [...prev, {
+      const runningResult = {
         phase: event.phase,
         target_agent: event.data?.target_agent,
         attempt: event.data?.attempt,
         running: true,
         message: event.message,
-      }]);
+      };
+      setQaResults(prev => upsertQaResult(prev, runningResult));
       return;
     } else if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
       const nodeKey = QA_PHASE_TO_NODE[event.phase];
       const result = normalizeQaResult(event);
-      setQaResults(prev => [
-        ...prev.filter(item => !(
-          item.running
-          && item.phase === result.phase
-          && (item.attempt == null || result.attempt == null || item.attempt === result.attempt)
-        )),
-        result,
-      ]);
+      setQaResults(prev => upsertQaResult(prev, result));
       if (event.type === 'qa_check_failed' && nodeKey) {
         setNodeStates(prev => ({ ...prev, [nodeKey]: 'retrying' }));
       } else if (event.type === 'qa_check_passed' && nodeKey) {

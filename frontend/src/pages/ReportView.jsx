@@ -25,6 +25,7 @@ export default function ReportView() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('overview');
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [iframeKey, setIframeKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +58,11 @@ export default function ReportView() {
     anchor.download = `${safeName}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleReloadIframe = () => {
+    setIframeLoading(true);
+    setIframeKey(current => current + 1);
   };
 
   if (loading) {
@@ -108,12 +114,11 @@ export default function ReportView() {
       </header>
 
       <nav className="report-view-tabs" aria-label="报告视图">
-        <div role="tablist">
+        <div>
           {REPORT_VIEWS.map(item => (
             <button
               type="button"
-              role="tab"
-              aria-selected={view === item.key}
+              aria-pressed={view === item.key}
               className={view === item.key ? 'is-active' : ''}
               key={item.key}
               onClick={() => handleViewChange(item.key)}
@@ -150,14 +155,18 @@ export default function ReportView() {
               </div>
             )}
             <iframe
+              key={iframeKey}
               src={iframeUrl}
               title={`${overview.productName} 竞品分析报告`}
               onLoad={() => setIframeLoading(false)}
+              onError={() => setIframeLoading(false)}
             />
           </div>
           <p className="report-iframe-fallback">
             如果嵌入内容未正常显示，请
-            <a href={iframeUrl} target="_blank" rel="noreferrer">在新窗口打开完整报告</a>。
+            <a href={iframeUrl} target="_blank" rel="noreferrer">在新窗口打开完整报告</a>
+            或
+            <button type="button" onClick={handleReloadIframe}>重新载入</button>。
           </p>
         </section>
       )}

@@ -13,6 +13,50 @@ export function getTaskStatusMeta(status) {
   return TASK_STATUS_META[status] || TASK_STATUS_META.pending;
 }
 
+export function getTaskModeMeta(task = {}) {
+  const executionLabel = task?.use_rule_engine === true
+    ? '规则引擎分析'
+    : task?.use_rule_engine === false
+      ? '智能模型分析'
+      : '执行模式待同步';
+  const qaLabel = task?.skip_qa === true
+    ? '质量检查已关闭'
+    : task?.skip_qa === false
+      ? 'QualityAgent 已开启'
+      : 'QA 状态待同步';
+
+  return {
+    executionLabel,
+    qaLabel,
+    qaTone: task?.skip_qa === true ? 'risk' : 'neutral',
+  };
+}
+
+export function resolveTaskProgress(status, liveProgress = 0, persistedProgress = 0) {
+  if (status === 'completed') return 100;
+
+  const normalizedLive = Number.isFinite(Number(liveProgress)) ? Number(liveProgress) : 0;
+  const normalizedPersisted = Number.isFinite(Number(persistedProgress))
+    ? Number(persistedProgress)
+    : 0;
+
+  return Math.round(Math.min(1, Math.max(0, normalizedLive, normalizedPersisted)) * 100);
+}
+
+const TERMINAL_TASK_STATUSES = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'degraded',
+]);
+
+export function resolveTaskStatus(liveStatus = 'pending', persistedStatus = 'pending') {
+  if (TERMINAL_TASK_STATUSES.has(persistedStatus)) return persistedStatus;
+  if (TERMINAL_TASK_STATUSES.has(liveStatus)) return liveStatus;
+  if (liveStatus && liveStatus !== 'pending') return liveStatus;
+  return persistedStatus || 'pending';
+}
+
 export function mergeTasks(serverTasks = [], recentTasks = []) {
   const recentById = new Map(
     recentTasks.filter(task => task?.id).map(task => [task.id, task]),

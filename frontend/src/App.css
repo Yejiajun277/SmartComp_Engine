@@ -2846,9 +2846,18 @@
   font-size: 9px;
 }
 
-.report-iframe-fallback a {
+.report-iframe-fallback a,
+.report-iframe-fallback button {
   margin-left: 3px;
   color: var(--sc-blue);
+}
+
+.report-iframe-fallback button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
 }
 
 .report-json-panel h2 {

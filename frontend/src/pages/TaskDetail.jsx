@@ -17,7 +17,12 @@ import PipelineGraph from '../components/PipelineGraph';
 import QATimeline from '../components/QATimeline';
 import LiveActivityRail from '../components/workbench/LiveActivityRail';
 import QualityCockpit from '../components/workbench/QualityCockpit';
-import { getTaskStatusMeta } from '../utils/presentation';
+import {
+  getTaskModeMeta,
+  getTaskStatusMeta,
+  resolveTaskProgress,
+  resolveTaskStatus,
+} from '../utils/presentation';
 
 const QA_PHASE_TO_NODE = {
   collection: 'collection',
@@ -211,11 +216,14 @@ export default function TaskDetail() {
     graphNodeStates[currentPhase] = 'running';
   }
 
-  const resolvedTaskStatus = taskStatus !== 'pending'
-    ? taskStatus
-    : taskInfo?.status || 'pending';
+  const resolvedTaskStatus = resolveTaskStatus(taskStatus, taskInfo?.status);
   const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
-  const progressPercent = resolvedTaskStatus === 'completed' ? 100 : Math.round(progress * 100);
+  const taskModeMeta = getTaskModeMeta(taskInfo);
+  const progressPercent = resolveTaskProgress(
+    resolvedTaskStatus,
+    progress,
+    taskInfo?.progress,
+  );
   const currentAgent = taskInfo?.current_agent
     || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
     || '等待调度';
@@ -263,11 +271,11 @@ export default function TaskDetail() {
           <span><RobotOutlined /> 当前 Agent：<strong>{currentAgent}</strong></span>
           <span>
             <CodeOutlined />
-            {taskInfo?.use_rule_engine ? '规则引擎分析' : '智能模型分析'}
+            {taskModeMeta.executionLabel}
           </span>
-          <span className={taskInfo?.skip_qa ? 'mission-risk-meta' : ''}>
+          <span className={taskModeMeta.qaTone === 'risk' ? 'mission-risk-meta' : ''}>
             <SafetyCertificateOutlined />
-            {taskInfo?.skip_qa ? '质量检查已关闭' : 'QualityAgent 已开启'}
+            {taskModeMeta.qaLabel}
           </span>
         </div>
 

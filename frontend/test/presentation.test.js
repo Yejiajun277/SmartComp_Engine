@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
   formatElapsed,
   getEventLabel,
+  getTaskModeMeta,
   getTaskStatusMeta,
   mergeTasks,
+  resolveTaskProgress,
+  resolveTaskStatus,
 } from '../src/utils/presentation.js';
 
 test('maps task states to user-facing labels and tones', () => {
@@ -38,4 +41,32 @@ test('keeps server task order and appends unmatched local tasks', () => {
   );
 
   assert.deepEqual(result.map(item => item.id), ['new', 'old', 'local']);
+});
+
+test('does not claim execution or QA modes when the task API omits them', () => {
+  const unknownMeta = {
+    executionLabel: '执行模式待同步',
+    qaLabel: 'QA 状态待同步',
+    qaTone: 'neutral',
+  };
+  assert.deepEqual(getTaskModeMeta({}), unknownMeta);
+  assert.deepEqual(getTaskModeMeta(null), unknownMeta);
+  assert.deepEqual(getTaskModeMeta({ use_rule_engine: true, skip_qa: true }), {
+    executionLabel: '规则引擎分析',
+    qaLabel: '质量检查已关闭',
+    qaTone: 'risk',
+  });
+});
+
+test('uses persisted task progress until a newer live update arrives', () => {
+  assert.equal(resolveTaskProgress('running', 0, 0.42), 42);
+  assert.equal(resolveTaskProgress('running', 0.58, 0.42), 58);
+  assert.equal(resolveTaskProgress('completed', 0, 0.42), 100);
+});
+
+test('lets persisted terminal state recover a missed websocket terminal event', () => {
+  assert.equal(resolveTaskStatus('running', 'completed'), 'completed');
+  assert.equal(resolveTaskStatus('running', 'failed'), 'failed');
+  assert.equal(resolveTaskStatus('completed', 'running'), 'completed');
+  assert.equal(resolveTaskStatus('pending', 'running'), 'running');
 });
