@@ -27,6 +27,7 @@ import {
   selectTaskArtifactCache,
   selectTaskQaPresentationState,
   shouldLoadQaArtifact,
+  shouldRefreshTerminalQa,
   updateTaskArtifactCache,
   updateTaskQaPresentationState,
 } from '../utils/workflowPresentation';
@@ -75,6 +76,7 @@ export default function TaskDetail() {
   const { connected } = useWebSocket(taskId, handleEvent);
   const activeTaskIdRef = useRef(taskId);
   const qaLoadAttemptedForRef = useRef(null);
+  const qaTerminalRefreshForRef = useRef(null);
   const qaPresentationModeRef = useRef('pending');
   const currentTaskInfo = taskInfo?.id === taskId ? taskInfo : null;
   const qaPresentationMode = getQaPresentationMode(taskId, currentTaskInfo);
@@ -88,6 +90,7 @@ export default function TaskDetail() {
   useEffect(() => {
     activeTaskIdRef.current = taskId;
     qaLoadAttemptedForRef.current = null;
+    qaTerminalRefreshForRef.current = null;
     queueMicrotask(() => {
       setTaskInfo(null);
       setPersistedQaPresentation(createTaskQaPresentationState(taskId));
@@ -200,7 +203,11 @@ export default function TaskDetail() {
         refreshQa();
       }
     }
-    if (qaPresentationMode === 'enabled' && event.type === 'task_completed') {
+    if (
+      qaPresentationMode === 'enabled'
+      && shouldRefreshTerminalQa(event, taskId, qaTerminalRefreshForRef.current)
+    ) {
+      qaTerminalRefreshForRef.current = taskId;
       refreshQa(true);
     }
   }, [events, mergeQaResult, qaPresentationMode, refreshArtifact, refreshQa, taskId]);

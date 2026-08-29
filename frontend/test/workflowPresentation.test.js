@@ -176,3 +176,23 @@ test('QA events are omitted from presentation only when QA is disabled', () => {
   assert.deepEqual(filterPresentationEvents(events, true), [{ type: 'agent_started' }]);
   assert.deepEqual(filterPresentationEvents(events, false), events);
 });
+
+test('a completed task forces its final QA refresh only once', () => {
+  assert.equal(typeof workflowPresentation.shouldRefreshTerminalQa, 'function');
+  const completed = { task_id: 'task-current', type: 'task_completed' };
+
+  assert.equal(workflowPresentation.shouldRefreshTerminalQa(completed, 'task-current', null), true);
+  assert.equal(
+    workflowPresentation.shouldRefreshTerminalQa(completed, 'task-current', 'task-current'),
+    false,
+  );
+  assert.equal(workflowPresentation.shouldRefreshTerminalQa(completed, 'task-other', null), false);
+  assert.equal(
+    workflowPresentation.shouldRefreshTerminalQa(
+      { ...completed, type: 'progress_update' },
+      'task-current',
+      null,
+    ),
+    false,
+  );
+});

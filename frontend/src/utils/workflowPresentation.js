@@ -105,6 +105,12 @@ export function shouldLoadQaArtifact(taskId, taskInfo, attemptedTaskId, force = 
     && (force || attemptedTaskId !== taskId);
 }
 
+export function shouldRefreshTerminalQa(event, taskId, refreshedTaskId) {
+  return event?.type === 'task_completed'
+    && event.task_id === taskId
+    && refreshedTaskId !== taskId;
+}
+
 export function filterPresentationEvents(events = [], qaDisabled = false) {
   return qaDisabled ? events.filter(event => !event?.type?.startsWith('qa_')) : events;
 }
