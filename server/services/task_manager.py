@@ -171,6 +171,12 @@ class TaskManager:
             task.report_path = event.data["run_dir"]
             self._save_task(task)
 
+    def _mark_task_cancelled(self, task: TaskState) -> None:
+        task.status = "cancelled"
+        task.finished_at = datetime.now()
+        task.current_agent = None
+        self._save_task(task)
+
     async def submit(self, product_description: str, max_competitors: int,
                      skip_qa: bool, use_rule_engine: bool = False) -> str:
         from core.llm_client import check_llm_backend
@@ -240,23 +246,29 @@ class TaskManager:
             # Listen to workflow events to update progress/agent in real time
             self._event_bus.add_listener(self._on_workflow_event)
 
-            # Wait for WebSocket to connect and subscribe
-            await asyncio.sleep(1.5)
+            try:
+                # Wait for WebSocket to connect and subscribe
+                await asyncio.sleep(1.5)
 
-            mode_msg = "规则引擎模式（无 LLM）" if use_rule_engine else "LLM 智能分析模式"
-            await self._event_bus.emit(task_id, WorkflowEvent(
-                type=EventType.TASK_STARTED,
-                task_id=task_id,
-                agent="Orchestrator",
-                phase="init",
-                status="running",
-                progress=0.0,
-                message=f"开始分析: {product_description} [{mode_msg}]",
-            ))
+                mode_msg = "规则引擎模式（无 LLM）" if use_rule_engine else "LLM 智能分析模式"
+                await self._event_bus.emit(task_id, WorkflowEvent(
+                    type=EventType.TASK_STARTED,
+                    task_id=task_id,
+                    agent="Orchestrator",
+                    phase="init",
+                    status="running",
+                    progress=0.0,
+                    message=f"开始分析: {product_description} [{mode_msg}]",
+                ))
 
-            # Agents read execution flags from the process-wide config module.
-            # Serialize this sensitive scope so concurrent tasks cannot flip modes.
-            await self._runtime_config_lock.acquire()
+                # Agents read execution flags from the process-wide config module.
+                # Serialize this sensitive scope so concurrent tasks cannot flip modes.
+                await self._runtime_config_lock.acquire()
+            except asyncio.CancelledError:
+                self._mark_task_cancelled(task)
+                self._event_bus.remove_listener(self._on_workflow_event)
+                raise
+
             try:
                 import config as app_config
                 app_config.SKIP_QA = skip_qa
@@ -373,6 +385,9 @@ class TaskManager:
                         "rule_engine_mode": use_rule_engine,
                     },
                 ))
+            except asyncio.CancelledError:
+                self._mark_task_cancelled(task)
+                raise
             except Exception as exc:
                 task.status = "failed"
                 task.finished_at = datetime.now()

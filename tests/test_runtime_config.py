@@ -204,6 +204,41 @@ class TaskSubmissionMetadataTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ConcurrentExecutionModeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelling_a_task_while_it_waits_for_the_mode_lock_cleans_up(self):
+        original_sleep = asyncio.sleep
+
+        async def fast_startup_sleep(_delay):
+            await original_sleep(0)
+
+        manager = TaskManager(EventBus(), max_concurrent=2)
+        task = TaskState("waiting", "waiting", 5, False, use_rule_engine=False)
+        manager._tasks = {task.id: task}
+        await manager._runtime_config_lock.acquire()
+
+        try:
+            with (
+                patch.object(task_manager_module.asyncio, "sleep", fast_startup_sleep),
+                patch.object(manager, "_save_task") as save_task,
+                patch.object(manager._event_bus, "emit", new_callable=AsyncMock),
+            ):
+                run = asyncio.create_task(
+                    manager._run_task(task.id, task.product_description, 5, False, False),
+                )
+                await original_sleep(0.01)
+                self.assertFalse(run.done())
+
+                run.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await run
+
+            self.assertEqual(task.status, "cancelled")
+            self.assertIsNotNone(task.finished_at)
+            self.assertIsNone(task.current_agent)
+            self.assertNotIn(manager._on_workflow_event, manager._event_bus._listeners)
+            self.assertGreaterEqual(save_task.call_count, 2)
+        finally:
+            manager._runtime_config_lock.release()
+
     async def test_opposite_modes_cannot_overwrite_each_others_runtime_config(self):
         observations = []
         original_sleep = asyncio.sleep
