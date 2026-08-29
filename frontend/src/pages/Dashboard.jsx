@@ -1,20 +1,21 @@
-import { useCallback, useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Row, Col, Card, Tag, List, Typography, Button, Popconfirm, message } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
-import { deleteTask, submitTask, getTasks } from '../api/client';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button, List, Popconfirm, message } from 'antd';
+import { ArrowRightOutlined, DeleteOutlined } from '@ant-design/icons';
+import { deleteTask, getTasks, submitTask } from '../api/client';
+import HomeHero from '../components/dashboard/HomeHero';
 import TaskForm from '../components/TaskForm';
-
-const { Title, Text } = Typography;
-
-const STATUS_MAP = {
-  pending: { color: 'default', text: '等待中' },
-  running: { color: 'processing', text: '运行中' },
-  completed: { color: 'success', text: '已完成' },
-  failed: { color: 'error', text: '失败' },
-};
+import { formatElapsed, getTaskStatusMeta, mergeTasks } from '../utils/presentation';
 
 const RECENT_TASKS_KEY = 'smartcomp_recent_tasks';
+
+const PROCESS_STEPS = [
+  { title: '发现竞品', description: '界定真实竞争边界' },
+  { title: '采集证据', description: '保留来源与查询链' },
+  { title: '并行分析', description: '功能、定价、市场同步推进' },
+  { title: 'QA 打回', description: '检查幻觉、完整性与覆盖率' },
+  { title: '策略交付', description: '输出带引用的行动建议' },
+];
 
 function loadRecentTasks() {
   try {
@@ -34,42 +35,90 @@ function removeRecentTask(taskId) {
   localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(tasks));
 }
 
-function mergeTasks(serverTasks, recentTasks) {
-  const byId = new Map();
-  recentTasks.forEach(task => byId.set(task.id, task));
-  serverTasks.forEach(task => byId.set(task.id, { ...byId.get(task.id), ...task }));
-  return Array.from(byId.values());
+function formatStartedAt(startedAt) {
+  if (!startedAt) return '尚未开始';
+  const value = new Date(startedAt);
+  if (Number.isNaN(value.getTime())) return '开始时间待确认';
+  return `开始于 ${value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function TaskListItem({ task, status, onOpen, onDelete }) {
+  return (
+    <List.Item className="task-list-item" onClick={onOpen}>
+      <div className="task-list-main">
+        <div className="task-list-title-row">
+          <span className={`status-pill status-${status.tone}`}>{status.label}</span>
+          <strong>{task.product_description || '未命名分析'}</strong>
+        </div>
+        <div className="task-list-meta">
+          <span>{task.max_competitors || 5} 个竞品</span>
+          <span>{formatStartedAt(task.started_at)}</span>
+          <span>{task.finished_at ? `总耗时 ${formatElapsed(task.started_at, task.finished_at)}` : '实时推进中'}</span>
+        </div>
+        {task.error && <p className="task-list-error">{task.error}</p>}
+      </div>
+
+      <div className="task-list-actions">
+        <Button
+          className="secondary-action"
+          icon={<ArrowRightOutlined />}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen();
+          }}
+        >
+          {task.status === 'completed' ? '查看结果' : '进入工作台'}
+        </Button>
+        <Popconfirm
+          title="删除任务"
+          description="删除后将无法从任务列表恢复。"
+          okText="删除"
+          cancelText="取消"
+          onConfirm={() => onDelete(task.id)}
+        >
+          <Button
+            className="task-delete-action"
+            danger
+            type="text"
+            icon={<DeleteOutlined />}
+            aria-label={`删除 ${task.product_description || '任务'}`}
+            onClick={event => event.stopPropagation()}
+          />
+        </Popconfirm>
+      </div>
+    </List.Item>
+  );
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedExample, setSelectedExample] = useState('');
 
   const loadTasks = useCallback(async () => {
-    setLoading(true);
     try {
       const data = await getTasks();
       setTasks(mergeTasks(data, loadRecentTasks()));
     } catch (err) {
       setTasks(loadRecentTasks());
-      message.error('任务列表加载失败: ' + (err.response?.data?.detail || err.message));
+      message.error(`任务列表加载失败：${err.response?.data?.detail || err.message}`);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadTasks();
-    const interval = setInterval(loadTasks, 5000);
+    const initialLoad = window.setTimeout(loadTasks, 0);
+    const interval = window.setInterval(loadTasks, 5000);
     window.addEventListener('focus', loadTasks);
     return () => {
-      clearInterval(interval);
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
       window.removeEventListener('focus', loadTasks);
     };
-  }, [loadTasks, location.key]);
+  }, [loadTasks]);
 
   const handleSubmit = async (values) => {
     setSubmitting(true);
@@ -89,10 +138,10 @@ export default function Dashboard() {
         finished_at: null,
         error: null,
       });
-      message.success('任务已提交');
+      message.success('Agent 团队已开始工作');
       navigate(`/tasks/${result.task_id}`);
     } catch (err) {
-      message.error('提交失败: ' + (err.response?.data?.detail || err.message));
+      message.error(`提交失败：${err.response?.data?.detail || err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -102,88 +151,58 @@ export default function Dashboard() {
     try {
       await deleteTask(taskId);
       removeRecentTask(taskId);
-      setTasks(prev => prev.filter(task => task.id !== taskId));
+      setTasks(previous => previous.filter(task => task.id !== taskId));
       message.success('任务已删除');
     } catch (err) {
-      message.error('删除失败: ' + (err.response?.data?.detail || err.message));
+      message.error(`删除失败：${err.response?.data?.detail || err.message}`);
     }
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={2}>SmartComp Engine</Title>
-      <Text type="secondary">AI 驱动的竞品分析 Agent 协作系统</Text>
+    <main className="page-shell dashboard-page">
+      <section className="dashboard-hero-grid">
+        <HomeHero onExampleSelect={setSelectedExample} />
+        <TaskForm
+          initialProduct={selectedExample}
+          onSubmit={handleSubmit}
+          loading={submitting}
+        />
+      </section>
 
-      <Row gutter={24} style={{ marginTop: 24 }}>
-        <Col xs={24} md={8}>
-          <TaskForm onSubmit={handleSubmit} loading={submitting} />
-        </Col>
+      <section className="process-proof" aria-label="分析工作流">
+        {PROCESS_STEPS.map((step, index) => (
+          <article className="process-step" key={step.title}>
+            <span>{String(index + 1).padStart(2, '0')}</span>
+            <strong>{step.title}</strong>
+            <p>{step.description}</p>
+          </article>
+        ))}
+      </section>
 
-        <Col xs={24} md={16}>
-          <Card title="分析任务列表" style={{ height: '100%' }}>
-            <List
-              loading={loading}
-              dataSource={tasks}
-              locale={{ emptyText: '暂无任务，提交一个试试' }}
-              renderItem={(task) => {
-                const status = STATUS_MAP[task.status] || STATUS_MAP.pending;
-                return (
-                  <List.Item
-                    style={{ cursor: 'pointer', padding: '12px 0' }}
-                    onClick={() => navigate(`/tasks/${task.id}`)}
-                    actions={[
-                      <Popconfirm
-                        key="delete"
-                        title="删除任务"
-                        description="确定删除这个分析任务吗？"
-                        okText="删除"
-                        cancelText="取消"
-                        onConfirm={(event) => {
-                          event?.stopPropagation?.();
-                          handleDelete(task.id);
-                        }}
-                        onCancel={(event) => event?.stopPropagation?.()}
-                      >
-                        <Button
-                          danger
-                          type="text"
-                          icon={<DeleteOutlined />}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          删除
-                        </Button>
-                      </Popconfirm>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={
-                        <span>
-                          {task.product_description}
-                          <Tag color={status.color} style={{ marginLeft: 8 }}>
-                            {status.text}
-                          </Tag>
-                        </span>
-                      }
-                      description={
-                        <span>
-                          竞品数: {task.max_competitors}
-                          {task.started_at && (
-                            <> | 开始: {new Date(task.started_at).toLocaleTimeString()}</>
-                          )}
-                          {task.finished_at && task.started_at && (
-                            <> | 耗时: {Math.round((new Date(task.finished_at) - new Date(task.started_at)) / 1000)}s</>
-                          )}
-                          {task.error && <> | 错误: {task.error}</>}
-                        </span>
-                      }
-                    />
-                  </List.Item>
-                );
-              }}
+      <section className="surface-card recent-tasks" aria-labelledby="recent-task-heading">
+        <header className="section-heading">
+          <div>
+            <span className="section-eyebrow">Recent missions</span>
+            <h2 id="recent-task-heading">最近分析</h2>
+          </div>
+          <span>{tasks.length} 个任务</span>
+        </header>
+        <List
+          className="task-list"
+          loading={loading}
+          dataSource={tasks}
+          split={false}
+          locale={{ emptyText: '还没有分析任务，从上方启动第一支 Agent 团队' }}
+          renderItem={(task) => (
+            <TaskListItem
+              task={task}
+              status={getTaskStatusMeta(task.status)}
+              onOpen={() => navigate(`/tasks/${task.id}`)}
+              onDelete={handleDelete}
             />
-          </Card>
-        </Col>
-      </Row>
-    </div>
+          )}
+        />
+      </section>
+    </main>
   );
 }

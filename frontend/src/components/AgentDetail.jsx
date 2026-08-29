@@ -1,8 +1,9 @@
-import { Drawer, Descriptions, Tag, Collapse, Typography, Spin } from 'antd';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Collapse, Drawer, Spin, Tabs, Typography } from 'antd';
 import { getArtifact } from '../api/client';
+import QATimeline from './QATimeline';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const QA_PHASE_MAP = {
   collection: 'collection',
@@ -12,80 +13,141 @@ const QA_PHASE_MAP = {
   strategy: 'strategy',
 };
 
+const NODE_STATUS_LABELS = {
+  waiting: '等待执行',
+  running: '正在分析',
+  retrying: 'QA 打回后重做',
+  completed: '阶段完成',
+  failed: '执行失败',
+};
+
+const SUMMARY_KEYS = [
+  'summary',
+  'overall_summary',
+  'conclusion',
+  'overall_positioning',
+  'positioning',
+  'analysis_summary',
+  'description',
+];
+
 function getQaChecks(qaData, phase) {
   const qaPhase = QA_PHASE_MAP[phase];
   if (!qaPhase || !qaData?.checks) return [];
   return qaData.checks.filter(check => check.phase === qaPhase);
 }
 
-function qaStatusText(check) {
-  if (check.degraded) return '降级通过';
-  return check.passed ? '通过' : '未通过';
+function getSummary(data) {
+  if (typeof data === 'string') return data;
+  if (!data || typeof data !== 'object') return '';
+  const key = SUMMARY_KEYS.find(candidate => typeof data[candidate] === 'string' && data[candidate]);
+  return key ? data[key] : '';
 }
 
-function withRetryCounts(checks) {
-  return checks.reduce(
-    (acc, check, index) => {
-      const retryCount = acc.retryCount + (check.passed ? 0 : 1);
-      return {
-        retryCount,
-        items: [...acc.items, { check, index, retryCount }],
-      };
-    },
-    { retryCount: 0, items: [] },
-  ).items;
+function getArtifactFacts(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+
+  return Object.entries(data)
+    .filter(([key]) => !SUMMARY_KEYS.includes(key) && !['citations', 'references', 'sources'].includes(key))
+    .slice(0, 6)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) return { key, value: `${value.length} 项` };
+      if (value && typeof value === 'object') return { key, value: `${Object.keys(value).length} 个字段` };
+      return { key, value: String(value ?? '—') };
+    });
 }
 
-function QaCheckCard({ check, index, retryCount }) {
-  const color = check.degraded ? 'warning' : check.passed ? 'success' : 'error';
-  const issues = check.issues || [];
-  const feedback = check.feedback_to_agent || '';
+function collectCitations(value, citations = [], visited = new Set()) {
+  if (!value || typeof value !== 'object' || visited.has(value)) return citations;
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach(item => collectCitations(item, citations, visited));
+    return citations;
+  }
+
+  if (typeof value.url === 'string') {
+    const title = value.title || value.source || value.name || value.url;
+    if (!citations.some(citation => citation.url === value.url)) {
+      citations.push({ title, url: value.url });
+    }
+  }
+
+  Object.values(value).forEach(item => collectCitations(item, citations, visited));
+  return citations;
+}
+
+function PhaseConclusion({ data, nodeStatus, emptyText }) {
+  const summary = getSummary(data);
+  const facts = getArtifactFacts(data);
 
   return (
-    <div style={{
-      border: '1px solid #f0f0f0',
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 12,
-      background: '#fff',
-    }}>
-      <Descriptions
-        size="small"
-        column={2}
-        items={[
-          { key: 'status', label: '状态', children: <Tag color={color}>{qaStatusText(check)}</Tag> },
-          { key: 'score', label: '分数', children: check.score != null ? Math.round(check.score) : '-' },
-          { key: 'attempt', label: '第几次', children: check.attempt ?? index + 1 },
-          { key: 'retry', label: '累计打回', children: retryCount },
-          { key: 'agent', label: '质检对象', children: check.target_agent || '-' },
-          { key: 'hallucination', label: '幻觉检测', children: check.hallucination_status || '-' },
-        ]}
-      />
-
-      {issues.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <Text strong>问题</Text>
-          <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-            {issues.map((issue, i) => (
-              <li key={`${issue.field || 'issue'}-${i}`} style={{ marginBottom: 4 }}>
-                <Text>
-                  {issue.field ? `${issue.field}：` : ''}
-                  {issue.description || issue.suggestion || issue.category}
-                </Text>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {feedback && (
-        <div style={{ marginTop: 12 }}>
-          <Text strong>反馈</Text>
-          <Paragraph style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{feedback}</Paragraph>
-        </div>
+    <div className="agent-detail-conclusion">
+      <div className="agent-detail-stage-state">
+        <span>阶段状态</span>
+        <strong>{NODE_STATUS_LABELS[nodeStatus] || nodeStatus || '状态待同步'}</strong>
+      </div>
+      {summary && <p className="agent-detail-summary">{summary}</p>}
+      {!summary && facts.length === 0 && <Text type="secondary">{emptyText}</Text>}
+      {facts.length > 0 && (
+        <dl className="agent-detail-facts">
+          {facts.map(fact => (
+            <div key={fact.key}>
+              <dt>{fact.key.replaceAll('_', ' ')}</dt>
+              <dd>{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </div>
   );
+}
+
+function EvidenceAndRawData({ data }) {
+  const citations = collectCitations(data);
+
+  if (!data) return <Text type="secondary">该阶段暂无引用或原始数据</Text>;
+  return (
+    <div className="agent-detail-evidence">
+      <header>
+        <strong>可识别引用</strong>
+        <span>{citations.length} 条</span>
+      </header>
+      {citations.length > 0 ? (
+        <ol>
+          {citations.slice(0, 20).map(citation => (
+            <li key={citation.url}>
+              {/^https?:\/\//i.test(citation.url) ? (
+                <a href={citation.url} target="_blank" rel="noreferrer">{citation.title}</a>
+              ) : citation.title}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <Text type="secondary">该阶段产物中未识别到独立引用对象</Text>
+      )}
+      <Collapse
+        className="agent-raw-data-collapse"
+        items={[{
+          key: 'raw',
+          label: '查看结构化原始数据',
+          children: <pre>{JSON.stringify(data, null, 2)}</pre>,
+        }]}
+      />
+    </div>
+  );
+}
+
+function TechnicalTrace({ data }) {
+  const trace = data?.technical_trace || data?.execution || data?.metadata;
+  if (!trace) {
+    return (
+      <Text type="secondary">
+        此阶段未提供额外执行元数据。模型、Token、耗时及原始输入输出可在工作台底部的“运行详情与技术追溯”中查看。
+      </Text>
+    );
+  }
+  return <pre className="agent-technical-json">{JSON.stringify(trace, null, 2)}</pre>;
 }
 
 export default function AgentDetail({
@@ -99,20 +161,17 @@ export default function AgentDetail({
   qaArtifactData,
   onArtifactLoaded,
 }) {
-  const [data, setData] = useState(null);
-  const [qaData, setQaData] = useState(null);
+  const [loadedArtifact, setLoadedArtifact] = useState({ phase: null, data: null });
+  const [loadedQaData, setLoadedQaData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open || !taskId || !phase) return;
-    let cancelled = false;
+    if (!open || !taskId || !phase) return undefined;
     const needsArtifact = artifactData === undefined;
     const needsQa = qaArtifactData === undefined;
-
-    if (!needsArtifact) setData(artifactData);
-    if (!needsQa) setQaData(qaArtifactData);
     if (!needsArtifact && !needsQa) return undefined;
 
+    let cancelled = false;
     Promise.resolve()
       .then(() => {
         if (!cancelled) setLoading(true);
@@ -125,8 +184,8 @@ export default function AgentDetail({
         if (cancelled) return;
         const nextData = artifactResult.status === 'fulfilled' ? artifactResult.value : null;
         const nextQaData = qaResult.status === 'fulfilled' ? qaResult.value : null;
-        setData(nextData);
-        setQaData(nextQaData);
+        setLoadedArtifact({ phase, data: nextData });
+        setLoadedQaData(nextQaData);
         if (nextData) onArtifactLoaded?.(phase, nextData);
         if (nextQaData) onArtifactLoaded?.('qa', nextQaData);
       })
@@ -139,19 +198,51 @@ export default function AgentDetail({
     };
   }, [artifactData, onArtifactLoaded, open, phase, qaArtifactData, taskId]);
 
-  const displayData = artifactData !== undefined ? artifactData : data;
-  const displayQaData = qaArtifactData !== undefined ? qaArtifactData : qaData;
+  const displayData = artifactData !== undefined
+    ? artifactData
+    : loadedArtifact.phase === phase ? loadedArtifact.data : null;
+  const displayQaData = qaArtifactData !== undefined ? qaArtifactData : loadedQaData;
   const qaChecks = getQaChecks(displayQaData, phase);
-  const qaChecksWithRetry = withRetryCounts(qaChecks);
   const emptyText = nodeStatus === 'running'
-    ? 'Agent 执行中，完成后会自动显示详情'
+    ? 'Agent 执行中，完成后会自动显示阶段结论'
     : nodeStatus === 'waiting'
-      ? '该 Agent 未开始，完成后会自动显示详情'
-      : '暂无输出数据';
+      ? '该 Agent 尚未开始，完成后会自动显示阶段结论'
+      : '暂无阶段输出';
+
+  const tabs = [
+    {
+      key: 'conclusion',
+      label: '阶段结论',
+      children: <PhaseConclusion data={displayData} nodeStatus={nodeStatus} emptyText={emptyText} />,
+    },
+    {
+      key: 'quality',
+      label: `质量反馈${qaChecks.length > 0 ? ` ${qaChecks.length}` : ''}`,
+      children: qaChecks.length > 0
+        ? <QATimeline results={qaChecks} />
+        : <Text type="secondary">该阶段暂无质检记录</Text>,
+    },
+    {
+      key: 'evidence',
+      label: '引用与原始数据',
+      children: <EvidenceAndRawData data={displayData} />,
+    },
+    {
+      key: 'technical',
+      label: '技术追溯',
+      children: <TechnicalTrace data={displayData} />,
+    },
+  ];
 
   return (
     <Drawer
-      title={`${agentLabel || phase} - 详细信息`}
+      className="agent-detail-drawer"
+      title={(
+        <div className="agent-detail-title">
+          <span>{agentLabel || phase}</span>
+          <small>{NODE_STATUS_LABELS[nodeStatus] || nodeStatus || '等待状态同步'}</small>
+        </div>
+      )}
       open={open}
       onClose={onClose}
       size="large"
@@ -159,49 +250,7 @@ export default function AgentDetail({
       {loading ? (
         <Spin style={{ display: 'block', textAlign: 'center', padding: 40 }} />
       ) : (
-        <Collapse
-          defaultActiveKey={['output', 'qa']}
-          items={[
-            {
-              key: 'output',
-              label: 'Agent 输出',
-              children: displayData ? (
-                <Paragraph>
-                  <pre style={{
-                    background: '#f5f5f5',
-                    padding: 12,
-                    borderRadius: 8,
-                    maxHeight: 400,
-                    overflow: 'auto',
-                    fontSize: 12,
-                  }}>
-                    {JSON.stringify(displayData, null, 2)}
-                  </pre>
-                </Paragraph>
-              ) : (
-                <Text type="secondary">{emptyText}</Text>
-              ),
-            },
-            {
-              key: 'qa',
-              label: '对应质检 QualityAgent',
-              children: qaChecks.length > 0 ? (
-                <div>
-                  {qaChecksWithRetry.map(({ check, index, retryCount }) => (
-                    <QaCheckCard
-                      key={`${check.phase}-${check.attempt || index}-${index}`}
-                      check={check}
-                      index={index}
-                      retryCount={retryCount}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Text type="secondary">该阶段暂无质检</Text>
-              ),
-            },
-          ]}
-        />
+        <Tabs className="agent-detail-tabs" defaultActiveKey="conclusion" items={tabs} />
       )}
     </Drawer>
   );

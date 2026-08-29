@@ -1,44 +1,83 @@
-import { useState } from 'react';
-import { Form, Input, InputNumber, Switch, Button, Card } from 'antd';
-import { ThunderboltOutlined } from '@ant-design/icons';
+import { useEffect } from 'react';
+import { Button, Collapse, Form, Input, InputNumber, Switch } from 'antd';
+import { SafetyCertificateOutlined, ThunderboltOutlined } from '@ant-design/icons';
 
-export default function TaskForm({ onSubmit, loading }) {
+export default function TaskForm({ initialProduct, onSubmit, loading }) {
   const [form] = Form.useForm();
 
-  const handleSubmit = (values) => {
-    onSubmit(values);
-  };
+  useEffect(() => {
+    if (initialProduct) form.setFieldValue('productDescription', initialProduct);
+  }, [form, initialProduct]);
+
+  const advancedSettings = (
+    <div className="advanced-settings">
+      <Form.Item
+        name="useRuleEngine"
+        label="规则引擎模式（不调用 LLM）"
+        valuePropName="checked"
+      >
+        <Switch />
+      </Form.Item>
+      <Form.Item
+        name="skipQa"
+        label="关闭质量检查（不建议）"
+        valuePropName="checked"
+      >
+        <Switch />
+      </Form.Item>
+      <p className="advanced-warning">
+        <SafetyCertificateOutlined />
+        关闭 QA 后将不再执行结论打回、修正与引用覆盖检查。
+      </p>
+    </div>
+  );
 
   return (
-    <Card title="提交分析任务" style={{ height: '100%' }}>
+    <aside className="surface-card task-launcher" aria-labelledby="task-launcher-title">
+      <span className="section-eyebrow">New analysis</span>
+      <h2 id="task-launcher-title">启动分析任务</h2>
+      <p>描述产品，系统将自动组建 Agent 团队并生成可核验策略报告。</p>
+
       <Form
         form={form}
         layout="vertical"
-        onFinish={handleSubmit}
+        onFinish={onSubmit}
         initialValues={{ maxCompetitors: 5, skipQa: false, useRuleEngine: false }}
+        requiredMark={false}
       >
         <Form.Item
           name="productDescription"
-          label="产品描述"
+          label="要分析的产品"
           rules={[{ required: true, message: '请输入产品名称或描述' }]}
         >
-          <Input placeholder="例：飞书文档、Notion、钉钉" size="large" />
+          <Input
+            autoComplete="off"
+            placeholder="例如：飞书文档、Notion、钉钉"
+            size="large"
+          />
         </Form.Item>
 
-        <Form.Item name="maxCompetitors" label="竞品数量">
-          <InputNumber min={1} max={8} style={{ width: '100%' }} size="large" />
+        <Form.Item
+          name="maxCompetitors"
+          label="竞品数量"
+          extra="建议 3–5 个，兼顾分析深度与演示节奏"
+        >
+          <InputNumber min={1} max={8} size="large" />
         </Form.Item>
 
-        <Form.Item name="useRuleEngine" label="规则引擎模式（不调 LLM）" valuePropName="checked">
-          <Switch />
-        </Form.Item>
+        <Collapse
+          className="advanced-settings-collapse"
+          ghost
+          items={[{
+            key: 'advanced',
+            label: '高级设置',
+            children: advancedSettings,
+          }]}
+        />
 
-        <Form.Item name="skipQa" label="跳过质检" valuePropName="checked">
-          <Switch />
-        </Form.Item>
-
-        <Form.Item>
+        <Form.Item className="task-launcher-submit">
           <Button
+            className="primary-action"
             type="primary"
             htmlType="submit"
             loading={loading}
@@ -46,10 +85,15 @@ export default function TaskForm({ onSubmit, loading }) {
             size="large"
             block
           >
-            开始分析
+            组建 Agent 团队
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+
+      <div className="launcher-trust-note">
+        <SafetyCertificateOutlined />
+        <span><strong>默认开启 QualityAgent</strong> · 对关键结论执行检查与打回</span>
+      </div>
+    </aside>
   );
 }

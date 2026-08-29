@@ -1,23 +1,28 @@
-import { useCallback, useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Progress, Typography, Row, Col, Statistic, Button, Tag, Space, Divider } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Button, Collapse, Progress } from 'antd';
 import {
   ArrowLeftOutlined,
+  CodeOutlined,
   FileTextOutlined,
   RobotOutlined,
-  CheckCircleOutlined,
-  FileSearchOutlined,
-  EditOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { getArtifact, getTask } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTask } from '../hooks/useTask';
-import PipelineGraph from '../components/PipelineGraph';
 import AgentDetail from '../components/AgentDetail';
-import QATimeline from '../components/QATimeline';
 import LlmLogs from '../components/LlmLogs';
-
-const { Title, Text } = Typography;
+import PipelineGraph from '../components/PipelineGraph';
+import QATimeline from '../components/QATimeline';
+import LiveActivityRail from '../components/workbench/LiveActivityRail';
+import QualityCockpit from '../components/workbench/QualityCockpit';
+import {
+  getTaskModeMeta,
+  getTaskStatusMeta,
+  resolveTaskProgress,
+  resolveTaskStatus,
+} from '../utils/presentation';
 
 const QA_PHASE_TO_NODE = {
   collection: 'collection',
@@ -45,17 +50,31 @@ function summarizeQaChecks(checks = []) {
     if (!nodeKey) return;
 
     const current = summaries[nodeKey] || { retryCount: 0 };
-    const retryCount = current.retryCount + (check.passed ? 0 : 1);
+    if (check.running) {
+      summaries[nodeKey] = {
+        ...current,
+        phase: check.phase,
+        label: '质检中',
+        status: 'running',
+        score: check.score,
+      };
+      return;
+    }
+
+    const retryCount = current.retryCount + (
+      check.passed === false && !check.degraded ? 1 : 0
+    );
+    const status = check.degraded ? 'degraded' : check.passed ? 'passed' : 'failed';
     const label = check.degraded
-      ? `降级通过，打回 ${retryCount} 次`
+      ? `降级通过 · 打回 ${retryCount} 次`
       : check.passed
-        ? `通过${check.score != null ? ` ${Math.round(check.score)}分` : ''}`
-        : `未通过，打回 ${retryCount} 次`;
+        ? `通过${check.score != null ? ` · ${Math.round(check.score)} 分` : ''}`
+        : `未通过 · 打回 ${retryCount} 次`;
 
     summaries[nodeKey] = {
       phase: check.phase,
       label,
-      status: check.degraded ? 'degraded' : check.passed ? 'passed' : 'failed',
+      status,
       score: check.score,
       retryCount,
     };
@@ -74,18 +93,46 @@ export default function TaskDetail() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState(null);
   const {
-    events, nodeStates, progress, currentMessage,
-    qaResults, qaSummaries, taskStatus, llmLogsKey, handleEvent, AGENT_PHASE_MAP,
+    events,
+    nodeStates,
+    progress,
+    currentMessage,
+    qaResults,
+    qaSummaries,
+    taskStatus,
+    llmLogsKey,
+    handleEvent,
+    AGENT_PHASE_MAP,
   } = useTask();
 
   const { connected } = useWebSocket(taskId, handleEvent);
 
   const loadTaskInfo = useCallback(() => (
-    getTask(taskId).then(setTaskInfo).catch(() => {})
+    getTask(taskId).then(setTaskInfo).catch(() => null)
   ), [taskId]);
 
   const cacheArtifact = useCallback((phase, data) => {
-    setArtifactCache(prev => ({ ...prev, [phase]: data }));
+    setArtifactCache(previous => ({ ...previous, [phase]: data }));
+  }, []);
+
+  const mergeQaResult = useCallback((qaResult) => {
+    setArtifactCache((previous) => {
+      const previousChecks = previous.qa?.checks || [];
+      const checks = [
+        ...previousChecks.filter(check => !(
+          check.phase === qaResult.phase
+          && (check.attempt == null || qaResult.attempt == null || check.attempt === qaResult.attempt)
+        )),
+        qaResult,
+      ];
+      return {
+        ...previous,
+        qa: {
+          ...(previous.qa || {}),
+          checks,
+        },
+      };
+    });
   }, []);
 
   const refreshArtifact = useCallback((phase) => {
@@ -121,8 +168,8 @@ export default function TaskDetail() {
 
   useEffect(() => {
     if (!taskId) return undefined;
-    const interval = setInterval(loadTaskInfo, 2000);
-    return () => clearInterval(interval);
+    const interval = window.setInterval(loadTaskInfo, 2000);
+    return () => window.clearInterval(interval);
   }, [loadTaskInfo, taskId]);
 
   useEffect(() => {
@@ -135,23 +182,7 @@ export default function TaskDetail() {
     if (event.type === 'qa_check_passed' || event.type === 'qa_check_failed') {
       const qaResult = event.data?.qa_result;
       if (qaResult) {
-        setArtifactCache(prev => {
-          const previousChecks = prev.qa?.checks || [];
-          const checks = [
-            ...previousChecks.filter(check => !(
-              check.phase === qaResult.phase
-              && (check.attempt == null || qaResult.attempt == null || check.attempt === qaResult.attempt)
-            )),
-            qaResult,
-          ];
-          return {
-            ...prev,
-            qa: {
-              ...(prev.qa || {}),
-              checks,
-            },
-          };
-        });
+        queueMicrotask(() => mergeQaResult(qaResult));
       } else {
         refreshQa();
       }
@@ -159,44 +190,23 @@ export default function TaskDetail() {
     if (event.type === 'task_completed') {
       refreshQa();
     }
-  }, [events, refreshArtifact, refreshQa]);
+  }, [events, mergeQaResult, refreshArtifact, refreshQa]);
 
   const handleNodeClick = (phase) => {
     setSelectedPhase(phase);
     setDetailOpen(true);
   };
 
-  const statusColor = {
-    pending: 'default', running: 'processing', completed: 'success', failed: 'error',
-  }[taskStatus] || 'default';
-
-  const statusText = {
-    pending: '等待中', running: '运行中', completed: '已完成', failed: '失败',
-  }[taskStatus] || taskStatus;
-  const graphQaSummaries = Object.keys(qaSummaries).length > 0 ? qaSummaries : persistedQaSummaries;
+  const graphQaSummaries = Object.keys(qaSummaries).length > 0
+    ? qaSummaries
+    : persistedQaSummaries;
   const timelineQaResults = qaResults.length > 0 ? qaResults : persistedQaResults;
+  const cockpitChecks = artifactCache.qa?.checks?.length > 0
+    ? artifactCache.qa.checks
+    : timelineQaResults;
   const graphNodeStates = { ...nodeStates };
-
-  // 业务闭环指标：从最近一轮 QA 结果中聚合（排除 skipped 的检查）
-  const allChecks = artifactCache.qa?.checks || [];
-  let accuracyRate = 0;
-  let coverageRate = 0;
-  let correctionRate = 0;
-  const validChecks = allChecks.filter(
-    (c) => c.hallucination_status !== 'skipped' && (c.total_fields || 0) > 0,
-  );
-  if (validChecks.length > 0) {
-    // 取每个 phase 最后一轮
-    const lastByPhase = {};
-    validChecks.forEach((c) => { lastByPhase[c.phase] = c; });
-    const lastChecks = Object.values(lastByPhase);
-    const totalFields = lastChecks.reduce((s, c) => s + (c.total_fields || 0), 0) || 1;
-    accuracyRate = lastChecks.reduce((s, c) => s + (c.accuracy_rate || 0) * (c.total_fields || 0), 0) / totalFields;
-    coverageRate = lastChecks.reduce((s, c) => s + (c.coverage_rate || 0) * (c.total_fields || 0), 0) / totalFields;
-    const corrected = lastChecks.reduce((s, c) => s + (c.correction_count || 0), 0);
-    correctionRate = corrected / totalFields * 100;
-  }
   const currentPhase = AGENT_TO_PHASE[taskInfo?.current_agent];
+
   if (
     taskInfo?.status === 'running'
     && currentPhase
@@ -206,166 +216,140 @@ export default function TaskDetail() {
     graphNodeStates[currentPhase] = 'running';
   }
 
+  const resolvedTaskStatus = resolveTaskStatus(taskStatus, taskInfo?.status);
+  const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
+  const taskModeMeta = getTaskModeMeta(taskInfo);
+  const progressPercent = resolveTaskProgress(
+    resolvedTaskStatus,
+    progress,
+    taskInfo?.progress,
+  );
+  const currentAgent = taskInfo?.current_agent
+    || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
+    || '等待调度';
+
   return (
-    <div style={{ padding: 24 }}>
+    <main className="page-shell workbench-page">
       <Button
+        className="workbench-back"
+        type="text"
         icon={<ArrowLeftOutlined />}
         onClick={() => navigate('/')}
-        style={{ marginBottom: 16 }}
       >
-        返回
+        返回分析中心
       </Button>
 
-      {/* Header */}
-      <Card style={{ marginBottom: 16 }}>
-        <Row gutter={24} align="middle">
-          <Col flex="auto">
-            <Space>
-              <Title level={3} style={{ margin: 0 }}>
-                {taskInfo?.product_description || taskId}
-              </Title>
-              <Tag color={statusColor}>{statusText}</Tag>
-              <Tag color={connected ? 'green' : 'default'}>
-                {connected ? 'WS 已连接' : 'WS 未连接'}
-              </Tag>
-            </Space>
-            {currentMessage && (
-              <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-                {currentMessage}
-              </Text>
-            )}
-            {taskInfo && (
-              <Space style={{ marginTop: 4 }}>
-                {taskInfo.use_rule_engine && <Tag color="purple">规则引擎模式</Tag>}
-                {taskInfo.skip_qa && <Tag color="orange">跳过质检</Tag>}
-              </Space>
-            )}
-          </Col>
-          <Col>
-            {taskStatus === 'completed' && (
+      <section className="surface-card mission-header">
+        <div className="mission-title-row">
+          <div className="mission-title-copy">
+            <span className="section-eyebrow">Live agent mission</span>
+            <h1>{taskInfo?.product_description || taskId}</h1>
+            <p>{currentMessage || '等待 Agent 团队更新进度'}</p>
+          </div>
+          <div className="mission-actions">
+            <span className={`status-pill status-${taskStatusMeta.tone}`}>
+              {taskStatusMeta.label}
+            </span>
+            <span className={`status-pill ${connected ? 'status-connected' : 'status-disconnected'}`}>
+              <i aria-hidden="true" />
+              {connected ? '实时连接正常' : '正在重新连接'}
+            </span>
+            {resolvedTaskStatus === 'completed' && (
               <Button
+                className="primary-action report-entry-action"
                 type="primary"
                 icon={<FileTextOutlined />}
                 onClick={() => navigate(`/tasks/${taskId}/report`)}
               >
-                查看报告
+                查看策略报告
               </Button>
             )}
-          </Col>
-        </Row>
+          </div>
+        </div>
 
+        <div className="mission-meta-row">
+          <span><RobotOutlined /> 当前 Agent：<strong>{currentAgent}</strong></span>
+          <span>
+            <CodeOutlined />
+            {taskModeMeta.executionLabel}
+          </span>
+          <span className={taskModeMeta.qaTone === 'risk' ? 'mission-risk-meta' : ''}>
+            <SafetyCertificateOutlined />
+            {taskModeMeta.qaLabel}
+          </span>
+        </div>
+
+        {taskInfo?.error && <p className="mission-error">{taskInfo.error}</p>}
+
+        <div className="mission-progress-row">
+          <span>任务总进度</span>
+          <strong>{progressPercent}%</strong>
+        </div>
         <Progress
-          percent={Math.round(progress * 100)}
-          status={taskStatus === 'failed' ? 'exception' : undefined}
-          style={{ marginTop: 12 }}
+          className="mission-progress"
+          percent={progressPercent}
+          showInfo={false}
+          status={resolvedTaskStatus === 'failed' ? 'exception' : undefined}
+          strokeColor={{ from: '#176bff', to: '#58e6c2' }}
         />
-      </Card>
+      </section>
 
-      {/* Pipeline Visualization */}
-      <Card title="Agent 流程" style={{ marginBottom: 16 }}>
-        <PipelineGraph
-          nodeStates={graphNodeStates}
-          qaSummaries={graphQaSummaries}
-          onNodeClick={handleNodeClick}
+      <section className="workbench-grid">
+        <section className="surface-card workflow-deck" aria-labelledby="workflow-deck-title">
+          <header className="workflow-deck-header">
+            <div>
+              <span className="section-eyebrow">Agent workflow</span>
+              <h2 id="workflow-deck-title">协作流程与质量门</h2>
+            </div>
+            <p>点击业务 Agent 查看阶段产物</p>
+          </header>
+          <PipelineGraph
+            nodeStates={graphNodeStates}
+            qaSummaries={graphQaSummaries}
+            onNodeClick={handleNodeClick}
+          />
+        </section>
+
+        <LiveActivityRail
+          events={events}
+          currentMessage={currentMessage}
+          connected={connected}
         />
-      </Card>
+      </section>
 
-      {/* Bottom Row: QA + Stats */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={12}>
-          <Card title="质检结果" style={{ height: '100%' }}>
-            <QATimeline results={timelineQaResults} />
-          </Card>
-        </Col>
-        <Col xs={24} md={12}>
-          <Card title="统计" style={{ height: '100%' }}>
-            <Row gutter={16}>
-              <Col span={8}>
-                <Statistic
-                  title="事件数"
-                  value={events.length}
-                  prefix={<RobotOutlined />}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="进度"
-                  value={Math.round(progress * 100)}
-                  suffix="%"
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title="质检次数"
-                  value={timelineQaResults.length}
-                />
-              </Col>
-            </Row>
-            {validChecks.length > 0 && (
-              <>
-                <Divider style={{ margin: '16px 0 12px' }} />
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Statistic
-                      title="准确率"
-                      value={accuracyRate.toFixed(1)}
-                      suffix="%"
-                      prefix={<CheckCircleOutlined />}
-                      valueStyle={{ color: accuracyRate >= 80 ? '#3f8600' : accuracyRate >= 60 ? '#d4b106' : '#cf1322' }}
-                    />
-                    <Progress
-                      percent={Math.round(accuracyRate)}
-                      size="small"
-                      showInfo={false}
-                      strokeColor={accuracyRate >= 80 ? '#3f8600' : accuracyRate >= 60 ? '#d4b106' : '#cf1322'}
-                      style={{ marginTop: 4 }}
-                    />
-                  </Col>
-                  <Col span={8}>
-                    <Statistic
-                      title="覆盖率"
-                      value={coverageRate.toFixed(1)}
-                      suffix="%"
-                      prefix={<FileSearchOutlined />}
-                      valueStyle={{ color: coverageRate >= 80 ? '#3f8600' : coverageRate >= 60 ? '#d4b106' : '#cf1322' }}
-                    />
-                    <Progress
-                      percent={Math.round(coverageRate)}
-                      size="small"
-                      showInfo={false}
-                      strokeColor={coverageRate >= 80 ? '#3f8600' : coverageRate >= 60 ? '#d4b106' : '#cf1322'}
-                      style={{ marginTop: 4 }}
-                    />
-                  </Col>
-                  <Col span={8}>
-                    <Statistic
-                      title="修正率"
-                      value={correctionRate.toFixed(1)}
-                      suffix="%"
-                      prefix={<EditOutlined />}
-                      valueStyle={{ color: correctionRate <= 10 ? '#3f8600' : correctionRate <= 30 ? '#d4b106' : '#cf1322' }}
-                    />
-                    <Progress
-                      percent={Math.round(correctionRate)}
-                      size="small"
-                      showInfo={false}
-                      strokeColor={correctionRate <= 10 ? '#3f8600' : correctionRate <= 30 ? '#d4b106' : '#cf1322'}
-                      style={{ marginTop: 4 }}
-                    />
-                  </Col>
-                </Row>
-              </>
-            )}
-          </Card>
-        </Col>
-      </Row>
+      <section className="quality-grid">
+        <QualityCockpit checks={cockpitChecks} />
+        <section className="surface-card qa-timeline-panel" aria-labelledby="qa-timeline-title">
+          <header>
+            <div>
+              <span className="section-eyebrow">Correction trail</span>
+              <h2 id="qa-timeline-title">QA 修正记录</h2>
+            </div>
+            <span>{timelineQaResults.length} 条记录</span>
+          </header>
+          <QATimeline results={timelineQaResults} />
+        </section>
+      </section>
 
-      {/* LLM Logs */}
-      <Card title="LLM 调用日志" style={{ marginBottom: 16 }}>
-        <LlmLogs taskId={taskId} refreshKey={llmLogsKey} />
-      </Card>
+      <section className="technical-trace" aria-label="技术追溯">
+        <Collapse
+          className="technical-trace-collapse"
+          items={[{
+            key: 'trace',
+            label: (
+              <div className="technical-trace-label">
+                <CodeOutlined />
+                <span>
+                  <strong>运行详情与技术追溯</strong>
+                  <small>按需查看模型、Token、耗时以及原始输入输出</small>
+                </span>
+              </div>
+            ),
+            children: <LlmLogs taskId={taskId} refreshKey={llmLogsKey} />,
+          }]}
+        />
+      </section>
 
-      {/* Agent Detail Drawer */}
       <AgentDetail
         taskId={taskId}
         phase={selectedPhase}
@@ -377,6 +361,6 @@ export default function TaskDetail() {
         qaArtifactData={artifactCache.qa}
         onArtifactLoaded={cacheArtifact}
       />
-    </div>
+    </main>
   );
 }

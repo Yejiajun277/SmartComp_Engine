@@ -2,19 +2,33 @@ import { useState, useEffect } from 'react';
 import { Table, Tag, Typography, Spin, Empty, Collapse } from 'antd';
 import { getLlmLogs } from '../api/client';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 export default function LlmLogs({ taskId, refreshKey = 0 }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!taskId) return;
-    setLoading(true);
-    getLlmLogs(taskId)
-      .then((data) => setLogs(data.logs || []))
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
+    if (!taskId) return undefined;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoading(true);
+        return getLlmLogs(taskId);
+      })
+      .then((data) => {
+        if (!cancelled) setLogs(data.logs || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLogs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [taskId, refreshKey]);
 
   if (loading) return <Spin style={{ display: 'block', textAlign: 'center', padding: 20 }} />;
@@ -82,15 +96,22 @@ export default function LlmLogs({ taskId, refreshKey = 0 }) {
   ];
 
   return (
-    <Table
-      dataSource={logs.map((log, i) => ({ ...log, key: i }))}
-      columns={columns}
-      size="small"
-      pagination={{ pageSize: 10 }}
-      expandable={{
-        expandedRowRender: (record) => <LogDetail record={record} />,
-      }}
-    />
+    <div className="technical-log-view">
+      <p className="technical-log-note">
+        此处用于工程追溯与成本核对。表格默认只显示 Agent、调用类型、状态、Token、耗时、模型和摘要；原始提示词与输出需展开单条记录后再查看。
+      </p>
+      <Table
+        className="technical-log-table"
+        dataSource={logs.map((log, i) => ({ ...log, key: i }))}
+        columns={columns}
+        size="small"
+        pagination={{ pageSize: 10 }}
+        scroll={{ x: 760 }}
+        expandable={{
+          expandedRowRender: (record) => <LogDetail record={record} />,
+        }}
+      />
+    </div>
   );
 }
 
@@ -138,7 +159,7 @@ function DetailSection({ label, content }) {
       items={[{
         key: '1',
         label: <Text strong>{label} <Text type="secondary">({content.length} chars)</Text></Text>,
-        children: <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto', fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{content}</pre>,
+        children: <pre className="technical-log-raw">{content}</pre>,
       }]}
     />
   );
