@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
@@ -44,4 +45,15 @@ test('workflow canvas follows the app theme without a local theme control', asyn
   assert.doesNotMatch(html, /深色画布|浅色画布/);
   assert.match(html, /title="重置画布"/);
   assert.match(html, /静态执行图/);
+});
+
+test('global styles define one semantic dark theme contract', async () => {
+  const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8');
+  const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+
+  assert.match(appCss, /:root\[data-theme='dark'\]/);
+  assert.match(appCss, /--sc-control-bg:/);
+  assert.match(appCss, /--sc-code-bg:/);
+  assert.match(indexCss, /html\[data-theme='dark'\]/);
+  assert.doesNotMatch(appCss, /\.workflow-canvas\[data-theme='dark'\]/);
 });
