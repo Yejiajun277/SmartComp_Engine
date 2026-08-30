@@ -268,6 +268,69 @@ test('the widened canvas keeps the report node clear of the right edge', () => {
   assert.ok(workflowCanvas.WORKFLOW_CANVAS_SIZE.width - reportRight >= 96);
 });
 
+test('mobile workflow uses a readable stage-focused default zoom', () => {
+  assert.equal(typeof workflowCanvas.getWorkflowInitialZoom, 'function');
+  assert.equal(workflowCanvas.getWorkflowInitialZoom(430), 0.72);
+  assert.equal(workflowCanvas.getWorkflowInitialZoom(767), 0.72);
+  assert.equal(workflowCanvas.getWorkflowInitialZoom(768), 0.84);
+  assert.equal(workflowCanvas.getWorkflowInitialZoom(undefined), 0.84);
+});
+
+test('mobile stage focus keeps first and final stages inside the viewport', () => {
+  assert.equal(typeof workflowCanvas.getWorkflowStageScrollLeft, 'function');
+  const [firstStage, secondStage, thirdStage, finalStage] = workflowCanvas.WORKFLOW_STAGES;
+
+  assert.equal(workflowCanvas.getWorkflowStageScrollLeft(firstStage, 0.72, 376), 0);
+  assert.equal(workflowCanvas.getWorkflowStageScrollLeft(secondStage, 0.72, 376), 386);
+  assert.equal(workflowCanvas.getWorkflowStageScrollLeft(thirdStage, 0.72, 376), 642);
+  assert.equal(workflowCanvas.getWorkflowStageScrollLeft(finalStage, 0.72, 376), 1100);
+});
+
+test('cancelled mobile stage focus can be scheduled again in React StrictMode', () => {
+  assert.equal(typeof workflowCanvas.scheduleWorkflowStageFocus, 'function');
+  const finalStage = workflowCanvas.WORKFLOW_STAGES.at(-1);
+  const focusedStageRef = { current: null };
+  const frames = new Map();
+  const appliedFocuses = [];
+  let nextFrameId = 0;
+  const scheduleFrame = callback => {
+    const frameId = ++nextFrameId;
+    frames.set(frameId, callback);
+    return frameId;
+  };
+  const cancelFrame = frameId => frames.delete(frameId);
+  const options = {
+    stage: finalStage,
+    zoom: 0.72,
+    viewportWidth: 376,
+    focusedStageRef,
+    scheduleFrame,
+    applyFocus: focus => appliedFocuses.push(focus),
+  };
+
+  const cancelledFrame = workflowCanvas.scheduleWorkflowStageFocus(options);
+  assert.equal(focusedStageRef.current, null);
+  cancelFrame(cancelledFrame);
+
+  const activeFrame = workflowCanvas.scheduleWorkflowStageFocus(options);
+  assert.notEqual(activeFrame, cancelledFrame);
+  frames.get(activeFrame)();
+
+  assert.equal(focusedStageRef.current, finalStage.number);
+  assert.deepEqual(appliedFocuses, [{
+    stageId: finalStage.id,
+    stageNumber: finalStage.number,
+    scrollLeft: 1100,
+  }]);
+});
+
+test('workflow scrolling respects the reduced motion preference', () => {
+  assert.equal(typeof workflowCanvas.getWorkflowScrollBehavior, 'function');
+  assert.equal(workflowCanvas.getWorkflowScrollBehavior(false), 'smooth');
+  assert.equal(workflowCanvas.getWorkflowScrollBehavior(true), 'auto');
+  assert.equal(workflowCanvas.getWorkflowScrollBehavior(false, false), 'auto');
+});
+
 test('canvas zoom is clamped to the supported readable range', () => {
   assert.equal(typeof workflowCanvas.clampCanvasZoom, 'function');
   assert.equal(workflowCanvas.clampCanvasZoom(0.2), 0.6);

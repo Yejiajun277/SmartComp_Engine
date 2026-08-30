@@ -2,6 +2,8 @@ import { getGateState } from './quality.js';
 
 export const WORKFLOW_CANVAS_SIZE = Object.freeze({ width: 2050, height: 680 });
 export const WORKFLOW_DEFAULT_ZOOM = 0.84;
+export const WORKFLOW_MOBILE_DEFAULT_ZOOM = 0.72;
+export const WORKFLOW_MOBILE_BREAKPOINT = 767;
 
 export const WORKFLOW_NODE_SIZES = Object.freeze({
   agent: Object.freeze({ width: 145, height: 96 }),
@@ -348,6 +350,64 @@ export function clampCanvasZoom(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return WORKFLOW_DEFAULT_ZOOM;
   return Math.min(1.4, Math.max(0.6, Math.round(numeric * 100) / 100));
+}
+
+export function getWorkflowInitialZoom(viewportWidth) {
+  const width = Number(viewportWidth);
+  if (Number.isFinite(width) && width > 0 && width <= WORKFLOW_MOBILE_BREAKPOINT) {
+    return WORKFLOW_MOBILE_DEFAULT_ZOOM;
+  }
+  return WORKFLOW_DEFAULT_ZOOM;
+}
+
+export function getWorkflowStageScrollLeft(stage, zoom, viewportWidth) {
+  const width = Number(viewportWidth);
+  if (!stage?.bounds || !Number.isFinite(width) || width <= 0) return 0;
+
+  const scale = clampCanvasZoom(zoom);
+  const stageStart = stage.bounds.x * scale;
+  const stageWidth = stage.bounds.width * scale;
+  const sceneWidth = WORKFLOW_CANVAS_SIZE.width * scale;
+  const maxScrollLeft = Math.max(0, sceneWidth - width);
+  let desiredScrollLeft = stageStart + (stageWidth / 2) - (width / 2);
+
+  if (stage.number === 1) {
+    desiredScrollLeft = stageStart - 16;
+  } else if (stage.number === WORKFLOW_STAGES.length) {
+    desiredScrollLeft = stageStart + stageWidth - width + 16;
+  }
+
+  return Math.round(Math.min(maxScrollLeft, Math.max(0, desiredScrollLeft)));
+}
+
+export function scheduleWorkflowStageFocus({
+  stage,
+  zoom,
+  viewportWidth,
+  focusedStageRef,
+  scheduleFrame,
+  applyFocus,
+}) {
+  if (
+    !stage
+    || !focusedStageRef
+    || focusedStageRef.current === stage.number
+    || typeof scheduleFrame !== 'function'
+    || typeof applyFocus !== 'function'
+  ) return null;
+
+  return scheduleFrame(() => {
+    applyFocus({
+      stageId: stage.id,
+      stageNumber: stage.number,
+      scrollLeft: getWorkflowStageScrollLeft(stage, zoom, viewportWidth),
+    });
+    focusedStageRef.current = stage.number;
+  });
+}
+
+export function getWorkflowScrollBehavior(prefersReducedMotion, animate = true) {
+  return prefersReducedMotion || !animate ? 'auto' : 'smooth';
 }
 
 export function getWorkflowNodeAction(node, taskStatus) {

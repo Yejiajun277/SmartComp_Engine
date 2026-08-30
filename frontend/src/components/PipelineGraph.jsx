@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppstoreOutlined,
   BarChartOutlined,
@@ -21,14 +21,26 @@ import {
 import {
   WORKFLOW_CANVAS_SIZE,
   WORKFLOW_DEFAULT_ZOOM,
+  WORKFLOW_MOBILE_BREAKPOINT,
+  WORKFLOW_MOBILE_DEFAULT_ZOOM,
   buildWorkflowCanvasModel,
   clampCanvasZoom,
   getStageZoneStyle,
   getWorkflowEdgeGeometry,
   getWorkflowFocus,
+  getWorkflowInitialZoom,
   getWorkflowNodeAction,
+  getWorkflowScrollBehavior,
+  getWorkflowStageScrollLeft,
+  scheduleWorkflowStageFocus,
   shouldResetWorkflowSelection,
 } from '../utils/workflowCanvas';
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 const STATUS_LABELS = {
   waiting: '等待接力',
@@ -155,8 +167,7 @@ function WorkflowNode({ node, selected, onSelect }) {
       style={{ left: node.x, top: node.y }}
       type="button"
       onClick={() => onSelect(node.id)}
-      aria-pressed={selected}
-      aria-label={`${node.label}，${statusLabel}`}
+      aria-label={`${node.label}，${statusLabel}${selected ? '，已选中' : ''}`}
     >
       <span className="dag-node-icon" aria-hidden="true">{NODE_ICONS[node.id]}</span>
       <span className="dag-node-copy">
@@ -266,8 +277,15 @@ export default function PipelineGraph({
   onReportClick,
 }) {
   const viewportRef = useRef(null);
+  const stageNavRef = useRef(null);
+  const lastAutoFocusedStageRef = useRef(null);
   const [selection, setSelection] = useState({ nodeId: null, taskStatus: null });
-  const [zoom, setZoom] = useState(WORKFLOW_DEFAULT_ZOOM);
+  const [mobileView, setMobileView] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth <= WORKFLOW_MOBILE_BREAKPOINT
+  ));
+  const [zoom, setZoom] = useState(() => getWorkflowInitialZoom(
+    typeof window === 'undefined' ? undefined : window.innerWidth,
+  ));
   const [theme, setTheme] = useState('light');
   const model = useMemo(() => buildWorkflowCanvasModel({
     nodeStates,
@@ -290,6 +308,49 @@ export default function PipelineGraph({
     ? model.nodesById.report
     : (model.nodesById[selection.nodeId] || activeNode);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mediaQuery = window.matchMedia(`(max-width: ${WORKFLOW_MOBILE_BREAKPOINT}px)`);
+    const handleViewportChange = (event) => {
+      setMobileView(event.matches);
+      setZoom(currentZoom => (
+        [WORKFLOW_DEFAULT_ZOOM, WORKFLOW_MOBILE_DEFAULT_ZOOM].includes(currentZoom)
+          ? (event.matches ? WORKFLOW_MOBILE_DEFAULT_ZOOM : WORKFLOW_DEFAULT_ZOOM)
+          : currentZoom
+      ));
+      lastAutoFocusedStageRef.current = null;
+    };
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleViewportChange);
+      return () => mediaQuery.removeEventListener('change', handleViewportChange);
+    }
+    mediaQuery.addListener?.(handleViewportChange);
+    return () => mediaQuery.removeListener?.(handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileView || lastAutoFocusedStageRef.current === focus.stageNumber) return undefined;
+    const stage = model.stages.find(candidate => candidate.number === focus.stageNumber);
+    if (!stage || !viewportRef.current) return undefined;
+
+    const frameId = scheduleWorkflowStageFocus({
+      stage,
+      zoom,
+      viewportWidth: viewportRef.current.clientWidth,
+      focusedStageRef: lastAutoFocusedStageRef,
+      scheduleFrame: callback => window.requestAnimationFrame(callback),
+      applyFocus: ({ stageId, scrollLeft }) => {
+        const behavior = getWorkflowScrollBehavior(prefersReducedMotion(), false);
+        viewportRef.current?.scrollTo({ left: scrollLeft, behavior });
+        stageNavRef.current
+          ?.querySelector(`[data-stage-id="${stageId}"]`)
+          ?.scrollIntoView({ behavior, block: 'nearest', inline: 'center' });
+      },
+    });
+    if (frameId === null) return undefined;
+    return () => window.cancelAnimationFrame(frameId);
+  }, [focus.stageNumber, mobileView, model.stages, zoom]);
+
   const setNextZoom = value => setZoom(clampCanvasZoom(value));
 
   const handleStageSelect = (stage) => {
@@ -298,16 +359,24 @@ export default function PipelineGraph({
       || stageNodes.find(node => node.status === 'waiting')
       || stageNodes.at(-1);
     if (targetNode) setSelection({ nodeId: targetNode.id, taskStatus });
+    const behavior = getWorkflowScrollBehavior(prefersReducedMotion());
     if (viewportRef.current) {
       viewportRef.current.scrollTo({
-        left: Math.max(0, (stage.bounds.x * zoom) - 22),
-        behavior: 'smooth',
+        left: getWorkflowStageScrollLeft(stage, zoom, viewportRef.current.clientWidth),
+        behavior,
       });
     }
+    stageNavRef.current
+      ?.querySelector(`[data-stage-id="${stage.id}"]`)
+      ?.scrollIntoView({ behavior, block: 'nearest', inline: 'center' });
   };
 
   return (
-    <div className="workflow-canvas" data-theme={theme}>
+    <div
+      className="workflow-canvas"
+      data-theme={theme}
+      data-mobile={mobileView ? 'true' : 'false'}
+    >
       <div className="workflow-focus-strip">
         <span className="workflow-focus-step">{focus.progressLabel}</span>
         <div>
@@ -317,13 +386,16 @@ export default function PipelineGraph({
         <BranchesOutlined aria-hidden="true" />
       </div>
 
-      <nav className="workflow-stage-nav" aria-label="工作流阶段">
+      <nav className="workflow-stage-nav" aria-label="工作流阶段" ref={stageNavRef}>
         {model.stages.map(stage => (
           <button
             key={stage.id}
             type="button"
+            data-stage-id={stage.id}
             data-status={getStageStatus(stage, model.nodesById)}
             data-current={stage.number === focus.stageNumber ? 'true' : 'false'}
+            data-selected={stage.id === selectedNode.stage ? 'true' : 'false'}
+            aria-current={stage.number === focus.stageNumber ? 'step' : undefined}
             onClick={() => handleStageSelect(stage)}
           >
             <span>0{stage.number}</span>
@@ -345,7 +417,9 @@ export default function PipelineGraph({
             title="切换画布主题"
           >
             {theme === 'light' ? <MoonOutlined /> : <SunOutlined />}
-            {theme === 'light' ? '深色画布' : '浅色画布'}
+            <span className="canvas-theme-label">
+              {theme === 'light' ? '深色画布' : '浅色画布'}
+            </span>
           </button>
           <span className="canvas-zoom-group">
             <button type="button" aria-label="缩小画布" onClick={() => setNextZoom(zoom - 0.1)}>
@@ -356,8 +430,14 @@ export default function PipelineGraph({
               <PlusOutlined />
             </button>
           </span>
-          <button type="button" onClick={() => setNextZoom(WORKFLOW_DEFAULT_ZOOM)} title="重置画布">
-            <FullscreenOutlined />重置
+          <button
+            type="button"
+            onClick={() => setNextZoom(
+              mobileView ? WORKFLOW_MOBILE_DEFAULT_ZOOM : WORKFLOW_DEFAULT_ZOOM,
+            )}
+            title="重置画布"
+          >
+            <FullscreenOutlined /><span className="canvas-reset-label">重置</span>
           </button>
         </div>
       </div>
@@ -404,6 +484,7 @@ export default function PipelineGraph({
             selectedNodeId={selectedNode.id}
             onStageSelect={handleStageSelect}
           />
+          <span className="workflow-mobile-stage-hint">左右滑动 · 点击阶段快速定位</span>
           <span className="workflow-canvas-pan-hint"><SettingOutlined /> 横向滚动查看完整流程</span>
         </div>
         <WorkflowInspector
