@@ -1214,6 +1214,28 @@
   backdrop-filter: blur(20px) saturate(150%);
 }
 
+.app-header-actions {
+  display: flex;
+  justify-self: end;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--sc-border);
+  border-radius: 12px;
+  color: var(--sc-ink);
+  background: var(--sc-control-bg, rgba(255, 255, 255, 0.72));
+  cursor: pointer;
+}
+
 .brand-link {
   width: fit-content;
   color: inherit;
@@ -2255,10 +2277,12 @@
     display: none;
   }
 
+  .app-header-actions { gap: 7px; }
+
   .runtime-status-compact {
-    width: min(170px, 48vw);
-    flex: 0 1 170px;
-    max-width: 170px;
+    width: min(142px, 40vw);
+    flex-basis: min(142px, 40vw);
+    max-width: 142px;
     padding: 7px 9px;
   }
 
@@ -2267,9 +2291,12 @@
   }
 
   .runtime-status-copy strong {
-    max-width: calc(min(170px, 48vw) - 36px);
+    max-width: calc(min(142px, 40vw) - 36px);
     font-size: 10px;
   }
+
+  .app-theme-toggle { width: 38px; flex: 0 0 38px; padding: 0; }
+  .app-theme-toggle span:not(.anticon) { display: none; }
 
   .page-shell {
     width: min(calc(100% - 28px), var(--sc-content-width));
