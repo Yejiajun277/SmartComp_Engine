@@ -269,9 +269,11 @@ export default function TaskDetail() {
     progress,
     currentTaskInfo?.progress,
   );
-  const currentAgent = currentTaskInfo?.current_agent
-    || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
-    || '等待调度';
+  const currentAgent = resolvedTaskStatus === 'completed'
+    ? '全部 Agent 已完成'
+    : (currentTaskInfo?.current_agent
+      || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
+      || '等待调度');
   const presentationCurrentMessage = qaPresentationBlocked
     ? presentationEvents.at(-1)?.message || '业务 Agent 正在推进工作流'
     : currentMessage;
@@ -287,7 +289,7 @@ export default function TaskDetail() {
         返回分析中心
       </Button>
 
-      <section className="surface-card mission-header">
+      <section className="surface-card mission-header mission-header-compact">
         <div className="mission-title-row">
           <div className="mission-title-copy">
             <span className="section-eyebrow">Live agent mission</span>
@@ -342,29 +344,48 @@ export default function TaskDetail() {
         />
       </section>
 
-      <section className="workbench-grid">
+      <section className="workflow-workspace">
         <section className="surface-card workflow-deck" aria-labelledby="workflow-deck-title">
           <header className="workflow-deck-header">
             <div>
               <span className="section-eyebrow">Agent workflow</span>
-              <h2 id="workflow-deck-title">协作流程与质量门</h2>
+              <h2 id="workflow-deck-title">多智能体协作画布</h2>
             </div>
-            <p>点击业务 Agent 查看阶段产物</p>
+            <p>从竞品发现到策略报告，完整展示每一步如何接力</p>
           </header>
           <PipelineGraph
+            key={taskId}
             nodeStates={graphNodeStates}
             qaSummaries={graphQaSummaries}
             taskStatus={resolvedTaskStatus}
             qaDisabled={qaDisabled}
             onNodeClick={handleNodeClick}
+            onReportClick={() => navigate(`/tasks/${taskId}/report`)}
           />
         </section>
 
-        <LiveActivityRail
-          events={presentationEvents}
-          currentMessage={presentationCurrentMessage}
-          connected={connected}
-          qaDisabled={qaDisabled}
+        <Collapse
+          className="workflow-activity-collapse"
+          items={[{
+            key: 'activity',
+            label: (
+              <span className="workflow-activity-collapse-label">
+                <RobotOutlined />
+                <span>
+                  <strong>查看实时执行记录</strong>
+                  <small>按需查看 Agent 事件，不干扰主流程阅读</small>
+                </span>
+              </span>
+            ),
+            children: (
+              <LiveActivityRail
+                events={presentationEvents}
+                currentMessage={presentationCurrentMessage}
+                connected={connected}
+                qaDisabled={qaDisabled}
+              />
+            ),
+          }]}
         />
       </section>
 
