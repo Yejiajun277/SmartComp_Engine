@@ -66,7 +66,8 @@
   color: var(--dag-ink);
 }
 
-.workflow-canvas[data-theme='dark'] {
+:root[data-theme='dark'] .workflow-canvas,
+.app-shell[data-theme='dark'] .workflow-canvas {
   --dag-bg: #07111f;
   --dag-panel: rgba(16, 29, 46, 0.94);
   --dag-panel-strong: #122137;
@@ -197,10 +198,10 @@
   justify-content: space-between;
   gap: 18px;
   padding: 10px 12px 10px 16px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--sc-border);
   border-bottom: 0;
   border-radius: 15px 15px 0 0;
-  background: #fbfcfe;
+  background: var(--sc-surface-soft);
 }
 
 .workflow-canvas-toolbar > div:first-child {
@@ -229,10 +230,10 @@
 .canvas-toolbar-actions > button,
 .canvas-zoom-group {
   min-height: 34px;
-  border: 1px solid #dbe3ed;
+  border: 1px solid var(--sc-border);
   border-radius: 10px;
-  color: #516073;
-  background: #fff;
+  color: var(--sc-muted);
+  background: var(--sc-control-solid, #ffffff);
 }
 
 .canvas-toolbar-actions > button,
@@ -259,7 +260,7 @@
 
 .canvas-zoom-group strong {
   min-width: 42px;
-  color: #344258;
+  color: var(--sc-ink);
   font-size: 10px;
   text-align: center;
 }
@@ -853,7 +854,6 @@
     min-height: 32px;
     padding: 0;
   }
-  .canvas-theme-label,
   .canvas-reset-label { display: none; }
   .canvas-zoom-group { min-height: 32px; }
 

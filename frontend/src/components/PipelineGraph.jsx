@@ -8,14 +8,12 @@ import {
   FileTextOutlined,
   FullscreenOutlined,
   MinusOutlined,
-  MoonOutlined,
   PlusOutlined,
   ProductOutlined,
   RadarChartOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
   SettingOutlined,
-  SunOutlined,
   TagOutlined,
 } from '@ant-design/icons';
 import {
@@ -286,7 +284,6 @@ export default function PipelineGraph({
   const [zoom, setZoom] = useState(() => getWorkflowInitialZoom(
     typeof window === 'undefined' ? undefined : window.innerWidth,
   ));
-  const [theme, setTheme] = useState('light');
   const model = useMemo(() => buildWorkflowCanvasModel({
     nodeStates,
     qaSummaries,
@@ -372,11 +369,7 @@ export default function PipelineGraph({
   };
 
   return (
-    <div
-      className="workflow-canvas"
-      data-theme={theme}
-      data-mobile={mobileView ? 'true' : 'false'}
-    >
+    <div className="workflow-canvas" data-mobile={mobileView ? 'true' : 'false'}>
       <div className="workflow-focus-strip">
         <span className="workflow-focus-step">{focus.progressLabel}</span>
         <div>
@@ -410,17 +403,6 @@ export default function PipelineGraph({
           <small>点击节点查看职责、产物与当前状态</small>
         </div>
         <div className="canvas-toolbar-actions">
-          <button
-            type="button"
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            aria-pressed={theme === 'dark'}
-            title="切换画布主题"
-          >
-            {theme === 'light' ? <MoonOutlined /> : <SunOutlined />}
-            <span className="canvas-theme-label">
-              {theme === 'light' ? '深色画布' : '浅色画布'}
-            </span>
-          </button>
           <span className="canvas-zoom-group">
             <button type="button" aria-label="缩小画布" onClick={() => setNextZoom(zoom - 0.1)}>
               <MinusOutlined />
