@@ -99,3 +99,15 @@ test('global styles define one semantic dark theme contract', async () => {
   assert.match(documentDarkDeclarations, /background\s*:\s*#07111d\s*;/);
   assert.doesNotMatch(appCss, /\.workflow-canvas\[data-theme='dark'\]/);
 });
+
+test('dashboard messages use the app-scoped Ant Design theme context', async () => {
+  const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const dashboardSource = await readFile(new URL('../src/pages/Dashboard.jsx', import.meta.url), 'utf8');
+
+  assert.match(appSource, /import\s*\{[^}]*\bApp\s+as\s+AntdApp\b[^}]*\}\s*from\s*['"]antd['"]/);
+  assert.match(appSource, /<AntdApp\s+component=\{false\}>/);
+  assert.match(dashboardSource, /import\s*\{[^}]*\bApp\s+as\s+AntdApp\b[^}]*\}\s*from\s*['"]antd['"]/);
+  assert.match(dashboardSource, /AntdApp\.useApp\(\)/);
+  assert.doesNotMatch(dashboardSource, /import\s*\{[^}]*\bmessage\b[^}]*\}\s*from\s*['"]antd['"]/);
+  assert.doesNotMatch(dashboardSource, /\bmessage\.(?:success|error)\s*\(/);
+});

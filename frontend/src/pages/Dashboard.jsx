@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, List, Popconfirm, message } from 'antd';
+import { App as AntdApp, Button, List, Popconfirm } from 'antd';
 import { ArrowRightOutlined, DeleteOutlined } from '@ant-design/icons';
 import { deleteTask, getTasks, submitTask } from '../api/client';
 import HomeHero from '../components/dashboard/HomeHero';
@@ -92,6 +92,7 @@ function TaskListItem({ task, status, onOpen, onDelete }) {
 
 export default function Dashboard({ runtimeConfig, runtimeLoading }) {
   const navigate = useNavigate();
+  const { message: messageApi } = AntdApp.useApp();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -103,11 +104,11 @@ export default function Dashboard({ runtimeConfig, runtimeLoading }) {
       setTasks(mergeTasks(data, loadRecentTasks()));
     } catch (err) {
       setTasks(loadRecentTasks());
-      message.error(`任务列表加载失败：${err.response?.data?.detail || err.message}`);
+      messageApi.error(`任务列表加载失败：${err.response?.data?.detail || err.message}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [messageApi]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(loadTasks, 0);
@@ -138,10 +139,10 @@ export default function Dashboard({ runtimeConfig, runtimeLoading }) {
         finished_at: null,
         error: null,
       });
-      message.success('Agent 团队已开始工作');
+      messageApi.success('Agent 团队已开始工作');
       navigate(`/tasks/${result.task_id}`);
     } catch (err) {
-      message.error(`提交失败：${err.response?.data?.detail || err.message}`);
+      messageApi.error(`提交失败：${err.response?.data?.detail || err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -152,9 +153,9 @@ export default function Dashboard({ runtimeConfig, runtimeLoading }) {
       await deleteTask(taskId);
       removeRecentTask(taskId);
       setTasks(previous => previous.filter(task => task.id !== taskId));
-      message.success('任务已删除');
+      messageApi.success('任务已删除');
     } catch (err) {
-      message.error(`删除失败：${err.response?.data?.detail || err.message}`);
+      messageApi.error(`删除失败：${err.response?.data?.detail || err.message}`);
     }
   };
 

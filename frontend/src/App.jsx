@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, NavLink, Routes, Route } from 'react-router-dom';
-import { ConfigProvider, Layout, theme } from 'antd';
+import { App as AntdApp, ConfigProvider, Layout, theme } from 'antd';
 import { getRuntimeConfig } from './api/client';
 import Dashboard from './pages/Dashboard';
 import TaskDetail from './pages/TaskDetail';
@@ -81,7 +81,8 @@ export default function App() {
         },
       }}
     >
-      <BrowserRouter>
+      <AntdApp component={false}>
+        <BrowserRouter>
         <Layout className="app-shell" data-theme={appTheme}>
           <Header className="app-header">
             <NavLink className="brand-link" to="/" aria-label="返回 SmartComp 分析中心">
@@ -111,7 +112,8 @@ export default function App() {
             </Routes>
           </Content>
         </Layout>
-      </BrowserRouter>
+        </BrowserRouter>
+      </AntdApp>
     </ConfigProvider>
   );
 }
