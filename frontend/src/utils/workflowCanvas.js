@@ -1,7 +1,14 @@
 import { getGateState } from './quality.js';
 
-export const WORKFLOW_CANVAS_SIZE = Object.freeze({ width: 1680, height: 680 });
+export const WORKFLOW_CANVAS_SIZE = Object.freeze({ width: 2050, height: 680 });
 export const WORKFLOW_DEFAULT_ZOOM = 0.84;
+
+export const WORKFLOW_NODE_SIZES = Object.freeze({
+  agent: Object.freeze({ width: 145, height: 96 }),
+  input: Object.freeze({ width: 124, height: 96 }),
+  output: Object.freeze({ width: 124, height: 96 }),
+  qa: Object.freeze({ width: 96, height: 92 }),
+});
 
 export const WORKFLOW_STAGES = Object.freeze([
   {
@@ -10,7 +17,7 @@ export const WORKFLOW_STAGES = Object.freeze([
     label: '找到对手与证据',
     shortLabel: '发现与取证',
     outcome: '竞品清单与可信证据',
-    bounds: { x: 20, y: 56, width: 600, height: 568 },
+    bounds: { x: 20, y: 56, width: 650, height: 568 },
     nodeIds: ['input', 'discovery', 'collection', 'qa_collection'],
   },
   {
@@ -19,7 +26,7 @@ export const WORKFLOW_STAGES = Object.freeze([
     label: '决定怎么比较',
     shortLabel: '分析框架',
     outcome: '本次任务专属比较维度',
-    bounds: { x: 630, y: 56, width: 195, height: 568 },
+    bounds: { x: 680, y: 56, width: 235, height: 568 },
     nodeIds: ['dimension'],
   },
   {
@@ -28,7 +35,7 @@ export const WORKFLOW_STAGES = Object.freeze([
     label: '三路并行分析',
     shortLabel: '并行研判',
     outcome: '产品、定价与市场三维结论',
-    bounds: { x: 835, y: 56, width: 330, height: 568 },
+    bounds: { x: 925, y: 56, width: 455, height: 568 },
     nodeIds: ['product_analysis', 'pricing_analysis', 'market_analysis', 'qa_analysis'],
   },
   {
@@ -37,7 +44,7 @@ export const WORKFLOW_STAGES = Object.freeze([
     label: '生成策略报告',
     shortLabel: '策略交付',
     outcome: '可执行的竞争策略报告',
-    bounds: { x: 1175, y: 56, width: 475, height: 568 },
+    bounds: { x: 1390, y: 56, width: 640, height: 568 },
     nodeIds: ['strategy', 'qa_strategy', 'report'],
   },
 ]);
@@ -50,57 +57,57 @@ export const WORKFLOW_NODES = Object.freeze([
   {
     id: 'discovery', kind: 'agent', stage: 'evidence', phase: 'discovery',
     agent: 'DiscoveryAgent', label: '竞品发现', description: '识别真正需要比较的竞争对手',
-    output: '竞品清单', x: 190, y: 292,
+    output: '竞品清单', x: 205, y: 292,
   },
   {
     id: 'collection', kind: 'agent', stage: 'evidence', phase: 'collection',
     agent: 'CollectionAgent', label: '证据采集', description: '补全产品、价格、市场信息与引用',
-    output: '证据集', x: 350, y: 292,
+    output: '证据集', x: 370, y: 292,
   },
   {
     id: 'qa_collection', kind: 'qa', stage: 'evidence', targets: ['collection'],
     label: '证据质检', description: '检查证据完整性与引用可信度',
-    output: '通过后进入分析框架', x: 515, y: 302,
+    output: '通过后进入分析框架', x: 550, y: 302,
   },
   {
     id: 'dimension', kind: 'agent', stage: 'framework', phase: 'dimension',
     agent: 'DimensionAgent', label: '定义分析维度', description: '根据产品与证据确定比较框架',
-    output: '分析框架', x: 660, y: 292,
+    output: '分析框架', x: 700, y: 292,
   },
   {
     id: 'product_analysis', kind: 'agent', stage: 'analysis', phase: 'product_analysis',
     agent: 'ProductAgent', label: '产品分析', description: '比较功能、体验与差异化',
-    output: '产品结论', x: 835, y: 132,
+    output: '产品结论', x: 930, y: 132,
   },
   {
     id: 'pricing_analysis', kind: 'agent', stage: 'analysis', phase: 'pricing_analysis',
     agent: 'PricingAgent', label: '定价分析', description: '比较价格、套餐与商业模式',
-    output: '定价结论', x: 835, y: 292,
+    output: '定价结论', x: 930, y: 292,
   },
   {
     id: 'market_analysis', kind: 'agent', stage: 'analysis', phase: 'market_analysis',
     agent: 'MarketAgent', label: '市场分析', description: '比较用户、定位与竞争态势',
-    output: '市场结论', x: 835, y: 452,
+    output: '市场结论', x: 930, y: 452,
   },
   {
     id: 'qa_analysis', kind: 'qa', stage: 'analysis',
     targets: ['product_analysis', 'pricing_analysis', 'market_analysis'],
     label: '分析质检', description: '逐路检查三维分析，有问题只打回对应 Agent',
-    output: '可信三维分析', x: 1045, y: 302,
+    output: '可信三维分析', x: 1210, y: 302,
   },
   {
     id: 'strategy', kind: 'agent', stage: 'strategy', phase: 'strategy',
     agent: 'StrategyAgent', label: '策略综合', description: '把证据与三维结论转化为行动建议',
-    output: '策略建议', x: 1190, y: 292,
+    output: '策略建议', x: 1420, y: 292,
   },
   {
     id: 'qa_strategy', kind: 'qa', stage: 'strategy', targets: ['strategy'],
     label: '报告质检', description: '核对策略与证据、分析是否一致',
-    output: '可交付报告', x: 1350, y: 302,
+    output: '可交付报告', x: 1650, y: 302,
   },
   {
     id: 'report', kind: 'output', stage: 'strategy', label: '策略报告',
-    description: '查看最终结论、行动优先级与引用', output: 'HTML / JSON 报告', x: 1490, y: 292,
+    description: '查看最终结论、行动优先级与引用', output: 'HTML / JSON 报告', x: 1830, y: 292,
   },
 ]);
 
@@ -119,6 +126,47 @@ export const WORKFLOW_EDGES = Object.freeze([
   { id: 'strategy-qa', from: 'strategy', to: 'qa_strategy', label: '提交检查' },
   { id: 'qa-report', from: 'qa_strategy', to: 'report', label: '生成报告' },
 ]);
+
+const BRANCH_TARGETS = ['product_analysis', 'pricing_analysis', 'market_analysis'];
+const MERGE_SOURCES = ['product_analysis', 'pricing_analysis', 'market_analysis'];
+
+function getNodeSize(node) {
+  return WORKFLOW_NODE_SIZES[node?.kind] || WORKFLOW_NODE_SIZES.agent;
+}
+
+function getEdgePort(node, side, portIndex = null) {
+  const size = getNodeSize(node);
+  const y = portIndex === null
+    ? node.y + (size.height / 2)
+    : node.y + ((size.height / 4) * (portIndex + 1));
+  return {
+    x: side === 'source' ? node.x + size.width : node.x,
+    y,
+  };
+}
+
+export function getWorkflowEdgeGeometry(edge, nodesById) {
+  const sourceNode = nodesById?.[edge?.from];
+  const targetNode = nodesById?.[edge?.to];
+  if (!sourceNode || !targetNode) return null;
+
+  const branchIndex = edge.kind === 'branch' ? BRANCH_TARGETS.indexOf(edge.to) : -1;
+  const mergeIndex = edge.kind === 'merge' ? MERGE_SOURCES.indexOf(edge.from) : -1;
+  const source = getEdgePort(sourceNode, 'source', branchIndex >= 0 ? branchIndex : null);
+  const target = getEdgePort(targetNode, 'target', mergeIndex >= 0 ? mergeIndex : null);
+  const horizontalGap = Math.max(1, target.x - source.x);
+  const controlDistance = Math.max(4, Math.min(88, horizontalGap * 0.36));
+  const sourceControl = { x: source.x + controlDistance, y: source.y };
+  const targetControl = { x: target.x - controlDistance, y: target.y };
+
+  return {
+    source,
+    target,
+    sourceControl,
+    targetControl,
+    path: `M ${source.x} ${source.y} C ${sourceControl.x} ${sourceControl.y}, ${targetControl.x} ${targetControl.y}, ${target.x} ${target.y}`,
+  };
+}
 
 const COMPLETE_STATES = new Set(['completed', 'passed', 'degraded']);
 const ACTIVE_STATES = new Set(['running', 'retrying']);

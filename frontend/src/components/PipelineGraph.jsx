@@ -24,17 +24,11 @@ import {
   buildWorkflowCanvasModel,
   clampCanvasZoom,
   getStageZoneStyle,
+  getWorkflowEdgeGeometry,
   getWorkflowFocus,
   getWorkflowNodeAction,
   shouldResetWorkflowSelection,
 } from '../utils/workflowCanvas';
-
-const NODE_SIZE = {
-  agent: { width: 145, height: 96 },
-  input: { width: 124, height: 96 },
-  output: { width: 124, height: 96 },
-  qa: { width: 96, height: 92 },
-};
 
 const STATUS_LABELS = {
   waiting: '等待接力',
@@ -63,25 +57,6 @@ const NODE_ICONS = {
 };
 
 const EDGE_STATUSES = ['waiting', 'running', 'completed', 'retrying', 'degraded', 'failed'];
-
-function getNodeSize(node) {
-  return NODE_SIZE[node.kind] || NODE_SIZE.agent;
-}
-
-function getNodeCenter(node, side) {
-  const size = getNodeSize(node);
-  return {
-    x: side === 'source' ? node.x + size.width : node.x,
-    y: node.y + size.height / 2,
-  };
-}
-
-function getEdgePath(edge, nodesById) {
-  const source = getNodeCenter(nodesById[edge.from], 'source');
-  const target = getNodeCenter(nodesById[edge.to], 'target');
-  const distance = Math.max(54, Math.min(110, (target.x - source.x) * 0.46));
-  return `M ${source.x} ${source.y} C ${source.x + distance} ${source.y}, ${target.x - distance} ${target.y}, ${target.x} ${target.y}`;
-}
 
 function getStageStatus(stage, nodesById) {
   const statuses = stage.nodeIds.map(id => nodesById[id]?.status || 'waiting');
@@ -118,9 +93,9 @@ function WorkflowEdgeLayer({ edges, nodesById }) {
         ))}
       </defs>
       {edges.map((edge) => {
-        const path = getEdgePath(edge, nodesById);
-        const source = getNodeCenter(nodesById[edge.from], 'source');
-        const target = getNodeCenter(nodesById[edge.to], 'target');
+        const geometry = getWorkflowEdgeGeometry(edge, nodesById);
+        if (!geometry) return null;
+        const { path, source, target } = geometry;
         return (
           <g className="dag-edge" data-status={edge.status} key={edge.id}>
             <path className="dag-edge-track" d={path} />

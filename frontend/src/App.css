@@ -367,13 +367,13 @@
 
 .dag-edge-track {
   stroke: color-mix(in srgb, var(--dag-line) 70%, transparent);
-  stroke-width: 7;
+  stroke-width: 5.5;
   opacity: 0.55;
 }
 
 .dag-edge-signal {
   stroke: var(--dag-waiting);
-  stroke-width: 2.4;
+  stroke-width: 2.2;
 }
 
 .dag-edge[data-status='running'] .dag-edge-signal {
@@ -794,7 +794,7 @@
 .workflow-activity-collapse .ant-collapse-content-box { padding: 0 18px 18px !important; }
 .workflow-activity-collapse .live-activity-rail { padding: 20px; border: 1px solid #edf0f4; box-shadow: none; }
 
-@media (max-width: 1180px) {
+@media (max-width: 1480px) {
   .workflow-canvas-layout { grid-template-columns: 1fr; }
   .dag-inspector {
     display: grid;
@@ -2785,6 +2785,7 @@
 
 /* Real-time workbench */
 .workbench-page {
+  width: min(calc(100% - 16px), 1840px);
   padding-top: 34px;
 }
 
@@ -2962,7 +2963,7 @@
 
 .workflow-deck {
   min-width: 0;
-  padding: clamp(22px, 2.5vw, 34px);
+  padding: clamp(18px, 1.5vw, 24px);
   box-shadow: 0 14px 42px rgba(31, 48, 66, 0.05);
 }
 

@@ -224,6 +224,50 @@ test('the canvas highlights branch and merge edges from their real node states',
   );
 });
 
+test('parallel branch routes use separate ports with a readable horizontal gutter', () => {
+  assert.equal(typeof workflowCanvas.getWorkflowEdgeGeometry, 'function');
+  const nodesById = Object.fromEntries(
+    workflowCanvas.WORKFLOW_NODES.map(node => [node.id, node]),
+  );
+  const routes = ['dimension-product', 'dimension-pricing', 'dimension-market']
+    .map(id => workflowCanvas.WORKFLOW_EDGES.find(edge => edge.id === id))
+    .map(edge => workflowCanvas.getWorkflowEdgeGeometry(edge, nodesById));
+
+  assert.deepEqual(routes.map(route => route.source.y), [316, 340, 364]);
+  assert.equal(new Set(routes.map(route => route.source.y)).size, 3);
+  routes.forEach((route) => {
+    assert.ok(route.target.x - route.source.x >= 72);
+    assert.ok(route.source.x < route.sourceControl.x);
+    assert.ok(route.sourceControl.x < route.targetControl.x);
+    assert.ok(route.targetControl.x < route.target.x);
+  });
+});
+
+test('parallel merge routes enter the quality gate through separate ports', () => {
+  assert.equal(typeof workflowCanvas.getWorkflowEdgeGeometry, 'function');
+  const nodesById = Object.fromEntries(
+    workflowCanvas.WORKFLOW_NODES.map(node => [node.id, node]),
+  );
+  const routes = ['product-qa', 'pricing-qa', 'market-qa']
+    .map(id => workflowCanvas.WORKFLOW_EDGES.find(edge => edge.id === id))
+    .map(edge => workflowCanvas.getWorkflowEdgeGeometry(edge, nodesById));
+
+  assert.deepEqual(routes.map(route => route.target.y), [325, 348, 371]);
+  assert.equal(new Set(routes.map(route => route.target.y)).size, 3);
+  routes.forEach((route) => {
+    assert.ok(route.target.x - route.source.x >= 72);
+    assert.ok(route.source.x < route.sourceControl.x);
+    assert.ok(route.sourceControl.x < route.targetControl.x);
+    assert.ok(route.targetControl.x < route.target.x);
+  });
+});
+
+test('the widened canvas keeps the report node clear of the right edge', () => {
+  const report = workflowCanvas.WORKFLOW_NODES.find(node => node.id === 'report');
+  const reportRight = report.x + 124;
+  assert.ok(workflowCanvas.WORKFLOW_CANVAS_SIZE.width - reportRight >= 96);
+});
+
 test('canvas zoom is clamped to the supported readable range', () => {
   assert.equal(typeof workflowCanvas.clampCanvasZoom, 'function');
   assert.equal(workflowCanvas.clampCanvasZoom(0.2), 0.6);
