@@ -1759,7 +1759,7 @@
   left: 50%;
   width: 88px;
   height: 88px;
-  color: var(--sc-on-accent);
+  color: var(--sc-bg);
   background: var(--sc-ink);
   box-shadow: 0 16px 34px rgba(11, 18, 32, 0.22), 0 0 0 9px rgba(23, 107, 255, 0.06);
   transform: translate(-50%, -50%);
@@ -1776,6 +1776,7 @@
 .agent-map-core strong {
   align-self: start;
   margin-top: 3px;
+  color: inherit;
   font-size: 18px;
   letter-spacing: 0.08em;
 }

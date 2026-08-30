@@ -13,6 +13,14 @@ function getDeclarationBlock(css, selectors) {
   return block.groups.declarations;
 }
 
+function getExactDeclarationBlock(css, selector) {
+  const block = [...css.matchAll(/(?<selector>[^{}]+)\{(?<declarations>[^{}]*)\}/g)]
+    .find(({ groups }) => groups.selector.trim() === selector);
+
+  assert.ok(block, `missing CSS block for ${selector}`);
+  return block.groups.declarations;
+}
+
 test('global theme toggle exposes the next action and current pressed state', async (t) => {
   const vite = await createServer({
     appType: 'custom',
@@ -110,4 +118,15 @@ test('dashboard messages use the app-scoped Ant Design theme context', async () 
   assert.match(dashboardSource, /AntdApp\.useApp\(\)/);
   assert.doesNotMatch(dashboardSource, /import\s*\{[^}]*\bmessage\b[^}]*\}\s*from\s*['"]antd['"]/);
   assert.doesNotMatch(dashboardSource, /\bmessage\.(?:success|error)\s*\(/);
+});
+
+test('home workflow strategy core keeps inverse foreground and background tokens', async () => {
+  const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8');
+  const coreDeclarations = getExactDeclarationBlock(appCss, '.agent-map-core');
+  const strategyDeclarations = getExactDeclarationBlock(appCss, '.agent-map-core strong');
+
+  assert.match(coreDeclarations, /color\s*:\s*var\(--sc-bg\)\s*;/);
+  assert.match(coreDeclarations, /background\s*:\s*var\(--sc-ink\)\s*;/);
+  assert.match(strategyDeclarations, /color\s*:\s*inherit\s*;/);
+  assert.doesNotMatch(strategyDeclarations, /!important/);
 });
