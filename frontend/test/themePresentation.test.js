@@ -5,6 +5,14 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
+function getDeclarationBlock(css, selectors) {
+  const block = [...css.matchAll(/(?<selector>[^{}]+)\{(?<declarations>[^{}]*)\}/g)]
+    .find(({ groups }) => selectors.every(selector => groups.selector.includes(selector)));
+
+  assert.ok(block, `missing CSS block for ${selectors.join(' and ')}`);
+  return block.groups.declarations;
+}
+
 test('global theme toggle exposes the next action and current pressed state', async (t) => {
   const vite = await createServer({
     appType: 'custom',
@@ -50,10 +58,44 @@ test('workflow canvas follows the app theme without a local theme control', asyn
 test('global styles define one semantic dark theme contract', async () => {
   const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8');
   const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  const darkThemeDeclarations = getDeclarationBlock(appCss, [
+    ":root[data-theme='dark']",
+    ".app-shell[data-theme='dark']",
+  ]);
+  const documentDarkDeclarations = getDeclarationBlock(indexCss, ["html[data-theme='dark']"]);
 
-  assert.match(appCss, /:root\[data-theme='dark'\]/);
-  assert.match(appCss, /--sc-control-bg:/);
-  assert.match(appCss, /--sc-code-bg:/);
-  assert.match(indexCss, /html\[data-theme='dark'\]/);
+  const requiredDarkTokens = [
+    '--sc-bg',
+    '--sc-bg-soft',
+    '--sc-surface',
+    '--sc-surface-soft',
+    '--sc-surface-elevated',
+    '--sc-control-bg',
+    '--sc-control-solid',
+    '--sc-header-bg',
+    '--sc-code-bg',
+    '--sc-overlay',
+    '--sc-ink',
+    '--sc-text',
+    '--sc-muted',
+    '--sc-border',
+    '--sc-border-strong',
+    '--sc-blue',
+    '--sc-blue-soft',
+    '--sc-mint',
+    '--sc-mint-bright',
+    '--sc-violet',
+    '--sc-amber',
+    '--sc-danger',
+    '--sc-on-accent',
+    '--sc-shadow-soft',
+  ];
+
+  for (const token of requiredDarkTokens) {
+    assert.match(darkThemeDeclarations, new RegExp(`${token}\\s*:\\s*[^;]+;`));
+  }
+
+  assert.match(documentDarkDeclarations, /color-scheme\s*:\s*dark\s*;/);
+  assert.match(documentDarkDeclarations, /background\s*:\s*#07111d\s*;/);
   assert.doesNotMatch(appCss, /\.workflow-canvas\[data-theme='dark'\]/);
 });
