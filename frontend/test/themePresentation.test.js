@@ -130,3 +130,13 @@ test('home workflow strategy core keeps inverse foreground and background tokens
   assert.match(strategyDeclarations, /color\s*:\s*inherit\s*;/);
   assert.doesNotMatch(strategyDeclarations, /!important/);
 });
+
+test('recent task grid lets long mobile cards shrink to their container', async () => {
+  const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8');
+  const taskGridDeclarations = getExactDeclarationBlock(appCss, '.task-list .ant-spin-container');
+
+  assert.match(
+    taskGridDeclarations,
+    /grid-template-columns\s*:\s*minmax\(0\s*,\s*1fr\)\s*;/,
+  );
+});
