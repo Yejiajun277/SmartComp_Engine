@@ -11,6 +11,7 @@ from agents.base_agent import BaseAgent
 from models.domain import (
     CompetitorData, CompetitorList, ProductAnalysis, PricingAnalysis, MarketAnalysis,
     StrategyReport, QualityIssue, QualityCheckResult, QATimeline, HallucinationCheckStatus,
+    normalize_text_value,
 )
 from core.prompt_loader import load as load_prompts
 from datetime import datetime
@@ -44,9 +45,27 @@ class QualityAgent(BaseAgent):
     _MEANINGLESS_VALUES = {"未知", "n/a", "暂无", "无", "unknown", "not available", "-"}
 
     @staticmethod
-    def _is_meaningless(text: str) -> bool:
+    def _is_meaningless(text: object) -> bool:
         """判断文本是否为无意义填充值"""
-        return text.strip().lower() in QualityAgent._MEANINGLESS_VALUES
+        return normalize_text_value(text).strip().lower() in QualityAgent._MEANINGLESS_VALUES
+
+    @staticmethod
+    def _text_schema_issue(competitor: str, field_name: str, value: object) -> QualityIssue:
+        normalized = normalize_text_value(value)
+        preview = normalized[:160] if normalized else "<empty>"
+        actual_type = type(value).__name__
+        return QualityIssue(
+            severity="critical",
+            category="schema",
+            field=f"{competitor}.{field_name}",
+            description=(
+                f"字段类型异常：{field_name} 期望 str，实际为 {actual_type}；"
+                "质检已使用安全文本继续检查"
+            ),
+            expected="str",
+            actual=f"{actual_type}: {preview}",
+            suggestion="重新采集该字段并输出单个字符串，不要返回数组、对象或 null",
+        )
 
     def __init__(self):
         prompts = load_prompts("quality_agent")
@@ -116,7 +135,11 @@ class QualityAgent(BaseAgent):
             issues.extend(self._check_citation_validity(all_citations, list(set(all_output_ids))))
 
         score = self._calculate_score(issues, phase="collection", competitor_count=len(competitors_data))
-        passed = score >= self.PASS_SCORE
+        has_critical_schema = any(
+            issue.category == "schema" and issue.severity == "critical"
+            for issue in issues
+        )
+        passed = score >= self.PASS_SCORE and not has_critical_schema
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -156,7 +179,7 @@ class QualityAgent(BaseAgent):
             for name, data in competitors_data.items():
                 for field_name in ["strengths", "weaknesses", "channels", "market_share", "user_reviews"]:
                     val = getattr(data, field_name, "")
-                    if val and len(str(val).strip()) > 10:
+                    if isinstance(val, str) and len(val.strip()) > 10:
                         self._passed_fields.add(f"{name}.{field_name}")
         else:
             # 未通过时，记录本轮没有幻觉问题的字段为"已通过"
@@ -166,7 +189,7 @@ class QualityAgent(BaseAgent):
                     field_key = f"{name}.{field_name}"
                     if field_key not in halluc_fields:
                         val = getattr(data, field_name, "")
-                        if val and len(str(val).strip()) > 10:
+                        if isinstance(val, str) and len(val.strip()) > 10:
                             self._passed_fields.add(field_key)
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -195,6 +218,15 @@ class QualityAgent(BaseAgent):
                 ))
 
         for name, data in competitors_data.items():
+            normalized_text = {}
+            invalid_text_fields = set()
+            for field_name in CompetitorData.TEXT_FIELDS:
+                raw_value = getattr(data, field_name, "")
+                normalized_text[field_name] = normalize_text_value(raw_value)
+                if not isinstance(raw_value, str):
+                    invalid_text_fields.add(field_name)
+                    issues.append(self._text_schema_issue(name, field_name, raw_value))
+
             if not data.name:
                 issues.append(QualityIssue(
                     severity="critical", category="completeness",
@@ -254,18 +286,21 @@ class QualityAgent(BaseAgent):
                         ))
 
             # 市场份额检查（含无意义文本检测）
-            if not data.market_share:
+            market_share = normalized_text["market_share"]
+            if "market_share" in invalid_text_fields:
+                pass
+            elif not market_share:
                 issues.append(QualityIssue(
                     severity="critical", category="completeness",
                     field=f"{name}.market_share",
                     description="市场份额信息为空",
                     suggestion="补充该竞品的市场份额数据",
                 ))
-            elif self._is_meaningless(data.market_share):
+            elif self._is_meaningless(market_share):
                 issues.append(QualityIssue(
                     severity="critical", category="completeness",
                     field=f"{name}.market_share",
-                    description=f"市场份额为无意义文本: '{data.market_share}'",
+                    description=f"市场份额为无意义文本: '{market_share}'",
                     suggestion="补充该竞品的实际市场份额数据",
                 ))
 
@@ -276,7 +311,9 @@ class QualityAgent(BaseAgent):
                 ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态", "warning"),
                 ("user_reviews", "用户评价", "用户评价 口碑 评分", "warning"),
             ]:
-                text = getattr(data, field_name)
+                text = normalized_text[field_name]
+                if field_name in invalid_text_fields:
+                    continue
                 if not text or not text.strip():
                     issues.append(QualityIssue(
                         severity=severity_if_empty, category="completeness",
@@ -322,10 +359,10 @@ class QualityAgent(BaseAgent):
             data_summary[name] = {
                 "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features],
                 "pricing_tiers": [{"tier_name": pt.tier_name, "price": pt.price} for pt in data.pricing_tiers],
-                "market_share": data.market_share,
-                "user_reviews": data.user_reviews[:200],
-                "strengths": data.strengths[:200],
-                "weaknesses": data.weaknesses[:200],
+                "market_share": normalize_text_value(data.market_share),
+                "user_reviews": normalize_text_value(data.user_reviews)[:200],
+                "strengths": normalize_text_value(data.strengths)[:200],
+                "weaknesses": normalize_text_value(data.weaknesses)[:200],
                 "citations": [{"id": c.id, "title": c.title[:80], "query": c.query} for c in data.citations[:30]],
             }
 
@@ -565,9 +602,9 @@ class QualityAgent(BaseAgent):
         for name, data in competitors_data.items():
             data_summary[name] = {
                 "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features[:5]],
-                "market_share": data.market_share[:200],
-                "strengths": data.strengths[:200],
-                "weaknesses": data.weaknesses[:200],
+                "market_share": normalize_text_value(data.market_share)[:200],
+                "strengths": normalize_text_value(data.strengths)[:200],
+                "weaknesses": normalize_text_value(data.weaknesses)[:200],
             }
 
         # 序列化分析结果
@@ -881,9 +918,11 @@ class QualityAgent(BaseAgent):
             for name, data in competitors_data.items():
                 for field_name in supplementable:
                     val = getattr(data, field_name, "")
-                    if not val or not str(val).strip():
+                    if not isinstance(val, str):
                         _add_missing(name, field_name)
-                    elif _is_truncated(str(val)):
+                    elif not val or not val.strip():
+                        _add_missing(name, field_name)
+                    elif _is_truncated(val):
                         _add_missing(name, field_name)
                 # pricing_tiers 检查
                 if not data.pricing_tiers:
@@ -897,8 +936,9 @@ class QualityAgent(BaseAgent):
             is_truncation = "截断" in desc or "未完成" in desc or "语义不完整" in desc
             is_empty = "为空" in desc or "缺失" in desc or "空白" in desc
             is_hallucination = "幻觉" in desc or "unsupported" in desc.lower() or "虚构" in desc or "无依据" in desc or "编造" in desc
+            is_schema = issue.category == "schema"
 
-            if not (is_truncation or is_empty or is_hallucination):
+            if not (is_truncation or is_empty or is_hallucination or is_schema):
                 continue
 
             field = issue.field

@@ -9,7 +9,14 @@ LLM调用：1+N次（维度拆解 + 逐竞品汇总）
 """
 
 from agents.base_agent import BaseAgent
-from models.domain import CompetitorList, CompetitorData, Citation, FeatureItem, PricingTier
+from models.domain import (
+    CompetitorList,
+    CompetitorData,
+    Citation,
+    FeatureItem,
+    PricingTier,
+    normalize_text_value,
+)
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
 import config
@@ -29,6 +36,17 @@ class CollectionAgent(BaseAgent):
         self._prompt_collect = prompts["prompt_collect"]
         self.search_client = SearchClient()
         self._last_search_texts: dict[str, str] = {}
+
+    @staticmethod
+    def _normalize_competitor_text_fields(result: dict) -> dict:
+        """Normalize LLM text fields before any string-only operation."""
+        if not isinstance(result, dict):
+            return {}
+        normalized = dict(result)
+        for field_name in CompetitorData.TEXT_FIELDS:
+            if field_name in normalized:
+                normalized[field_name] = normalize_text_value(normalized[field_name])
+        return normalized
 
     def get_search_texts(self) -> dict[str, str]:
         """返回每个竞品的原始搜索文本（供幻觉检测使用）"""
@@ -260,6 +278,7 @@ class CollectionAgent(BaseAgent):
                 search_results=all_text[:12000],
             )
             result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
+            result = self._normalize_competitor_text_fields(result)
             if truncated and result:
                 # 检测到截断：对文本字段进行补充提取
                 self._log(f"   ⚠️ 采集输出被截断，补充提取文本字段...")
@@ -378,6 +397,7 @@ class CollectionAgent(BaseAgent):
             )
             # 使用截断检测，与同步版本保持一致的max_tokens
             result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
+            result = self._normalize_competitor_text_fields(result)
             if truncated and result:
                 # 检测到截断：对文本字段进行补充提取（与同步版本逻辑一致）
                 self._log(f"   ⚠️ 异步采集输出被截断，补充提取文本字段...")
@@ -445,6 +465,8 @@ class CollectionAgent(BaseAgent):
         检查 market_share, user_reviews, strengths, weaknesses, channels 是否被截断，
         如果是，发起第二次 LLM 调用只提取这些字段。
         """
+        result = self._normalize_competitor_text_fields(result)
+
         # 检查哪些文本字段可能被截断（以句号/分号结尾的不算截断）
         text_fields = ["market_share", "user_reviews", "strengths", "weaknesses", "channels"]
         truncated_fields = []
@@ -480,6 +502,7 @@ class CollectionAgent(BaseAgent):
 ```"""
 
         supplement_result = self.ask_llm_json(supplement_prompt, max_tokens=4096, temperature=0)
+        supplement_result = self._normalize_competitor_text_fields(supplement_result)
         if supplement_result:
             for field in truncated_fields:
                 new_value = supplement_result.get(field, "")
@@ -550,6 +573,7 @@ class CollectionAgent(BaseAgent):
                                   market_share: str,
                                   existing_cites: list) -> tuple:
         """如果市场份额数据缺失，执行补充搜索"""
+        market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
             return market_share, []
 
@@ -594,7 +618,7 @@ class CollectionAgent(BaseAgent):
             )
             result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
             if result and result.get("market_share"):
-                market_share = result["market_share"]
+                market_share = normalize_text_value(result["market_share"])
 
         return market_share, extra_cites
 
@@ -659,6 +683,7 @@ class CollectionAgent(BaseAgent):
                                              market_share: str,
                                              existing_cites: list) -> tuple:
         """如果市场份额数据缺失，异步执行补充搜索"""
+        market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
             return market_share, []
 
@@ -703,7 +728,7 @@ class CollectionAgent(BaseAgent):
             )
             result = await self.async_ask_llm_json(prompt, max_tokens=2048, temperature=0)
             if result and result.get("market_share"):
-                market_share = result["market_share"]
+                market_share = normalize_text_value(result["market_share"])
 
         return market_share, extra_cites
 
@@ -807,6 +832,7 @@ class CollectionAgent(BaseAgent):
                 extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
 
                 result = self.ask_llm_json(extract_prompt, max_tokens=8192, temperature=0)
+                result = self._normalize_competitor_text_fields(result)
                 if result:
                     still_truncated = []
                     for field_name in fields:
@@ -845,6 +871,7 @@ class CollectionAgent(BaseAgent):
                         self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
                         retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
                         retry_result = self.ask_llm_json(retry_prompt, max_tokens=8192, temperature=0)
+                        retry_result = self._normalize_competitor_text_fields(retry_result)
                         if retry_result:
                             for field_name in still_truncated:
                                 retry_val = retry_result.get(field_name, "")
@@ -943,6 +970,7 @@ class CollectionAgent(BaseAgent):
                 extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
 
                 result = await self.async_ask_llm_json(extract_prompt, max_tokens=8192, temperature=0)
+                result = self._normalize_competitor_text_fields(result)
                 if result:
                     still_truncated = []
                     for field_name in fields:
@@ -979,6 +1007,7 @@ class CollectionAgent(BaseAgent):
                         self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
                         retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
                         retry_result = await self.async_ask_llm_json(retry_prompt, max_tokens=8192, temperature=0)
+                        retry_result = self._normalize_competitor_text_fields(retry_result)
                         if retry_result:
                             for field_name in still_truncated:
                                 retry_val = retry_result.get(field_name, "")

@@ -6,10 +6,48 @@ models/domain.py — 领域模型定义
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import ClassVar
 
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def normalize_text_value(value: object) -> str:
+    """Convert JSON-shaped values into deterministic, readable text.
+
+    Plain strings are returned unchanged. This keeps the existing semantics for
+    valid LLM output while making arrays, objects, and null values safe at the
+    domain boundary.
+    """
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        parts = []
+        for key in sorted(value, key=lambda item: str(item)):
+            normalized_value = normalize_text_value(value[key]).strip()
+            if not normalized_value:
+                continue
+            normalized_key = normalize_text_value(key).strip()
+            parts.append(
+                f"{normalized_key}：{normalized_value}"
+                if normalized_key
+                else normalized_value
+            )
+        return "；".join(parts)
+    if isinstance(value, (list, tuple)):
+        parts = [normalize_text_value(item).strip() for item in value]
+        return "、".join(part for part in parts if part)
+    if isinstance(value, (set, frozenset)):
+        parts = sorted(
+            normalized
+            for item in value
+            if (normalized := normalize_text_value(item).strip())
+        )
+        return "、".join(parts)
+    return str(value)
 
 
 @dataclass
@@ -108,6 +146,14 @@ class PricingTier:
 @dataclass
 class CompetitorData:
     """单个竞品的采集数据"""
+    TEXT_FIELDS: ClassVar[tuple[str, ...]] = (
+        "market_share",
+        "user_reviews",
+        "strengths",
+        "weaknesses",
+        "channels",
+    )
+
     name: str                               # 竞品名称
     product_features: list[FeatureItem] = field(default_factory=list)  # 产品功能列表
     pricing_tiers: list[PricingTier] = field(default_factory=list)     # 定价层级
@@ -118,6 +164,11 @@ class CompetitorData:
     channels: str = ""                      # 渠道策略
     search_sources: list[str] = field(default_factory=list)  # 搜索原文
     citations: list[Citation] = field(default_factory=list)  # 结构化引用来源
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self.TEXT_FIELDS:
+            value = normalize_text_value(value)
+        super().__setattr__(name, value)
 
 
 @dataclass
