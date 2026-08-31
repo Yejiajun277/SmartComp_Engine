@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   appendUniqueEvent,
   buildQaSummaries,
+  mergeQaResults,
   mergeQaSummaries,
   shouldAcceptTaskEvent,
   upsertQaResult,
@@ -48,6 +49,22 @@ test('keeps separate QA attempts while replacing the running placeholder', () =>
 
   assert.equal(results.length, 2);
   assert.deepEqual(results.map(result => result.attempt), [1, 2]);
+  assert.equal(results[0].passed, false);
+  assert.equal(results[0].running, false);
+});
+
+test('terminal QA outcomes outrank a contradictory running marker', () => {
+  const cases = [
+    [{ phase: 'collection', attempt: 1, running: true, passed: false }, 'failed'],
+    [{ phase: 'product', attempt: 1, running: true, passed: true }, 'passed'],
+    [{ phase: 'strategy', attempt: 1, running: true, passed: false, degraded: true }, 'degraded'],
+  ];
+
+  cases.forEach(([result, expectedStatus]) => {
+    const summary = buildQaSummaries([result]);
+    const nodeKey = result.phase === 'product' ? 'product_analysis' : result.phase;
+    assert.equal(summary[nodeKey].status, expectedStatus);
+  });
 });
 
 test('deduplicates replayed workflow history by stable event identity', () => {
@@ -96,4 +113,56 @@ test('same or unknown QA attempts cannot downgrade a persisted terminal summary'
     assert.equal(merged.strategy.status, 'passed');
     assert.equal(merged.strategy.attempt, 1);
   });
+});
+
+test('timeline merge preserves persisted terminal attempts over replayed starts', () => {
+  const merged = mergeQaResults(
+    [{ phase: 'collection', target_agent: 'CollectionAgent', attempt: 1, passed: false, score: 53 }],
+    [{ phase: 'collection', target_agent: 'CollectionAgent', attempt: 1, running: true }],
+  );
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].passed, false);
+  assert.notEqual(merged[0].running, true);
+  assert.equal(merged[0].score, 53);
+});
+
+test('an older replayed terminal summary cannot replace a newer persisted attempt', () => {
+  const persisted = buildQaSummaries([
+    { phase: 'collection', attempt: 2, passed: true, score: 91 },
+  ]);
+  const replayed = buildQaSummaries([
+    { phase: 'collection', attempt: 1, passed: false, score: 53 },
+  ]);
+
+  const merged = mergeQaSummaries(persisted, replayed);
+
+  assert.equal(merged.collection.status, 'passed');
+  assert.equal(merged.collection.attempt, 2);
+  assert.equal(merged.collection.score, 91);
+});
+
+test('numeric and string attempt values identify the same QA round', () => {
+  const merged = mergeQaResults(
+    [{ phase: 'collection', target_agent: 'CollectionAgent', attempt: 1, passed: false }],
+    [{ phase: 'collection', target_agent: 'CollectionAgent', attempt: '1', running: true }],
+  );
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].passed, false);
+  assert.notEqual(merged[0].running, true);
+});
+
+test('summary selection uses the newest QA attempt regardless of replay order', () => {
+  const results = mergeQaResults(
+    [{ phase: 'collection', attempt: 2, passed: true, score: 91 }],
+    [{ phase: 'collection', attempt: 1, passed: false, score: 53 }],
+  );
+
+  const summary = buildQaSummaries(results).collection;
+
+  assert.equal(summary.status, 'passed');
+  assert.equal(summary.attempt, 2);
+  assert.equal(summary.score, 91);
+  assert.equal(summary.retryCount, 1);
 });

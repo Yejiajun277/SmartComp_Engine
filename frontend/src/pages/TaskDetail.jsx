@@ -32,7 +32,11 @@ import {
   updateTaskArtifactCache,
   updateTaskQaPresentationState,
 } from '../utils/workflowPresentation';
-import { buildQaSummaries, mergeQaSummaries, shouldAcceptTaskEvent } from '../utils/taskEvents';
+import {
+  buildQaSummaries,
+  mergeQaResults,
+  shouldAcceptTaskEvent,
+} from '../utils/taskEvents';
 import {
   getTaskModeMeta,
   getTaskStatusMeta,
@@ -66,7 +70,6 @@ export default function TaskDetail() {
     progress,
     currentMessage,
     qaResults,
-    qaSummaries,
     taskStatus,
     llmLogsKey,
     handleEvent,
@@ -129,13 +132,7 @@ export default function TaskDetail() {
       const artifacts = selectTaskArtifactCache(previous, taskId);
       if (previous.taskId !== taskId) return previous;
       const previousChecks = artifacts.qa?.checks || [];
-      const checks = [
-        ...previousChecks.filter(check => !(
-          check.phase === qaResult.phase
-          && (check.attempt == null || qaResult.attempt == null || check.attempt === qaResult.attempt)
-        )),
-        qaResult,
-      ];
+      const checks = mergeQaResults(previousChecks, [qaResult]);
       return updateTaskArtifactCache(previous, taskId, 'qa', {
           ...(artifacts.qa || {}),
           checks,
@@ -245,10 +242,12 @@ export default function TaskDetail() {
   };
 
   const persistedQa = selectTaskQaPresentationState(persistedQaPresentation, taskId);
+  const timelineQaResults = qaPresentationBlocked
+    ? []
+    : mergeQaResults(persistedQa.results, qaResults);
   const graphQaSummaries = qaPresentationBlocked
     ? {}
-    : mergeQaSummaries(persistedQa.summaries, qaSummaries);
-  const timelineQaResults = qaPresentationBlocked ? [] : (qaResults.length > 0 ? qaResults : persistedQa.results);
+    : buildQaSummaries(timelineQaResults);
   const taskArtifacts = selectTaskArtifactCache(artifactCache, taskId);
   const cockpitChecks = taskArtifacts.qa?.checks?.length > 0
     ? taskArtifacts.qa.checks

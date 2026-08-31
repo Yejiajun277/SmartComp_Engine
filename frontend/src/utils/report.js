@@ -1,3 +1,5 @@
+import { getQaResultState } from './taskEvents.js';
+
 const PRIORITY_ORDER = new Map([
   ['P0', 0],
   ['P1', 1],
@@ -16,7 +18,7 @@ function getLatestCompletedChecks(checks) {
   const latestByPhase = new Map();
 
   checks.forEach((check) => {
-    if (!check || check.running) return;
+    if (!check || getQaResultState(check) === 'running') return;
     latestByPhase.set(check.phase || '__unknown', check);
   });
 

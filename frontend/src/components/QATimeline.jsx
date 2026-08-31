@@ -5,6 +5,7 @@ import {
   SafetyCertificateOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
+import { getQaResultState } from '../utils/taskEvents';
 
 const PHASE_LABELS = {
   collection: '证据采集',
@@ -15,13 +16,14 @@ const PHASE_LABELS = {
 };
 
 function getStatusMeta(result) {
-  if (result.running) {
+  const state = getQaResultState(result);
+  if (state === 'running') {
     return { label: '质检中', tone: 'running', icon: <LoadingOutlined spin /> };
   }
-  if (result.degraded) {
+  if (state === 'degraded') {
     return { label: '降级通过', tone: 'degraded', icon: <WarningOutlined /> };
   }
-  if (result.passed) {
+  if (state === 'passed') {
     return { label: '通过', tone: 'passed', icon: <CheckCircleOutlined /> };
   }
   return { label: '已打回', tone: 'failed', icon: <CloseCircleOutlined /> };
@@ -52,9 +54,10 @@ function groupResults(results) {
 }
 
 function getCorrectionStory(result, attempt) {
-  if (result.running) return `第 ${attempt} 轮质量检查正在进行`;
-  if (result.degraded) return `第 ${attempt} 轮保留风险后降级通过`;
-  if (result.passed) return `第 ${attempt} 轮检查通过，可以进入下一阶段`;
+  const state = getQaResultState(result);
+  if (state === 'running') return `第 ${attempt} 轮质量检查正在进行`;
+  if (state === 'degraded') return `第 ${attempt} 轮保留风险后降级通过`;
+  if (state === 'passed') return `第 ${attempt} 轮检查通过，可以进入下一阶段`;
   return `发现问题 → 已反馈给 ${result.target_agent || '对应 Agent'} → 第 ${attempt} 轮修正`;
 }
 

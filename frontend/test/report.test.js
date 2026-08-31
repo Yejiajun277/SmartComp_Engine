@@ -44,3 +44,13 @@ test('uses the latest completed QA check per phase', () => {
   assert.equal(result.qaCheckCount, 3);
   assert.equal(result.qaStatus, 'passed');
 });
+
+test('report overview treats an explicit QA failure as terminal even with stale running state', () => {
+  const result = buildReportOverview({
+    qa_timeline: {
+      checks: [{ phase: 'collection', running: true, passed: false }],
+    },
+  });
+
+  assert.equal(result.qaStatus, 'failed');
+});

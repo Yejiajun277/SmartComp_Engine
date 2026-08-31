@@ -1,3 +1,5 @@
+import { getQaResultState } from './taskEvents.js';
+
 const GATE_PRIORITY = ['running', 'failed', 'degraded', 'passed', 'waiting'];
 
 function roundRate(value) {
@@ -19,7 +21,9 @@ function weightedRate(checks, field) {
 }
 
 export function aggregateQuality(checks = []) {
-  const completedChecks = checks.filter(check => check && !check.running);
+  const completedChecks = checks.filter(check => (
+    check && getQaResultState(check) !== 'running'
+  ));
   const latestByPhase = new Map();
 
   completedChecks.forEach((check) => {

@@ -68,3 +68,17 @@ test('disabled QA overrides stale running summaries', () => {
 
   assert.equal(result.status, 'disabled');
 });
+
+test('completed quality metrics include terminal outcomes with a stale running marker', () => {
+  const result = aggregateQuality([{
+    phase: 'collection',
+    running: true,
+    passed: false,
+    total_fields: 4,
+    correction_count: 1,
+    issues: [{}],
+  }]);
+
+  assert.equal(result.totalChecks, 1);
+  assert.equal(result.retryCount, 1);
+});
