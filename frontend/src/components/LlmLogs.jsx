@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Table, Tag, Typography, Spin, Empty, Collapse } from 'antd';
 import { getLlmLogs } from '../api/client';
+import { INITIAL_LLM_LOG_PAGINATION, updateLlmLogPagination } from '../utils/llmLogs';
 
 const { Text } = Typography;
 
 export default function LlmLogs({ taskId, refreshKey = 0 }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState(INITIAL_LLM_LOG_PAGINATION);
 
   useEffect(() => {
     if (!taskId) return undefined;
@@ -100,18 +102,42 @@ export default function LlmLogs({ taskId, refreshKey = 0 }) {
       <p className="technical-log-note">
         此处用于工程追溯与成本核对。表格默认只显示 Agent、调用类型、状态、Token、耗时、模型和摘要；原始提示词与输出需展开单条记录后再查看。
       </p>
-      <Table
-        className="technical-log-table"
-        dataSource={logs.map((log, i) => ({ ...log, key: i }))}
+      <LlmLogsTable
+        logs={logs}
         columns={columns}
-        size="small"
-        pagination={{ pageSize: 10 }}
-        scroll={{ x: 760 }}
-        expandable={{
-          expandedRowRender: (record) => <LogDetail record={record} />,
+        pagination={pagination}
+        onPaginationChange={(next) => {
+          setPagination(current => updateLlmLogPagination(current, next));
         }}
       />
     </div>
+  );
+}
+
+export function LlmLogsTable({
+  logs,
+  columns,
+  pagination = INITIAL_LLM_LOG_PAGINATION,
+  onPaginationChange,
+}) {
+  return (
+    <Table
+      className="technical-log-table"
+      dataSource={logs.map((log, i) => ({ ...log, key: i }))}
+      columns={columns}
+      size="small"
+      pagination={{
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+        showSizeChanger: true,
+        pageSizeOptions: [10, 20, 50, 100],
+      }}
+      onChange={onPaginationChange}
+      scroll={{ x: 760 }}
+      expandable={{
+        expandedRowRender: (record) => <LogDetail record={record} />,
+      }}
+    />
   );
 }
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { DEFAULT_MAX_COMPETITORS } from '../utils/taskCreation.js';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -7,7 +8,12 @@ export async function getRuntimeConfig() {
   return data;
 }
 
-export async function submitTask(productDescription, maxCompetitors = 5, skipQa = false, useRuleEngine = false) {
+export async function submitTask(
+  productDescription,
+  maxCompetitors = DEFAULT_MAX_COMPETITORS,
+  skipQa = false,
+  useRuleEngine = false,
+) {
   const { data } = await api.post('/tasks', {
     product_description: productDescription,
     max_competitors: maxCompetitors,

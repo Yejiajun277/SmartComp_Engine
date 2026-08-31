@@ -6,6 +6,7 @@ import { deleteTask, getTasks, submitTask } from '../api/client';
 import HomeHero from '../components/dashboard/HomeHero';
 import TaskForm from '../components/TaskForm';
 import { formatElapsed, getTaskStatusMeta, mergeTasks } from '../utils/presentation';
+import { DEFAULT_MAX_COMPETITORS } from '../utils/taskCreation';
 
 const RECENT_TASKS_KEY = 'smartcomp_recent_tasks';
 
@@ -51,7 +52,7 @@ function TaskListItem({ task, status, onOpen, onDelete }) {
           <strong>{task.product_description || '未命名分析'}</strong>
         </div>
         <div className="task-list-meta">
-          <span>{task.max_competitors || 5} 个竞品</span>
+          <span>{task.max_competitors || DEFAULT_MAX_COMPETITORS} 个竞品</span>
           <span>{formatStartedAt(task.started_at)}</span>
           <span>{task.finished_at ? `总耗时 ${formatElapsed(task.started_at, task.finished_at)}` : '实时推进中'}</span>
         </div>

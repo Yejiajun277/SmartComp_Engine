@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Button, Collapse, Form, Input, InputNumber, Switch } from 'antd';
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { getRuntimeStatusMeta } from '../utils/runtime';
+import { DEFAULT_MAX_COMPETITORS } from '../utils/taskCreation';
 import RuntimeStatus from './RuntimeStatus';
 
 export default function TaskForm({
@@ -63,7 +64,11 @@ export default function TaskForm({
           ...values,
           useRuleEngine: runtimeMeta.forceRuleEngine || values.useRuleEngine,
         })}
-        initialValues={{ maxCompetitors: 5, skipQa: false, useRuleEngine: false }}
+        initialValues={{
+          maxCompetitors: DEFAULT_MAX_COMPETITORS,
+          skipQa: false,
+          useRuleEngine: false,
+        }}
         requiredMark={false}
       >
         <Form.Item
