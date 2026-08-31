@@ -35,6 +35,9 @@ def _build_task_summary(task) -> TaskSummary:
         started_at=task.started_at,
         finished_at=task.finished_at,
         error=task.error,
+        failed_node=task.failed_node,
+        failed_phase=task.failed_phase,
+        failed_agent=task.failed_agent,
     )
 
 
@@ -77,8 +80,13 @@ async def get_task(task_id: str, request: Request):
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, request: Request):
+    from server.services.task_manager import TaskDeletionError
+
     manager = _get_manager(request)
-    deleted = manager.delete(task_id)
+    try:
+        deleted = await manager.delete(task_id)
+    except TaskDeletionError as exc:
+        raise HTTPException(status_code=500, detail=f"Task cleanup failed: {exc}") from exc
     return {"ok": True, "already_absent": not deleted}
 
 

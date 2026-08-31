@@ -206,6 +206,10 @@
   color: var(--sc-danger);
 }
 
+.workflow-stage-nav button[data-status='blocked'] {
+  color: var(--dag-muted);
+}
+
 .workflow-stage-nav button > span {
   display: grid;
   flex: 0 0 auto;
@@ -379,6 +383,7 @@
 .dag-stage-zone[data-status='degraded'],
 .dag-stage-zone[data-status='retrying'] { border-color: color-mix(in srgb, var(--dag-warning) 45%, transparent); }
 .dag-stage-zone[data-status='failed'] { border-color: color-mix(in srgb, var(--dag-failed) 48%, transparent); }
+.dag-stage-zone[data-status='blocked'] { border-color: color-mix(in srgb, var(--dag-waiting) 42%, transparent); opacity: 0.78; }
 
 .dag-stage-zone-number {
   position: relative;
@@ -427,6 +432,7 @@
 .dag-edge[data-status='retrying'] .dag-edge-signal,
 .dag-edge[data-status='degraded'] .dag-edge-signal { stroke: var(--dag-warning); }
 .dag-edge[data-status='failed'] .dag-edge-signal { stroke: var(--dag-failed); }
+.dag-edge[data-status='blocked'] .dag-edge-signal { stroke: var(--dag-waiting); opacity: 0.72; }
 
 .dag-arrow-head.edge-waiting { fill: var(--dag-waiting); }
 .dag-arrow-head.edge-running { fill: var(--dag-running); }
@@ -434,6 +440,7 @@
 .dag-arrow-head.edge-retrying,
 .dag-arrow-head.edge-degraded { fill: var(--dag-warning); }
 .dag-arrow-head.edge-failed { fill: var(--dag-failed); }
+.dag-arrow-head.edge-blocked { fill: var(--dag-waiting); }
 
 .dag-edge-label {
   fill: var(--dag-muted);
@@ -484,6 +491,7 @@
 .dag-node[data-status='retrying'],
 .dag-node[data-status='degraded'] { --node-color: var(--dag-warning); }
 .dag-node[data-status='failed'] { --node-color: var(--dag-failed); }
+.dag-node[data-status='blocked'] { --node-color: var(--dag-waiting); opacity: 0.72; }
 .dag-node[data-status='disabled'] { --node-color: var(--dag-waiting); opacity: 0.72; }
 
 .dag-node[data-status='running']::after {
@@ -666,6 +674,7 @@
 .dag-minimap-node[data-status='retrying'],
 .dag-minimap-node[data-status='degraded'] { background: var(--dag-warning); }
 .dag-minimap-node[data-status='failed'] { background: var(--dag-failed); }
+.dag-minimap-node[data-status='blocked'] { background: var(--dag-waiting); opacity: 0.7; }
 .dag-minimap-node[data-selected='true'] { outline: 2px solid var(--dag-ink); outline-offset: 2px; }
 .dag-minimap > span { display: block; margin-top: 6px; font-size: 8px; text-align: center; }
 
@@ -699,6 +708,7 @@
 .dag-inspector[data-status='retrying'],
 .dag-inspector[data-status='degraded'] { --inspector-color: var(--dag-warning); }
 .dag-inspector[data-status='failed'] { --inspector-color: var(--dag-failed); }
+.dag-inspector[data-status='blocked'] { --inspector-color: var(--dag-waiting); }
 
 .dag-inspector header {
   display: grid;

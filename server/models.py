@@ -75,3 +75,6 @@ class TaskSummary(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    failed_node: str | None = None
+    failed_phase: str | None = None
+    failed_agent: str | None = None

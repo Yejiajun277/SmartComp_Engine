@@ -1,5 +1,11 @@
 import { useState, useCallback } from 'react';
-import { appendUniqueEvent, buildQaSummaries, upsertQaResult } from '../utils/taskEvents';
+import {
+  appendUniqueEvent,
+  buildQaSummaries,
+  reduceWorkflowNodeStates,
+  terminalizeQaResultsForTaskFailure,
+  upsertQaResult,
+} from '../utils/taskEvents';
 
 const AGENT_PHASE_MAP = {
   discovery: { label: '竞品发现', agent: 'DiscoveryAgent' },
@@ -15,11 +21,14 @@ const AGENT_PHASE_MAP = {
 const INITIAL_NODE_STATES = {
   discovery: 'waiting',
   collection: 'waiting',
+  qa_collection: 'waiting',
   dimension: 'waiting',
   product_analysis: 'waiting',
   pricing_analysis: 'waiting',
   market_analysis: 'waiting',
+  qa_analysis: 'waiting',
   strategy: 'waiting',
+  qa_strategy: 'waiting',
 };
 
 const QA_PHASE_TO_NODE = {
@@ -73,17 +82,7 @@ export function useTask() {
     if (event.progress) setProgress(event.progress);
     if (event.message) setCurrentMessage(event.message);
 
-    // Update node states based on event type
-    const phase = event.phase;
-    if (phase && Object.prototype.hasOwnProperty.call(INITIAL_NODE_STATES, phase)) {
-      if (event.type === 'agent_started') {
-        setNodeStates(prev => ({ ...prev, [phase]: 'running' }));
-      } else if (event.type === 'agent_completed') {
-        setNodeStates(prev => ({ ...prev, [phase]: 'completed' }));
-      } else if (event.type === 'agent_failed') {
-        setNodeStates(prev => ({ ...prev, [phase]: 'failed' }));
-      }
-    }
+    setNodeStates(prev => reduceWorkflowNodeStates(prev, event));
 
     // Handle QA events
     if (event.type === 'qa_check_started') {
@@ -125,6 +124,7 @@ export function useTask() {
       setProgress(1.0);
     } else if (event.type === 'task_failed') {
       setTaskStatus('failed');
+      setQaResults(prev => terminalizeQaResultsForTaskFailure(prev, event));
     }
   }, []);
 

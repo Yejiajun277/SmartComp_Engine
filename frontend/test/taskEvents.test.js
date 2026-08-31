@@ -1,13 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
+import * as taskEvents from '../src/utils/taskEvents.js';
+
+const {
   appendUniqueEvent,
   buildQaSummaries,
   mergeQaResults,
   mergeQaSummaries,
+  reduceWorkflowNodeStates,
   shouldAcceptTaskEvent,
+  terminalizeQaResultsForTaskFailure,
   upsertQaResult,
-} from '../src/utils/taskEvents.js';
+} = taskEvents;
 
 test('accepts websocket events only for the active task and an open connection', () => {
   const currentEvent = { task_id: 'task-current', type: 'qa_check_passed' };
@@ -165,4 +169,70 @@ test('summary selection uses the newest QA attempt regardless of replay order', 
   assert.equal(summary.attempt, 2);
   assert.equal(summary.score, 91);
   assert.equal(summary.retryCount, 1);
+});
+
+test('a structured task failure stops spinners and marks only the real workflow node failed', () => {
+  assert.equal(typeof reduceWorkflowNodeStates, 'function');
+  const result = reduceWorkflowNodeStates(
+    {
+      discovery: 'completed',
+      collection: 'completed',
+      qa_collection: 'running',
+      dimension: 'waiting',
+      product_analysis: 'running',
+    },
+    {
+      type: 'task_failed',
+      phase: 'qa_collection',
+      data: { failed_node: 'qa_collection' },
+    },
+  );
+
+  assert.deepEqual(result, {
+    discovery: 'completed',
+    collection: 'completed',
+    qa_collection: 'failed',
+    dimension: 'waiting',
+    product_analysis: 'blocked',
+  });
+});
+
+test('an agent failure event uses failed_node instead of leaving the business stage running', () => {
+  assert.equal(typeof reduceWorkflowNodeStates, 'function');
+  const result = reduceWorkflowNodeStates(
+    { collection: 'completed', qa_collection: 'running' },
+    {
+      type: 'agent_failed',
+      phase: 'collection',
+      data: { failed_node: 'qa_collection' },
+    },
+  );
+
+  assert.equal(result.collection, 'completed');
+  assert.equal(result.qa_collection, 'failed');
+});
+
+test('a technical QA failure replaces its spinner with a diagnostic terminal result', () => {
+  assert.equal(typeof terminalizeQaResultsForTaskFailure, 'function');
+  const results = terminalizeQaResultsForTaskFailure(
+    [
+      { phase: 'collection', target_agent: 'CollectionAgent', attempt: 3, running: true },
+      { phase: 'product', target_agent: 'ProductAgent', attempt: 1, running: true },
+    ],
+    {
+      type: 'task_failed',
+      message: '证据质检执行失败',
+      data: { failed_node: 'qa_collection' },
+    },
+  );
+
+  assert.deepEqual(results, [{
+    phase: 'collection',
+    target_agent: 'CollectionAgent',
+    attempt: 3,
+    running: false,
+    passed: false,
+    technical_error: true,
+    message: '证据质检执行失败',
+  }]);
 });

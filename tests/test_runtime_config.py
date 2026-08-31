@@ -2,8 +2,11 @@
 """Runtime configuration API contract tests."""
 
 import asyncio
+import json
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -13,8 +16,9 @@ import config
 from server.main import app
 from server.routers import tasks as tasks_router
 from server.services.event_bus import EventBus
+import server.services.event_bus as event_bus_module
 import server.services.task_manager as task_manager_module
-from server.services.task_manager import TaskManager, TaskState
+from server.services.task_manager import TaskDeletionError, TaskManager, TaskState
 
 
 class RuntimeConfigApiTests(unittest.TestCase):
@@ -329,6 +333,269 @@ class ConcurrentExecutionModeTests(unittest.IsolatedAsyncioTestCase):
             ("model", "start", True, False),
             ("model", "end", True, False),
         ])
+
+
+class TaskDeletionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deleting_running_task_cancels_job_and_prevents_task_file_recreation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_dir = Path(tmp) / "tasks"
+            manager = TaskManager(EventBus())
+            manager._tasks = {}
+            task = TaskState("running-delete", "product", 5, False, status="running")
+            manager._tasks[task.id] = task
+
+            async def running_job():
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    manager._mark_task_cancelled(task)
+                    raise
+
+            with (
+                patch.object(task_manager_module, "_TASKS_DIR", tasks_dir),
+                patch.object(event_bus_module, "_TASKS_DIR", tasks_dir),
+            ):
+                manager._save_task(task)
+                job = asyncio.create_task(running_job())
+                manager._job_tasks[task.id] = job
+
+                deleted = await manager.delete(task.id)
+                self.assertTrue(deleted)
+                self.assertTrue(job.cancelled())
+                self.assertNotIn(task.id, manager._tasks)
+                self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+                self.assertIn(task.id, manager._deleted_task_ids)
+                self.assertIn(task.id, manager._event_bus._deleted_tasks)
+
+                manager._save_task(task)
+                self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+
+                await manager._event_bus.emit(task.id, task_manager_module.WorkflowEvent(
+                    type=task_manager_module.EventType.PROGRESS_UPDATE,
+                    task_id=task.id,
+                    agent="CollectionAgent",
+                    phase="collection",
+                    status="running",
+                ))
+                self.assertEqual(manager._event_bus.get_history(task.id), [])
+                self.assertFalse((tasks_dir / f"{task.id}_events.jsonl").exists())
+
+    async def test_deleting_completed_task_removes_all_artifacts_and_event_bus_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            tasks_dir = output_dir / "tasks"
+            run_dir = output_dir / "run-completed"
+            run_dir.mkdir()
+            (run_dir / "report.html").write_text("report", encoding="utf-8")
+            event_bus = EventBus()
+            manager = TaskManager(event_bus)
+            manager._tasks = {}
+            task = TaskState(
+                "completed-delete", "product", 5, False,
+                status="completed", report_path=str(run_dir),
+            )
+            manager._tasks[task.id] = task
+
+            async def subscriber(_event):
+                return None
+
+            with (
+                patch.object(task_manager_module, "_TASKS_DIR", tasks_dir),
+                patch.object(event_bus_module, "_TASKS_DIR", tasks_dir),
+            ):
+                manager._save_task(task)
+                await event_bus.emit(task.id, task_manager_module.WorkflowEvent(
+                    type=task_manager_module.EventType.TASK_COMPLETED,
+                    task_id=task.id,
+                    agent="Orchestrator",
+                    phase="finalize",
+                    status="completed",
+                ))
+                event_bus.subscribe(task.id, subscriber)
+
+                self.assertTrue(await manager.delete(task.id))
+
+            self.assertFalse(run_dir.exists())
+            self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+            self.assertFalse((tasks_dir / f"{task.id}_events.jsonl").exists())
+            self.assertNotIn(task.id, event_bus._history)
+            self.assertNotIn(task.id, event_bus._subscribers)
+
+    async def test_deleting_an_absent_task_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_dir = Path(tmp) / "tasks"
+            manager = TaskManager(EventBus())
+            manager._tasks = {}
+            with patch.object(task_manager_module, "_TASKS_DIR", tasks_dir):
+                self.assertFalse(await manager.delete("already-gone"))
+                self.assertFalse(await manager.delete("already-gone"))
+                self.assertNotIn("already-gone", manager._event_bus._deleted_tasks)
+
+    async def test_cleanup_failure_is_visible_and_can_be_retried(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_dir = Path(tmp) / "tasks"
+            manager = TaskManager(EventBus())
+            manager._tasks = {}
+            task = TaskState("cleanup-retry", "product", 5, False, status="completed")
+            manager._tasks[task.id] = task
+
+            with patch.object(task_manager_module, "_TASKS_DIR", tasks_dir):
+                manager._save_task(task)
+                with patch.object(Path, "unlink", side_effect=PermissionError("file is locked")):
+                    with self.assertRaisesRegex(TaskDeletionError, "file is locked"):
+                        await manager.delete(task.id)
+
+                self.assertTrue((tasks_dir / f"{task.id}.json").exists())
+                self.assertIs(manager.get(task.id), task)
+                self.assertIn(task, manager.list_all())
+                self.assertEqual(task.status, "failed")
+                self.assertIn("删除清理失败", task.error)
+                self.assertTrue(await manager.delete(task.id))
+                self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+                self.assertFalse(await manager.delete(task.id))
+
+    async def test_report_cleanup_failure_survives_restart_and_can_be_retried(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            tasks_dir = output_dir / "tasks"
+            run_dir = output_dir / "run-locked"
+            run_dir.mkdir()
+            (run_dir / "report.html").write_text("report", encoding="utf-8")
+            task = TaskState(
+                "restart-cleanup", "product", 5, False,
+                status="completed", report_path=str(run_dir),
+            )
+
+            with (
+                patch.object(task_manager_module, "_TASKS_DIR", tasks_dir),
+                patch.object(event_bus_module, "_TASKS_DIR", tasks_dir),
+            ):
+                manager = TaskManager(EventBus())
+                manager._tasks = {task.id: task}
+                manager._save_task(task)
+
+                with patch.object(
+                    task_manager_module.shutil,
+                    "rmtree",
+                    side_effect=PermissionError("report directory is locked"),
+                ):
+                    with self.assertRaisesRegex(TaskDeletionError, "report directory is locked"):
+                        await manager.delete(task.id)
+
+                self.assertTrue((tasks_dir / f"{task.id}.json").exists())
+                self.assertTrue(run_dir.exists())
+                self.assertIs(manager.get(task.id), task)
+
+                restarted = TaskManager(EventBus())
+                restarted_task = restarted.get(task.id)
+                self.assertIsNotNone(restarted_task)
+                self.assertEqual(restarted_task.status, "failed")
+                self.assertIn("删除清理失败", restarted_task.error)
+                self.assertTrue(await restarted.delete(task.id))
+                self.assertFalse(run_dir.exists())
+                self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+
+    async def test_workflow_cancellation_error_keeps_deletion_retryable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_dir = Path(tmp) / "tasks"
+            manager = TaskManager(EventBus())
+            manager._tasks = {}
+            task = TaskState("cancel-error", "product", 5, False, status="running")
+            manager._tasks[task.id] = task
+
+            async def broken_cancellation():
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError as exc:
+                    raise RuntimeError("workflow refused clean cancellation") from exc
+
+            with patch.object(task_manager_module, "_TASKS_DIR", tasks_dir):
+                manager._save_task(task)
+                manager._job_tasks[task.id] = asyncio.create_task(broken_cancellation())
+                await asyncio.sleep(0)
+
+                with self.assertRaisesRegex(TaskDeletionError, "workflow refused clean cancellation"):
+                    await manager.delete(task.id)
+
+                self.assertTrue((tasks_dir / f"{task.id}.json").exists())
+                self.assertIs(manager.get(task.id), task)
+                self.assertEqual(task.status, "failed")
+                self.assertIsNone(task.current_agent)
+                saved = json.loads((tasks_dir / f"{task.id}.json").read_text(encoding="utf-8"))
+                self.assertEqual(saved["status"], "failed")
+                self.assertIn("workflow refused clean cancellation", saved["error"])
+                self.assertTrue(await manager.delete(task.id))
+                self.assertFalse((tasks_dir / f"{task.id}.json").exists())
+
+
+class StructuredTaskFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_task_failed_persists_node_failure_details_and_exposes_them_in_summary(self):
+        class FakeAgent:
+            on_log_added = None
+
+        failure = {
+            "failed_node": "strategy",
+            "failed_phase": "strategy",
+            "failed_agent": "StrategyAgent",
+            "node_name": "generate_strategy",
+            "attempts": 3,
+            "error": "provider unavailable",
+        }
+
+        class WorkflowFailure(RuntimeError):
+            def __init__(self):
+                super().__init__("strategy unavailable")
+                self.failure = failure
+
+        class FailingOrchestrator:
+            def __init__(self):
+                self.discovery_agent = FakeAgent()
+                self.collection_agent = FakeAgent()
+                self.dimension_agent = FakeAgent()
+                self.product_agent = FakeAgent()
+                self.pricing_agent = FakeAgent()
+                self.market_agent = FakeAgent()
+                self.strategy_agent = FakeAgent()
+                self.quality_agent = FakeAgent()
+
+            async def analyze(self, *_args, **_kwargs):
+                raise WorkflowFailure()
+
+        original_sleep = asyncio.sleep
+
+        async def fast_startup_sleep(_delay):
+            await original_sleep(0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_dir = Path(tmp) / "tasks"
+            manager = TaskManager(EventBus())
+            manager._tasks = {}
+            task = TaskState("structured-failure", "product", 5, False)
+            manager._tasks[task.id] = task
+            emitted = []
+
+            async def record_event(_task_id, event):
+                emitted.append(event)
+
+            with (
+                patch.object(task_manager_module, "_TASKS_DIR", tasks_dir),
+                patch.dict(sys.modules, {"core.orchestrator": SimpleNamespace(Orchestrator=FailingOrchestrator)}),
+                patch.object(task_manager_module.asyncio, "sleep", fast_startup_sleep),
+                patch.object(manager, "_sync_llm_logs_live", new_callable=AsyncMock),
+                patch.object(manager._event_bus, "emit", side_effect=record_event),
+            ):
+                await manager._run_task(task.id, task.product_description, 5, False, False)
+
+                saved = json.loads((tasks_dir / f"{task.id}.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(task.failed_node, "strategy")
+            self.assertEqual(task.failed_phase, "strategy")
+            self.assertEqual(task.failed_agent, "StrategyAgent")
+            self.assertIsNone(task.current_agent)
+            self.assertEqual(saved["failed_node"], "strategy")
+            self.assertEqual(tasks_router._build_task_summary(task).failed_node, "strategy")
+            failed_event = next(event for event in emitted if event.type.value == "task_failed")
+            self.assertEqual(failed_event.data, failure)
 
 
 if __name__ == "__main__":

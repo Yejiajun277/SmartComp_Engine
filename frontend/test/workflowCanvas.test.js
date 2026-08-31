@@ -99,6 +99,72 @@ test('a terminal failure outranks a stale running event from an earlier stage', 
   assert.equal(focus.title, '分析在“生成策略报告”阶段中断');
 });
 
+test('a technical QA failure marks the real gate failed and blocks every downstream node', () => {
+  const model = workflowCanvas.buildWorkflowCanvasModel({
+    nodeStates: {
+      discovery: 'completed',
+      collection: 'completed',
+      qa_collection: 'failed',
+    },
+    taskStatus: 'failed',
+    qaDisabled: false,
+  });
+
+  assert.equal(model.nodesById.collection.status, 'completed');
+  assert.equal(model.nodesById.qa_collection.status, 'failed');
+  assert.equal(model.nodesById.dimension.status, 'blocked');
+  assert.equal(model.nodesById.product_analysis.status, 'blocked');
+  assert.equal(model.nodesById.pricing_analysis.status, 'blocked');
+  assert.equal(model.nodesById.market_analysis.status, 'blocked');
+  assert.equal(model.nodesById.strategy.status, 'blocked');
+  assert.equal(model.nodesById.report.status, 'blocked');
+  assert.deepEqual(
+    model.nodes.filter(node => node.status === 'failed').map(node => node.id),
+    ['qa_collection'],
+  );
+  assert.equal(workflowCanvas.getWorkflowFocus({
+    nodeStates: { collection: 'completed', qa_collection: 'failed' },
+    taskStatus: 'failed',
+    qaDisabled: false,
+  }).stageNumber, 1);
+});
+
+test('a failed parallel agent blocks unfinished sibling work in the terminated stage', () => {
+  const model = workflowCanvas.buildWorkflowCanvasModel({
+    nodeStates: {
+      discovery: 'completed',
+      collection: 'completed',
+      qa_collection: 'completed',
+      dimension: 'completed',
+      product_analysis: 'failed',
+      pricing_analysis: 'waiting',
+      market_analysis: 'running',
+    },
+    taskStatus: 'failed',
+  });
+
+  assert.equal(model.nodesById.product_analysis.status, 'failed');
+  assert.equal(model.nodesById.pricing_analysis.status, 'blocked');
+  assert.equal(model.nodesById.market_analysis.status, 'blocked');
+  assert.equal(model.nodesById.qa_analysis.status, 'blocked');
+  assert.equal(model.nodesById.report.status, 'blocked');
+});
+
+test('a disabled QA gate does not stop failure blocking from reaching later stages', () => {
+  const model = workflowCanvas.buildWorkflowCanvasModel({
+    nodeStates: { discovery: 'failed' },
+    taskStatus: 'failed',
+    qaDisabled: true,
+  });
+
+  assert.equal(model.nodesById.discovery.status, 'failed');
+  assert.equal(model.nodesById.qa_collection.status, 'disabled');
+  assert.equal(model.nodesById.dimension.status, 'blocked');
+  assert.equal(model.nodesById.product_analysis.status, 'blocked');
+  assert.equal(model.nodesById.strategy.status, 'blocked');
+  assert.equal(model.nodesById.report.status, 'blocked');
+});
+
 test('a degraded checkpoint keeps the focus on its real risk stage', () => {
   const focus = workflowCanvas.getWorkflowFocus({
     nodeStates: {
@@ -221,6 +287,30 @@ test('the canvas highlights branch and merge edges from their real node states',
   assert.equal(
     model.edges.find(edge => edge.from === 'product_analysis' && edge.to === 'qa_analysis').status,
     'completed',
+  );
+});
+
+test('a completed no-QA task keeps persisted QA placeholders visibly disabled', () => {
+  const model = workflowCanvas.buildWorkflowCanvasModel({
+    nodeStates: {
+      discovery: 'completed',
+      collection: 'completed',
+      qa_collection: 'completed',
+      dimension: 'completed',
+      product_analysis: 'completed',
+      pricing_analysis: 'completed',
+      market_analysis: 'completed',
+      qa_analysis: 'completed',
+      strategy: 'completed',
+      qa_strategy: 'completed',
+    },
+    taskStatus: 'completed',
+    qaDisabled: true,
+  });
+
+  assert.deepEqual(
+    model.nodes.filter(node => node.kind === 'qa').map(node => node.status),
+    ['disabled', 'disabled', 'disabled'],
   );
 });
 

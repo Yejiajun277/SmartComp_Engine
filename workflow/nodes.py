@@ -38,6 +38,31 @@ except ImportError:
 T = TypeVar("T")
 
 
+class NodeExecutionError(RuntimeError):
+    """Technical node failure with the context required by task-level reporting."""
+
+    def __init__(self, message: str, failure: dict):
+        super().__init__(message)
+        self.failure = failure
+
+
+_NODE_FAILURE_CONTEXT = {
+    "discover_competitors": ("discovery", "discovery", "DiscoveryAgent"),
+    "collect_target_product": ("collection", "collection", "CollectionAgent"),
+    "collect_competitors": ("collection", "collection", "CollectionAgent"),
+    "check_collection_quality": ("qa_collection", "collection", "QualityAgent"),
+    "generate_dimensions": ("dimension", "dimension", "DimensionAgent"),
+    "run_product_analysis": ("product_analysis", "product", "ProductAgent"),
+    "run_pricing_analysis": ("pricing_analysis", "pricing", "PricingAgent"),
+    "run_market_analysis": ("market_analysis", "market", "MarketAgent"),
+    "check_product_quality": ("qa_analysis", "product", "QualityAgent"),
+    "check_pricing_quality": ("qa_analysis", "pricing", "QualityAgent"),
+    "check_market_quality": ("qa_analysis", "market", "QualityAgent"),
+    "generate_strategy": ("strategy", "strategy", "StrategyAgent"),
+    "check_strategy_quality": ("qa_strategy", "strategy", "QualityAgent"),
+}
+
+
 class AnalysisGraphNodes:
     """Bound node methods for the analysis graph.
 
@@ -54,7 +79,7 @@ class AnalysisGraphNodes:
         self.event_bus = event_bus
         self.task_id = task_id
 
-    async def _retry_node(self, name: str, fn: Callable[[], Awaitable[T]]) -> T:
+    async def _retry_node(self, state: AnalysisState, name: str, fn: Callable[[], Awaitable[T]]) -> T:
         last_error: Exception | None = None
         for attempt in range(self.node_retries + 1):
             try:
@@ -65,15 +90,35 @@ class AnalysisGraphNodes:
                     break
                 await asyncio.sleep(min(0.2 * (attempt + 1), 1.0))
         assert last_error is not None
-        detail = str(last_error).strip().replace("\r", " ").replace("\n", " ")
-        detail = detail[:500] or type(last_error).__name__
-        raise RuntimeError(
-            f"node '{name}' failed after {self.node_retries + 1} attempts: "
-            f"{type(last_error).__name__}: {detail}"
+        failed_node, failed_phase, agent = _NODE_FAILURE_CONTEXT.get(
+            name, ("unknown", "unknown", "Orchestrator")
+        )
+        failure = {
+            "failed_node": failed_node,
+            "failed_phase": failed_phase,
+            "failed_agent": agent,
+            "node_name": name,
+            "attempts": self.node_retries + 1,
+            "error": str(last_error),
+        }
+        await self._emit(
+            state,
+            EventType.AGENT_FAILED,
+            agent,
+            failed_node,
+            status="failed",
+            progress=state.get("progress", 0.0),
+            message=f"{name} failed after {self.node_retries + 1} attempts: {last_error}",
+            data=failure,
+        )
+        raise NodeExecutionError(
+            f"node '{name}' failed after {self.node_retries + 1} attempts: {last_error}",
+            failure,
         ) from last_error
 
     async def _emit(self, state: AnalysisState, event_type, agent: str, phase: str,
-                    progress: float = 0.0, message: str = "", data: dict = None) -> None:
+                    progress: float = 0.0, message: str = "", data: dict = None,
+                    status: str | None = None) -> None:
         """Emit a workflow event to the event bus (no-op if event_bus is None)."""
         if not self.event_bus or not WorkflowEvent:
             return
@@ -83,7 +128,7 @@ class AnalysisGraphNodes:
                 task_id=self.task_id,
                 agent=agent,
                 phase=phase,
-                status="running" if "started" in event_type.value else "completed",
+                status=status or ("running" if "started" in event_type.value else "completed"),
                 progress=progress,
                 message=message,
                 data=data,
@@ -199,7 +244,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        competitors = await self._retry_node("discover_competitors", call)
+        competitors = await self._retry_node(state, "discover_competitors", call)
         timings = self._merge_timing(state, "discovery", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("01_competitor_list.json", competitors)
@@ -246,7 +291,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        data = await self._retry_node("collect_target_product", call)
+        data = await self._retry_node(state, "collect_target_product", call)
         timings = self._merge_timing(state, "target_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("00_target_product_data.json", data)
@@ -268,7 +313,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        data = await self._retry_node("collect_competitors", call)
+        data = await self._retry_node(state, "collect_competitors", call)
         timings = self._merge_timing(state, "collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
         search_texts = self.orchestrator.collection_agent.get_search_texts()
@@ -331,7 +376,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        result = await self._retry_node("check_collection_quality", call)
+        result = await self._retry_node(state, "check_collection_quality", call)
         # 「仅幻觉」短路通过：已至少重试 1 轮且未通过，但无缺失字段、无 critical completeness 问题
         # 新增：检查幻觉问题数量，过多幻觉不应通过
         if not result.passed and state.get("collection_retry_count", 0) >= 1:
@@ -473,7 +518,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        config = await self._retry_node("generate_dimensions", call)
+        config = await self._retry_node(state, "generate_dimensions", call)
         timings = self._merge_timing(state, "dimension", time.perf_counter() - start)
         self.orchestrator.timings = timings
         product_dims = self.orchestrator._format_sub_dimensions(config.product_sub_dimensions)
@@ -520,7 +565,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        analysis = await self._retry_node("run_product_analysis", call)
+        analysis = await self._retry_node(state, "run_product_analysis", call)
         timings = self._merge_timing(state, "product_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("04_product_analysis.json", analysis)
@@ -543,7 +588,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        analysis = await self._retry_node("run_pricing_analysis", call)
+        analysis = await self._retry_node(state, "run_pricing_analysis", call)
         timings = self._merge_timing(state, "pricing_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("05_pricing_analysis.json", analysis)
@@ -565,7 +610,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        analysis = await self._retry_node("run_market_analysis", call)
+        analysis = await self._retry_node(state, "run_market_analysis", call)
         timings = self._merge_timing(state, "market_analysis", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("06_market_analysis.json", analysis)
@@ -638,7 +683,7 @@ class AnalysisGraphNodes:
                 attempt=attempt,
             )
 
-        result = await self._retry_node(f"check_{analysis_type}_quality", call)
+        result = await self._retry_node(state, f"check_{analysis_type}_quality", call)
         # 分数未提升即通过：处于重试态且新分数未高于上一轮，判定为误报通过
         if (
             not result.passed
@@ -758,7 +803,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        report = await self._retry_node("generate_strategy", call)
+        report = await self._retry_node(state, "generate_strategy", call)
         timings = self._merge_timing(state, "strategy", time.perf_counter() - start)
         self.orchestrator.timings = timings
         self.orchestrator._save_artifact_json("07_strategy_report.json", report)
@@ -809,7 +854,7 @@ class AnalysisGraphNodes:
             )
 
         start = time.perf_counter()
-        result = await self._retry_node("check_strategy_quality", call)
+        result = await self._retry_node(state, "check_strategy_quality", call)
         # 重试后设置修正率
         if state.get("strategy_retry_count", 0) > 0:
             result.correction_count = state.get("analysis_pending_fields", 0)

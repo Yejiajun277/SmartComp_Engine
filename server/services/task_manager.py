@@ -17,6 +17,10 @@ from server.services.event_bus import EventBus
 _TASKS_DIR = Path(__file__).resolve().parents[2] / "output" / "tasks"
 
 
+class TaskDeletionError(RuntimeError):
+    """Raised when a task was stopped but one or more artifacts could not be removed."""
+
+
 @dataclass
 class TaskState:
     id: str
@@ -36,6 +40,9 @@ class TaskState:
     report_json: dict | None = None
     llm_logs: list[dict] = field(default_factory=list)
     error: str | None = None
+    failed_node: str | None = None
+    failed_phase: str | None = None
+    failed_agent: str | None = None
 
 
 class _DateTimeEncoder(json.JSONEncoder):
@@ -51,10 +58,16 @@ class TaskManager:
         self._event_bus = event_bus
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._runtime_config_lock = asyncio.Lock()
+        self._delete_lock = asyncio.Lock()
+        self._job_tasks: dict[str, asyncio.Task[None]] = {}
+        self._deleted_task_ids: set[str] = set()
+        self._deletion_records: dict[str, TaskState] = {}
         self._load_tasks()
 
-    def _save_task(self, task: TaskState) -> None:
+    def _save_task(self, task: TaskState, *, allow_deleted: bool = False) -> None:
         """Persist a single task to disk as JSON."""
+        if task.id in self._deleted_task_ids and not allow_deleted:
+            return
         _TASKS_DIR.mkdir(parents=True, exist_ok=True)
         data = {
             "id": task.id,
@@ -74,6 +87,9 @@ class TaskManager:
             "report_json": task.report_json,
             "llm_logs": task.llm_logs,
             "error": task.error,
+            "failed_node": task.failed_node,
+            "failed_phase": task.failed_phase,
+            "failed_agent": task.failed_agent,
         }
         path = _TASKS_DIR / f"{task.id}.json"
         try:
@@ -113,6 +129,9 @@ class TaskManager:
                     report_json=data.get("report_json"),
                     llm_logs=data.get("llm_logs", []),
                     error=data.get("error"),
+                    failed_node=data.get("failed_node"),
+                    failed_phase=data.get("failed_phase"),
+                    failed_agent=data.get("failed_agent"),
                 )
                 # Tasks that were running/pending when the process exited are effectively failed
                 if task.status in ("running", "pending"):
@@ -132,7 +151,7 @@ class TaskManager:
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
                 task_id = data["id"]
-                if task_id in self._tasks:
+                if task_id in self._tasks or task_id in self._deleted_task_ids:
                     continue
                 self._tasks[task_id] = TaskState(
                     id=task_id,
@@ -152,12 +171,17 @@ class TaskManager:
                     report_json=data.get("report_json"),
                     llm_logs=data.get("llm_logs", []),
                     error=data.get("error"),
+                    failed_node=data.get("failed_node"),
+                    failed_phase=data.get("failed_phase"),
+                    failed_agent=data.get("failed_agent"),
                 )
             except Exception:
                 continue
 
     def _on_workflow_event(self, event: WorkflowEvent) -> None:
         """Update task.progress and task.current_agent from workflow events."""
+        if event.task_id in self._deleted_task_ids:
+            return
         task = self._tasks.get(event.task_id)
         if not task:
             return
@@ -167,6 +191,12 @@ class TaskManager:
         elif event.type in (EventType.AGENT_COMPLETED, EventType.AGENT_FAILED):
             if task.current_agent == event.agent:
                 task.current_agent = None
+        if event.type == EventType.AGENT_FAILED and event.data:
+            task.failed_node = event.data.get("failed_node")
+            task.failed_phase = event.data.get("failed_phase")
+            task.failed_agent = event.data.get("failed_agent")
+        elif event.type == EventType.TASK_FAILED:
+            task.current_agent = None
         if event.data and event.data.get("run_dir"):
             task.report_path = event.data["run_dir"]
             self._save_task(task)
@@ -186,6 +216,8 @@ class TaskManager:
             use_rule_engine = not llm_backend["available"]
 
         task_id = str(uuid.uuid4())[:8]
+        while task_id in self._tasks or task_id in self._deleted_task_ids:
+            task_id = str(uuid.uuid4())[:8]
         task = TaskState(
             id=task_id,
             product_description=product_description,
@@ -197,39 +229,87 @@ class TaskManager:
         )
         self._tasks[task_id] = task
         self._save_task(task)
-        asyncio.create_task(self._run_task(task_id, product_description, max_competitors,
-                                            skip_qa, use_rule_engine))
+        job = asyncio.create_task(self._run_task(task_id, product_description, max_competitors,
+                                                 skip_qa, use_rule_engine))
+        self._job_tasks[task_id] = job
+
+        def _forget_job(done: asyncio.Task[None]) -> None:
+            if self._job_tasks.get(task_id) is done:
+                self._job_tasks.pop(task_id, None)
+
+        job.add_done_callback(_forget_job)
         return task_id
 
     def get(self, task_id: str) -> TaskState | None:
         return self._tasks.get(task_id)
 
-    def delete(self, task_id: str) -> bool:
-        self._sync_tasks_from_disk()
-        task = self._tasks.pop(task_id, None)
-        task_path = _TASKS_DIR / f"{task_id}.json"
-        events_path = _TASKS_DIR / f"{task_id}_events.jsonl"
-        deleted = False
+    async def delete(self, task_id: str) -> bool:
+        """Cancel a live workflow, then remove every persisted trace of the task."""
+        async with self._delete_lock:
+            if task_id not in self._deleted_task_ids:
+                self._sync_tasks_from_disk()
+            task = self._tasks.get(task_id) or self._deletion_records.get(task_id)
+            if task is None:
+                self._event_bus.purge_task(task_id)
+                return False
 
-        if task and task.report_path:
-            run_dir = Path(task.report_path)
-            output_root = Path(__file__).resolve().parents[2] / "output"
+            self._deleted_task_ids.add(task_id)
+            self._event_bus.mark_task_deleted(task_id)
+            errors: list[str] = []
+            job = self._job_tasks.get(task_id)
+            if job and job is not asyncio.current_task():
+                if not job.done():
+                    job.cancel()
+                try:
+                    await job
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:  # noqa: BLE001 - cancellation failure must stay retryable
+                    errors.append(f"workflow cancellation: {exc}")
+            self._job_tasks.pop(task_id, None)
+            self._tasks.pop(task_id, None)
+            self._event_bus.clear_task(task_id)
+
+            if task.report_path:
+                run_dir = Path(task.report_path)
+                output_root = _TASKS_DIR.parent.resolve()
+                try:
+                    resolved_run_dir = run_dir.resolve()
+                    if resolved_run_dir == output_root or output_root not in resolved_run_dir.parents:
+                        raise ValueError(f"report path is outside output: {run_dir}")
+                    if run_dir.exists():
+                        shutil.rmtree(run_dir)
+                except Exception as exc:  # noqa: BLE001 - cleanup failures are API-visible
+                    errors.append(f"run directory {run_dir}: {exc}")
+
+            events_path = _TASKS_DIR / f"{task_id}_events.jsonl"
             try:
-                if run_dir.is_dir() and output_root in run_dir.resolve().parents:
-                    shutil.rmtree(run_dir)
-                    deleted = True
-            except Exception:
-                pass
+                if events_path.exists():
+                    events_path.unlink()
+            except Exception as exc:  # noqa: BLE001 - cleanup failures are API-visible
+                errors.append(f"{events_path.name}: {exc}")
 
-        for path in (task_path, events_path):
-            try:
-                if path.exists():
-                    path.unlink()
-                    deleted = True
-            except Exception:
-                pass
+            task_path = _TASKS_DIR / f"{task_id}.json"
+            if not errors:
+                try:
+                    if task_path.exists():
+                        task_path.unlink()
+                except Exception as exc:  # noqa: BLE001 - cleanup failures are API-visible
+                    errors.append(f"{task_path.name}: {exc}")
 
-        return bool(task or deleted)
+            if errors:
+                cleanup_error = "; ".join(errors)
+                if cleanup_error not in (task.error or ""):
+                    task.error = " | ".join(filter(None, [task.error, f"删除清理失败：{cleanup_error}"]))
+                task.status = "failed"
+                task.finished_at = task.finished_at or datetime.now()
+                task.current_agent = None
+                self._tasks[task_id] = task
+                self._deletion_records[task_id] = task
+                self._save_task(task, allow_deleted=True)
+                raise TaskDeletionError(cleanup_error)
+            self._deletion_records.pop(task_id, None)
+            return True
 
     def list_all(self) -> list[TaskState]:
         self._sync_tasks_from_disk()
@@ -238,7 +318,9 @@ class TaskManager:
     async def _run_task(self, task_id: str, product_description: str,
                         max_competitors: int, skip_qa: bool, use_rule_engine: bool) -> None:
         async with self._semaphore:
-            task = self._tasks[task_id]
+            task = self._tasks.get(task_id)
+            if task is None or task_id in self._deleted_task_ids:
+                return
             task.status = "running"
             task.started_at = datetime.now()
             self._save_task(task)
@@ -392,6 +474,12 @@ class TaskManager:
                 task.status = "failed"
                 task.finished_at = datetime.now()
                 task.error = str(exc)
+                failure = getattr(exc, "failure", None)
+                if isinstance(failure, dict):
+                    task.failed_node = failure.get("failed_node")
+                    task.failed_phase = failure.get("failed_phase")
+                    task.failed_agent = failure.get("failed_agent")
+                task.current_agent = None
                 self._save_task(task)
 
                 await self._event_bus.emit(task_id, WorkflowEvent(
@@ -401,6 +489,7 @@ class TaskManager:
                     phase="error",
                     status="failed",
                     progress=task.progress,
+                    data=failure if isinstance(failure, dict) else None,
                     message=f"分析失败: {exc}",
                 ))
             finally:

@@ -137,6 +137,83 @@ export function appendUniqueEvent(events = [], incoming) {
   const isReplay = events.some(event => getEventIdentity(event) === incomingIdentity);
   return isReplay ? events : [...events, incoming];
 }
+
+const ACTIVE_WORKFLOW_STATES = new Set(['running', 'retrying']);
+
+function getFailureNode(event = {}, previous = {}) {
+  const structuredNode = event.data?.failed_node;
+  if (structuredNode) return structuredNode;
+  return event.phase && Object.prototype.hasOwnProperty.call(previous, event.phase)
+    ? event.phase
+    : null;
+}
+
+export function reduceWorkflowNodeStates(previous = {}, event = {}) {
+  const phase = event.phase;
+
+  if (event.type === 'agent_started' && phase) {
+    return { ...previous, [phase]: 'running' };
+  }
+  if (event.type === 'agent_completed' && phase) {
+    return { ...previous, [phase]: 'completed' };
+  }
+  if (event.type === 'agent_failed') {
+    const failedNode = getFailureNode(event, previous);
+    return failedNode ? { ...previous, [failedNode]: 'failed' } : previous;
+  }
+  if (event.type !== 'task_failed') return previous;
+
+  const failedNode = getFailureNode(event, previous);
+  const next = Object.fromEntries(
+    Object.entries(previous).map(([node, state]) => [
+      node,
+      ACTIVE_WORKFLOW_STATES.has(state) ? 'blocked' : state,
+    ]),
+  );
+  if (failedNode) next[failedNode] = 'failed';
+  return next;
+}
+
+const QA_NODE_TO_PHASES = {
+  qa_collection: ['collection'],
+  qa_analysis: ['product', 'pricing', 'market'],
+  qa_strategy: ['strategy'],
+};
+
+const WORKFLOW_PHASE_TO_QA_PHASE = {
+  collection: 'collection',
+  product: 'product',
+  product_analysis: 'product',
+  pricing: 'pricing',
+  pricing_analysis: 'pricing',
+  market: 'market',
+  market_analysis: 'market',
+  strategy: 'strategy',
+};
+
+export function terminalizeQaResultsForTaskFailure(results = [], event = {}) {
+  if (event.type !== 'task_failed') return results;
+
+  const failedNode = event.data?.failed_node;
+  const qaPhases = QA_NODE_TO_PHASES[failedNode] || [];
+  const exactPhase = WORKFLOW_PHASE_TO_QA_PHASE[event.data?.failed_phase];
+  const failedPhases = exactPhase && qaPhases.includes(exactPhase)
+    ? [exactPhase]
+    : qaPhases;
+
+  return results.flatMap((result) => {
+    const normalized = normalizeQaResultState(result);
+    if (getQaResultState(normalized) !== 'running') return [normalized];
+    if (!failedPhases.includes(normalized.phase)) return [];
+    return [{
+      ...normalized,
+      running: false,
+      passed: false,
+      technical_error: true,
+      message: event.message || event.data?.error || '质检执行中断',
+    }];
+  });
+}
 const QA_PHASE_TO_NODE = {
   collection: 'collection',
   product: 'product_analysis',

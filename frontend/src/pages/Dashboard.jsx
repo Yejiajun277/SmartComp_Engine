@@ -43,9 +43,9 @@ function formatStartedAt(startedAt) {
   return `开始于 ${value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function TaskListItem({ task, status, onOpen, onDelete }) {
+export function TaskListItem({ task, status, onOpen, onDelete }) {
   return (
-    <List.Item className="task-list-item" onClick={onOpen}>
+    <List.Item className="task-list-item">
       <div className="task-list-main">
         <div className="task-list-title-row">
           <span className={`status-pill status-${status.tone}`}>{status.label}</span>
@@ -63,10 +63,7 @@ function TaskListItem({ task, status, onOpen, onDelete }) {
         <Button
           className="secondary-action"
           icon={<ArrowRightOutlined />}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpen();
-          }}
+          onClick={onOpen}
         >
           {task.status === 'completed' ? '查看结果' : '进入工作台'}
         </Button>

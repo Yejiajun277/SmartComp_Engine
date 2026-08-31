@@ -36,6 +36,7 @@ import {
   buildQaSummaries,
   mergeQaResults,
   shouldAcceptTaskEvent,
+  terminalizeQaResultsForTaskFailure,
 } from '../utils/taskEvents';
 import {
   getTaskModeMeta,
@@ -43,6 +44,7 @@ import {
   resolveTaskProgress,
   resolveTaskStatus,
 } from '../utils/presentation';
+import { createTaskLoadScope, getTaskLoadFailureAction } from '../utils/taskNavigation';
 
 const AGENT_TO_PHASE = {
   DiscoveryAgent: 'discovery',
@@ -58,6 +60,7 @@ export default function TaskDetail() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const [taskInfo, setTaskInfo] = useState(null);
+  const [taskMissing, setTaskMissing] = useState(false);
   const [persistedQaPresentation, setPersistedQaPresentation] = useState(
     () => createTaskQaPresentationState(taskId),
   );
@@ -77,7 +80,7 @@ export default function TaskDetail() {
     AGENT_PHASE_MAP,
   } = useTask();
 
-  const { connected } = useWebSocket(taskId, handleEvent);
+  const { connected } = useWebSocket(taskMissing ? null : taskId, handleEvent);
   const activeTaskIdRef = useRef(taskId);
   const currentTaskInfoRef = useRef(null);
   const qaLoadAttemptedForRef = useRef(null);
@@ -102,6 +105,7 @@ export default function TaskDetail() {
     qaPresentationModeRef.current = 'pending';
     queueMicrotask(() => {
       setTaskInfo(null);
+      setTaskMissing(false);
       setPersistedQaPresentation(createTaskQaPresentationState(taskId));
       setArtifactCache(createTaskArtifactCache(taskId));
       setSelectedPhase(null);
@@ -109,18 +113,6 @@ export default function TaskDetail() {
       reset();
     });
   }, [reset, taskId]);
-
-  const loadTaskInfo = useCallback(() => (
-    getTask(taskId)
-      .then((data) => {
-        if (data?.id !== taskId || activeTaskIdRef.current !== taskId) return null;
-        currentTaskInfoRef.current = data;
-        qaPresentationModeRef.current = getQaPresentationMode(taskId, data);
-        setTaskInfo(data);
-        return data;
-      })
-      .catch(() => null)
-  ), [taskId]);
 
   const cacheArtifact = useCallback((phase, data) => {
     setArtifactCache(previous => updateTaskArtifactCache(previous, taskId, phase, data));
@@ -197,19 +189,39 @@ export default function TaskDetail() {
   }, [cacheArtifact, taskId]);
 
   useEffect(() => {
-    loadTaskInfo();
-  }, [loadTaskInfo]);
-
-  useEffect(() => {
     if (qaPresentationMode !== 'enabled') return;
     refreshQa();
   }, [qaPresentationMode, refreshQa]);
 
   useEffect(() => {
-    if (!taskId) return undefined;
+    if (!taskId || taskMissing) return undefined;
+    const scope = createTaskLoadScope(taskId);
+    const loadTaskInfo = () => (
+      getTask(taskId)
+        .then((data) => {
+          if (!scope.isActive() || data?.id !== taskId) return null;
+          currentTaskInfoRef.current = data;
+          qaPresentationModeRef.current = getQaPresentationMode(taskId, data);
+          setTaskInfo(data);
+          return data;
+        })
+        .catch((error) => {
+          if (!scope.isActive()) return null;
+          if (getTaskLoadFailureAction(error) !== 'redirect_home') return null;
+          activeTaskIdRef.current = null;
+          setTaskMissing(true);
+          navigate('/', { replace: true });
+          return null;
+        })
+    );
+    const initialLoad = window.setTimeout(loadTaskInfo, 0);
     const interval = window.setInterval(loadTaskInfo, 2000);
-    return () => window.clearInterval(interval);
-  }, [loadTaskInfo, taskId]);
+    return () => {
+      scope.cancel();
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
+  }, [navigate, taskId, taskMissing]);
 
   useEffect(() => {
     const event = events[events.length - 1];
@@ -242,23 +254,39 @@ export default function TaskDetail() {
   };
 
   const persistedQa = selectTaskQaPresentationState(persistedQaPresentation, taskId);
-  const timelineQaResults = qaPresentationBlocked
+  const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
+  const failureEvent = {
+    type: 'task_failed',
+    message: currentTaskInfo?.error,
+    data: {
+      failed_node: currentTaskInfo?.failed_node,
+      failed_phase: currentTaskInfo?.failed_phase,
+      error: currentTaskInfo?.error,
+    },
+  };
+  const mergedTimelineQaResults = qaPresentationBlocked
     ? []
     : mergeQaResults(persistedQa.results, qaResults);
+  const timelineQaResults = resolvedTaskStatus === 'failed'
+    ? terminalizeQaResultsForTaskFailure(mergedTimelineQaResults, failureEvent)
+    : mergedTimelineQaResults;
   const graphQaSummaries = qaPresentationBlocked
     ? {}
     : buildQaSummaries(timelineQaResults);
   const taskArtifacts = selectTaskArtifactCache(artifactCache, taskId);
-  const cockpitChecks = taskArtifacts.qa?.checks?.length > 0
+  const rawCockpitChecks = taskArtifacts.qa?.checks?.length > 0
     ? taskArtifacts.qa.checks
     : timelineQaResults;
+  const cockpitChecks = resolvedTaskStatus === 'failed'
+    ? terminalizeQaResultsForTaskFailure(rawCockpitChecks, failureEvent)
+    : rawCockpitChecks;
   const presentationEvents = filterPresentationEvents(events, qaPresentationBlocked);
-  const resolvedTaskStatus = resolveTaskStatus(taskStatus, currentTaskInfo?.status);
   const currentPhase = AGENT_TO_PHASE[currentTaskInfo?.current_agent];
   const graphNodeStates = buildPresentationNodeStates(
     nodeStates,
     resolvedTaskStatus,
     currentPhase,
+    currentTaskInfo?.failed_node,
   );
 
   const taskStatusMeta = getTaskStatusMeta(resolvedTaskStatus);
@@ -270,12 +298,16 @@ export default function TaskDetail() {
   );
   const currentAgent = resolvedTaskStatus === 'completed'
     ? '全部 Agent 已完成'
-    : (currentTaskInfo?.current_agent
-      || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
-      || '等待调度');
-  const presentationCurrentMessage = qaPresentationBlocked
-    ? presentationEvents.at(-1)?.message || '业务 Agent 正在推进工作流'
-    : currentMessage;
+    : resolvedTaskStatus === 'failed'
+      ? `${currentTaskInfo?.failed_agent || '工作流'}（已停止）`
+      : (currentTaskInfo?.current_agent
+        || (currentPhase ? AGENT_PHASE_MAP[currentPhase]?.agent : null)
+        || '等待调度');
+  const presentationCurrentMessage = resolvedTaskStatus === 'failed'
+    ? (currentTaskInfo?.error || currentMessage || '工作流执行中断，请查看失败节点')
+    : qaPresentationBlocked
+      ? presentationEvents.at(-1)?.message || '业务 Agent 正在推进工作流'
+      : currentMessage;
 
   return (
     <main className="page-shell workbench-page">

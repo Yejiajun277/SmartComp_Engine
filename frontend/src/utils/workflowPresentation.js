@@ -24,13 +24,27 @@ export function normalizeNodeStateForTask(nodeState = 'waiting', taskStatus) {
   return nodeState === 'failed' ? 'failed' : 'completed';
 }
 
-export function buildPresentationNodeStates(nodeStates = {}, taskStatus, currentPhase) {
+export function buildPresentationNodeStates(
+  nodeStates = {},
+  taskStatus,
+  currentPhase,
+  failedNode = null,
+) {
   const displayNodeStates = Object.fromEntries(
     Object.entries(nodeStates).map(([phase, state]) => [
       phase,
       normalizeNodeStateForTask(state, taskStatus),
     ]),
   );
+
+  if (taskStatus === 'failed') {
+    Object.entries(displayNodeStates).forEach(([phase, state]) => {
+      if (['running', 'retrying'].includes(state)) displayNodeStates[phase] = 'blocked';
+    });
+    const failurePhase = failedNode || currentPhase;
+    if (failurePhase) displayNodeStates[failurePhase] = 'failed';
+    return displayNodeStates;
+  }
 
   if (
     taskStatus === 'running'

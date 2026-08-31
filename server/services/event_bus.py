@@ -19,6 +19,7 @@ class EventBus:
         self._subscribers: dict[str, list[Callable[[WorkflowEvent], Awaitable[None]]]] = {}
         self._listeners: list[Callable[[WorkflowEvent], None]] = []
         self._history: dict[str, deque[WorkflowEvent]] = {}
+        self._deleted_tasks: set[str] = set()
         self._history_size = history_size
 
     def add_listener(self, callback: Callable[[WorkflowEvent], None]) -> None:
@@ -30,6 +31,8 @@ class EventBus:
             self._listeners.remove(callback)
 
     async def emit(self, task_id: str, event: WorkflowEvent) -> None:
+        if task_id in self._deleted_tasks:
+            return
         self._history.setdefault(task_id, deque(maxlen=self._history_size)).append(event)
         self._persist_event(task_id, event)
         # Notify global listeners (sync callbacks, e.g. TaskManager progress update)
@@ -47,6 +50,8 @@ class EventBus:
                 print(f"[EventBus] subscriber error: {e}")
 
     def subscribe(self, task_id: str, callback: Callable[[WorkflowEvent], Awaitable[None]]) -> None:
+        if task_id in self._deleted_tasks:
+            return
         self._subscribers.setdefault(task_id, []).append(callback)
 
     def unsubscribe(self, task_id: str, callback: Callable[[WorkflowEvent], Awaitable[None]]) -> None:
@@ -55,6 +60,8 @@ class EventBus:
             subs.remove(callback)
 
     def get_history(self, task_id: str) -> list[dict]:
+        if task_id in self._deleted_tasks:
+            return []
         # Prefer in-memory (live session); fall back to disk (after restart)
         if task_id in self._history:
             return [e.model_dump(mode="json") for e in self._history[task_id]]
@@ -84,3 +91,17 @@ class EventBus:
             [WorkflowEvent(**e) for e in events], maxlen=self._history_size
         )
         return events
+
+    def clear_task(self, task_id: str) -> None:
+        """Forget a deleted task and reject late events from its cancelled job."""
+        self.mark_task_deleted(task_id)
+        self.purge_task(task_id)
+
+    def purge_task(self, task_id: str) -> None:
+        """Remove task history and subscribers without creating a tombstone."""
+        self._history.pop(task_id, None)
+        self._subscribers.pop(task_id, None)
+
+    def mark_task_deleted(self, task_id: str) -> None:
+        """Reject new events while task cancellation and cleanup are in progress."""
+        self._deleted_tasks.add(task_id)

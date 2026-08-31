@@ -5,6 +5,7 @@ import asyncio
 import unittest
 
 from models.domain import CompetitorData, QualityCheckResult, QualityIssue
+from server.services.event_bus import EventBus
 from workflow.nodes import AnalysisGraphNodes
 from workflow.state import initial_analysis_state
 
@@ -67,6 +68,11 @@ class FlakyDiscoveryAgent:
         if self.calls == 1:
             raise TimeoutError("temporary discovery timeout")
         return await self.wrapped.run(product_description, max_competitors)
+
+
+class BrokenDiscoveryAgent:
+    async def run(self, _product_description, _max_competitors):
+        raise ConnectionError("search backend unavailable")
 
 
 class ExcessiveHallucinationQualityAgent:
@@ -244,14 +250,63 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(orch.discovery_agent.calls, 2)
 
+    async def test_exhausted_node_retry_emits_structured_agent_failed_event(self):
+        event_bus = EventBus()
+        orch = make_orchestrator()
+        orch.discovery_agent = BrokenDiscoveryAgent()
+        nodes = AnalysisGraphNodes(orch, node_retries=1, event_bus=event_bus, task_id="failed-node")
+        state = initial_analysis_state("Target product", 2)
+
+        with self.assertRaises(RuntimeError) as raised:
+            await nodes.discover_competitors(state)
+
+        failure = getattr(raised.exception, "failure", None)
+        self.assertEqual(failure, {
+            "failed_node": "discovery",
+            "failed_phase": "discovery",
+            "failed_agent": "DiscoveryAgent",
+            "node_name": "discover_competitors",
+            "attempts": 2,
+            "error": "search backend unavailable",
+        })
+        events = event_bus.get_history("failed-node")
+        agent_failed = events[-1]
+        self.assertEqual(agent_failed["type"], "agent_failed")
+        self.assertEqual(agent_failed["phase"], "discovery")
+        self.assertEqual(agent_failed["data"], failure)
+
+    async def test_quality_retry_failure_targets_the_canvas_gate_and_business_phase(self):
+        event_bus = EventBus()
+        nodes = AnalysisGraphNodes(
+            make_orchestrator(), node_retries=0,
+            event_bus=event_bus, task_id="failed-quality-node",
+        )
+        state = initial_analysis_state("Target product", 2)
+
+        async def fail_quality_check():
+            raise AttributeError("'list' object has no attribute 'strip'")
+
+        with self.assertRaises(RuntimeError) as raised:
+            await nodes._retry_node(state, "check_collection_quality", fail_quality_check)
+
+        self.assertEqual(raised.exception.failure["failed_node"], "qa_collection")
+        self.assertEqual(raised.exception.failure["failed_phase"], "collection")
+        self.assertEqual(raised.exception.failure["failed_agent"], "QualityAgent")
+        self.assertEqual(raised.exception.failure["node_name"], "check_collection_quality")
+        self.assertIn("'list' object has no attribute 'strip'", str(raised.exception))
+        agent_failed = event_bus.get_history("failed-quality-node")[-1]
+        self.assertEqual(agent_failed["phase"], "qa_collection")
+        self.assertEqual(agent_failed["data"]["error"], "'list' object has no attribute 'strip'")
+
     async def test_node_retry_error_includes_the_root_cause(self):
         nodes = AnalysisGraphNodes(make_orchestrator(), node_retries=0)
+        state = initial_analysis_state("Target product", 2)
 
         async def fail_with_search_error():
             raise RuntimeError("TAVILY_API_KEY 未配置")
 
         with self.assertRaisesRegex(RuntimeError, "TAVILY_API_KEY 未配置"):
-            await nodes._retry_node("discover_competitors", fail_with_search_error)
+            await nodes._retry_node(state, "discover_competitors", fail_with_search_error)
 
     async def test_collection_quality_excessive_hallucination_event_does_not_crash(self):
         orch = make_orchestrator()

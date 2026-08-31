@@ -172,6 +172,14 @@ export function getWorkflowEdgeGeometry(edge, nodesById) {
 
 const COMPLETE_STATES = new Set(['completed', 'passed', 'degraded']);
 const ACTIVE_STATES = new Set(['running', 'retrying']);
+const BLOCKING_SOURCE_STATES = new Set(['failed', 'blocked']);
+const BLOCKING_TARGET_EXCEPTIONS = new Set([
+  'completed',
+  'passed',
+  'degraded',
+  'failed',
+  'disabled',
+]);
 
 function getQaNodeStatus(node, qaSummaries, qaDisabled) {
   return getGateState(node.targets, qaSummaries, { disabled: qaDisabled }).status;
@@ -181,15 +189,69 @@ function getInitialNodeStatus(node, nodeStates, qaSummaries, taskStatus, qaDisab
   if (node.kind === 'input') return taskStatus === 'pending' ? 'waiting' : 'completed';
   if (node.kind === 'output') {
     if (taskStatus === 'completed') return 'completed';
-    if (taskStatus === 'failed') return 'failed';
+    if (taskStatus === 'failed') return 'blocked';
     return 'waiting';
   }
-  if (node.kind === 'qa') return getQaNodeStatus(node, qaSummaries, qaDisabled);
+  if (node.kind === 'qa') {
+    if (qaDisabled) return 'disabled';
+    const hasExplicitStatus = Object.prototype.hasOwnProperty.call(nodeStates || {}, node.id);
+    const explicitStatus = nodeStates?.[node.id] || 'waiting';
+    if (hasExplicitStatus && explicitStatus !== 'waiting') {
+      if (taskStatus === 'completed' && explicitStatus !== 'failed') return 'completed';
+      return { status: explicitStatus, explicit: true };
+    }
+    return getQaNodeStatus(node, qaSummaries, qaDisabled);
+  }
 
   const hasExplicitStatus = Object.prototype.hasOwnProperty.call(nodeStates || {}, node.phase);
   const explicitStatus = nodeStates?.[node.phase] || 'waiting';
   if (taskStatus === 'completed' && explicitStatus !== 'failed') return 'completed';
   return { status: explicitStatus, explicit: hasExplicitStatus };
+}
+
+function propagateBlockedNodes(nodes, taskStatus) {
+  if (taskStatus !== 'failed') return nodes;
+
+  const next = nodes.map(node => ({ ...node }));
+  const nodesById = Object.fromEntries(next.map(node => [node.id, node]));
+  const failedNode = next.find(node => node.status === 'failed');
+  const failedStageNumber = failedNode
+    ? WORKFLOW_STAGES.find(stage => stage.id === failedNode.stage)?.number
+    : null;
+
+  if (failedStageNumber) {
+    next.forEach((node) => {
+      const stageNumber = WORKFLOW_STAGES.find(stage => stage.id === node.stage)?.number;
+      if (
+        stageNumber >= failedStageNumber
+        && !BLOCKING_TARGET_EXCEPTIONS.has(node.status)
+        && node.status !== 'blocked'
+      ) {
+        node.status = 'blocked';
+      }
+    });
+  }
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    WORKFLOW_EDGES.forEach((edge) => {
+      const source = nodesById[edge.from];
+      const target = nodesById[edge.to];
+      if (
+        !source
+        || !target
+        || !BLOCKING_SOURCE_STATES.has(source.status)
+        || BLOCKING_TARGET_EXCEPTIONS.has(target.status)
+        || target.status === 'blocked'
+      ) return;
+      target.status = 'blocked';
+      changed = true;
+    });
+  }
+
+  return next;
 }
 
 function inferReadyNodes(nodes, taskStatus) {
@@ -229,6 +291,7 @@ function deriveEdgeStatus(edge, nodesById) {
   const targetComplete = isForwardComplete(edge.to, nodesById);
 
   if (sourceStatus === 'failed' || targetStatus === 'failed') return 'failed';
+  if (sourceStatus === 'blocked' || targetStatus === 'blocked') return 'blocked';
   if (sourceStatus === 'degraded' || targetStatus === 'degraded') return 'degraded';
   if (targetStatus === 'retrying' || sourceStatus === 'retrying') return 'retrying';
   if (edge.kind === 'branch') {
@@ -263,7 +326,8 @@ export function buildWorkflowCanvasModel({
       ...(typeof initialState === 'string' ? { status: initialState } : initialState),
     };
   });
-  const nodes = inferReadyNodes(initialNodes, taskStatus);
+  const blockedNodes = propagateBlockedNodes(initialNodes, taskStatus);
+  const nodes = inferReadyNodes(blockedNodes, taskStatus);
   const nodesById = Object.fromEntries(nodes.map(node => [node.id, node]));
   const edges = WORKFLOW_EDGES.map(edge => ({
     ...edge,

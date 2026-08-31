@@ -16,6 +16,9 @@ const PHASE_LABELS = {
 };
 
 function getStatusMeta(result) {
+  if (result.technical_error === true) {
+    return { label: '执行错误', tone: 'failed', icon: <CloseCircleOutlined /> };
+  }
   const state = getQaResultState(result);
   if (state === 'running') {
     return { label: '质检中', tone: 'running', icon: <LoadingOutlined spin /> };
@@ -54,6 +57,7 @@ function groupResults(results) {
 }
 
 function getCorrectionStory(result, attempt) {
+  if (result.technical_error === true) return `第 ${attempt} 轮质量检查执行中断`;
   const state = getQaResultState(result);
   if (state === 'running') return `第 ${attempt} 轮质量检查正在进行`;
   if (state === 'degraded') return `第 ${attempt} 轮保留风险后降级通过`;

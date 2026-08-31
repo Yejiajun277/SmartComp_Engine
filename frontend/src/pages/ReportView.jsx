@@ -8,9 +8,10 @@ import {
   FileDoneOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import { getReport } from '../api/client';
+import { getReport, getTask } from '../api/client';
 import ReportOverview from '../components/report/ReportOverview';
 import { buildReportOverview } from '../utils/report';
+import { getTaskLoadFailureAction } from '../utils/taskNavigation';
 
 const REPORT_VIEWS = [
   { key: 'overview', label: '决策简报' },
@@ -33,8 +34,22 @@ export default function ReportView() {
       .then((data) => {
         if (!cancelled) setReport(data);
       })
-      .catch(() => {
-        if (!cancelled) setReport(null);
+      .catch(async (error) => {
+        if (getTaskLoadFailureAction(error) !== 'redirect_home') {
+          if (!cancelled) setReport(null);
+          return;
+        }
+
+        try {
+          await getTask(taskId);
+          if (!cancelled) setReport(null);
+        } catch (taskError) {
+          if (!cancelled && getTaskLoadFailureAction(taskError) === 'redirect_home') {
+            navigate('/', { replace: true });
+          } else if (!cancelled) {
+            setReport(null);
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -42,7 +57,7 @@ export default function ReportView() {
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [navigate, taskId]);
 
   const handleViewChange = (nextView) => {
     if (nextView === 'full') setIframeLoading(true);

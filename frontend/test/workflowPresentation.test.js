@@ -63,6 +63,29 @@ test('a running resolved task marks its current agent as running without hiding 
   );
 });
 
+test('persisted failure metadata restores the real failed node after a page reload', () => {
+  assert.deepEqual(
+    workflowPresentation.buildPresentationNodeStates(
+      { collection: 'completed', qa_collection: 'running' },
+      'failed',
+      null,
+      'qa_collection',
+    ),
+    { collection: 'completed', qa_collection: 'failed' },
+  );
+});
+
+test('legacy failed tasks fall back to the last persisted phase instead of leaving it running', () => {
+  assert.deepEqual(
+    workflowPresentation.buildPresentationNodeStates(
+      { collection: 'running' },
+      'failed',
+      'collection',
+    ),
+    { collection: 'failed' },
+  );
+});
+
 test('a task-scoped cache is empty for a different route and rejects stale writes', () => {
   assert.equal(typeof workflowPresentation.createTaskArtifactCache, 'function');
   assert.equal(typeof workflowPresentation.selectTaskArtifactCache, 'function');

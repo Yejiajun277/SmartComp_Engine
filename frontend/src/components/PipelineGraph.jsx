@@ -48,6 +48,7 @@ const STATUS_LABELS = {
   retrying: '正在重做',
   degraded: '带风险交付',
   failed: '需要处理',
+  blocked: '已阻断',
   disabled: '质检已关闭',
 };
 
@@ -66,7 +67,15 @@ const NODE_ICONS = {
   report: <FileTextOutlined />,
 };
 
-const EDGE_STATUSES = ['waiting', 'running', 'completed', 'retrying', 'degraded', 'failed'];
+const EDGE_STATUSES = [
+  'waiting',
+  'running',
+  'completed',
+  'retrying',
+  'degraded',
+  'failed',
+  'blocked',
+];
 
 function getStageStatus(stage, nodesById) {
   const statuses = stage.nodeIds.map(id => nodesById[id]?.status || 'waiting');
@@ -74,6 +83,7 @@ function getStageStatus(stage, nodesById) {
   if (statuses.includes('degraded')) return 'degraded';
   if (statuses.includes('retrying')) return 'retrying';
   if (statuses.includes('running')) return 'running';
+  if (statuses.includes('blocked')) return 'blocked';
   if (statuses.every(status => ['completed', 'passed', 'disabled'].includes(status))) return 'completed';
   return 'waiting';
 }
@@ -156,7 +166,9 @@ function WorkflowStageLayer({ stages, nodesById }) {
 }
 
 function WorkflowNode({ node, selected, onSelect }) {
-  const statusLabel = STATUS_LABELS[node.status] || STATUS_LABELS.waiting;
+  const statusLabel = node.kind === 'output' && node.status === 'blocked'
+    ? '未生成'
+    : (STATUS_LABELS[node.status] || STATUS_LABELS.waiting);
   return (
     <button
       className={`dag-node dag-node-${node.kind}`}
@@ -220,7 +232,9 @@ function WorkflowMinimap({ stages, nodes, selectedNodeId, onStageSelect }) {
 function WorkflowInspector({ node, taskStatus, onNodeClick, onReportClick }) {
   if (!node) return null;
   const action = getWorkflowNodeAction(node, taskStatus);
-  const statusLabel = STATUS_LABELS[node.status] || STATUS_LABELS.waiting;
+  const statusLabel = node.kind === 'output' && node.status === 'blocked'
+    ? '未生成'
+    : (STATUS_LABELS[node.status] || STATUS_LABELS.waiting);
 
   const handleAction = () => {
     if (action?.kind === 'artifact') onNodeClick?.(action.phase);
@@ -260,7 +274,11 @@ function WorkflowInspector({ node, taskStatus, onNodeClick, onReportClick }) {
         </button>
       )}
       {!action && node.kind === 'output' && taskStatus !== 'completed' && (
-        <p className="dag-inspector-waiting">流程完成后可在这里打开最终报告。</p>
+        <p className="dag-inspector-waiting">
+          {node.status === 'blocked'
+            ? '上游节点执行失败，本次报告尚未生成。'
+            : '流程完成后可在这里打开最终报告。'}
+        </p>
       )}
     </aside>
   );
