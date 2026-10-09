@@ -12,6 +12,7 @@ import { getReport, getTask } from '../api/client';
 import ReportOverview from '../components/report/ReportOverview';
 import { buildReportOverview } from '../utils/report';
 import { getTaskLoadFailureAction } from '../utils/taskNavigation';
+import { buildTaskReportPath } from '../utils/appBase';
 
 const REPORT_VIEWS = [
   { key: 'overview', label: '决策简报' },
@@ -101,7 +102,7 @@ export default function ReportView() {
   }
 
   const overview = buildReportOverview(report);
-  const iframeUrl = `/api/tasks/${taskId}/report.html`;
+  const iframeUrl = buildTaskReportPath(taskId);
 
   return (
     <main className="page-shell report-page">

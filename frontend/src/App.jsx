@@ -8,6 +8,7 @@ import ReportView from './pages/ReportView';
 import BrandMark from './components/BrandMark';
 import RuntimeStatus from './components/RuntimeStatus';
 import ThemeToggle from './components/ThemeToggle';
+import { APP_BASE_PATH } from './utils/appBase';
 import {
   getAppThemeStorage,
   getNextAppTheme,
@@ -82,7 +83,7 @@ export default function App() {
       }}
     >
       <AntdApp component={false}>
-        <BrowserRouter>
+        <BrowserRouter basename={APP_BASE_PATH || '/'}>
         <Layout className="app-shell" data-theme={appTheme}>
           <Header className="app-header">
             <NavLink className="brand-link" to="/" aria-label="返回 SmartComp 分析中心">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { shouldAcceptTaskEvent } from '../utils/taskEvents';
+import { buildWebSocketUrl } from '../utils/appBase';
 
 export function useWebSocket(taskId, onEvent) {
   const wsRef = useRef(null);
@@ -16,8 +17,7 @@ export function useWebSocket(taskId, onEvent) {
 
     let closed = false;
     let finished = false;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/tasks/${taskId}`;
+    const wsUrl = buildWebSocketUrl(window.location, `/ws/tasks/${taskId}`);
 
     function connect() {
       if (closed || finished) return;

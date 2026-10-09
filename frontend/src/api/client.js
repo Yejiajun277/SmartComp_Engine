@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { DEFAULT_MAX_COMPETITORS } from '../utils/taskCreation.js';
+import { buildAppPath } from '../utils/appBase.js';
 
-const api = axios.create({ baseURL: '/api' });
+const api = axios.create({ baseURL: buildAppPath('/api') });
 
 export async function getRuntimeConfig() {
   const { data } = await api.get('/runtime');
