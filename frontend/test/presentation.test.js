@@ -63,9 +63,9 @@ test('shows the exact model persisted for a model-backed task', () => {
     use_rule_engine: false,
     skip_qa: false,
     llm_provider: 'mimo',
-    llm_model: 'mimo-v2.5-pro',
+    llm_model: 'mimo-v2.6-pro',
   }), {
-    executionLabel: 'MiMo · mimo-v2.5-pro',
+    executionLabel: 'MiMo · mimo-v2.6-pro',
     qaLabel: 'QualityAgent 已开启',
     qaTone: 'neutral',
   });

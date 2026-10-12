@@ -54,7 +54,7 @@ async def run_analysis(product_description: str,
     if use_llm:
         from core.llm_client import check_llm_backend
         backend = check_llm_backend()
-        provider_label = {"mimo": "mimo_v2.5"}.get(
+        provider_label = {"mimo": "MiMo"}.get(
             backend["provider"], backend["provider"])
         print(f"  LLM后端: {provider_label}")
         print(f"  模型: {backend['model']}")
@@ -177,7 +177,7 @@ if __name__ == "__main__":
 ║    LLM_PROVIDER=mimo            选择LLM后端                  ║
 ║    MIMO_API_KEY=xxx             mimo API密钥                 ║
 ║    MIMO_BASE_URL=https://...    mimo接口地址                 ║
-║    MIMO_MODEL=mimo_v2.5         模型名称                     ║
+║    MIMO_MODEL=mimo-v2.6-pro     模型名称                     ║
 ║    TAVILY_API_KEY=xxx           Tavily搜索API密钥            ║
 ╚══════════════════════════════════════════════════════════════╝
 """)

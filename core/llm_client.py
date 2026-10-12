@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-core/llm_client.py — mimo_v2.5 LLM 调用封装
+core/llm_client.py — MiMo LLM 调用封装
 """
 
 import json
@@ -52,7 +52,7 @@ def _response_format_is_unsupported(status_code: int, result: dict) -> bool:
 def _call_mimo(system_prompt: str, user_message: str,
                temperature: float, max_tokens: int,
                agent_id: str, json_mode: bool = False) -> dict:
-    """调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
+    """调用 MiMo OpenAI 兼容接口，返回结构化结果。"""
     import requests
     global _last_call_error, _last_finish_reason, _last_usage
 
@@ -179,7 +179,7 @@ def _call_mimo(system_prompt: str, user_message: str,
 async def _async_call_mimo(system_prompt: str, user_message: str,
                            temperature: float, max_tokens: int,
                            agent_id: str, json_mode: bool = False) -> dict:
-    """异步调用 mimo_v2.5 OpenAI 兼容接口，返回结构化结果。"""
+    """异步调用 MiMo OpenAI 兼容接口，返回结构化结果。"""
     import httpx
     import ssl
     global _last_call_error, _last_finish_reason, _last_usage

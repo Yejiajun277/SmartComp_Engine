@@ -40,7 +40,7 @@ MIMO_BASE_URL = os.environ.get(
 )
 MIMO_MODEL = os.environ.get(
     "MIMO_MODEL",
-    "mimo-v2.5-pro",
+    "mimo-v2.6-pro",
 )
 MIMO_USE_SYSTEM_PROXY = os.environ.get(
     "MIMO_USE_SYSTEM_PROXY",

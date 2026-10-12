@@ -24,7 +24,7 @@ test('describes a missing model API as forced rule-engine mode', () => {
 
 test('shows the configured provider and exact model without claiming connectivity', () => {
   const meta = getRuntimeStatusMeta({
-    llm: { configured: true, provider: 'mimo', model: 'mimo-v2.5-pro' },
+    llm: { configured: true, provider: 'mimo', model: 'mimo-v2.6-pro' },
     search: { configured: true, provider: 'tavily', model: null },
     default_mode: 'model',
   });
@@ -33,9 +33,9 @@ test('shows the configured provider and exact model without claiming connectivit
     state: 'model',
     tone: 'ready',
     title: '模型 API 已配置',
-    compactLabel: 'MiMo · mimo-v2.5-pro',
-    detail: 'MiMo · mimo-v2.5-pro',
-    executionLabel: 'MiMo · mimo-v2.5-pro',
+    compactLabel: 'MiMo · mimo-v2.6-pro',
+    detail: 'MiMo · mimo-v2.6-pro',
+    executionLabel: 'MiMo · mimo-v2.6-pro',
     forceRuleEngine: false,
     searchConfigured: true,
     searchLabel: 'Tavily 联网搜索已配置',

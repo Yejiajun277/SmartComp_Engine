@@ -2,7 +2,7 @@
 
 基于多 Agent 协作的竞品分析系统。输入一个产品名称，自动发现竞品、多维度分析（功能 / 定价 / 市场），生成 HTML + JSON 策略报告。
 
-- LLM 调用走豆包（Volcengine）API，联网搜索走豆包 Responses API
+- LLM 调用走小米 MiMo OpenAI 兼容 API，联网搜索走 Tavily API
 - 每个 Agent 都有规则引擎兜底，无 API Key 时可零成本运行
 - 双执行路径：LangGraph StateGraph（默认）和 Legacy 顺序流
 
@@ -33,15 +33,18 @@ pip install -r requirements.txt
 在项目根目录创建 `.env` 文件（已被 `.gitignore` 忽略）：
 
 ```env
-DOUBAO_API_KEY=你的豆包API Key
-DOUBAO_MODEL=你的接入点ID
-DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+LLM_PROVIDER=mimo
+MIMO_API_KEY=你的 MiMo API Key
+MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
+MIMO_MODEL=mimo-v2.6-pro
 
+TAVILY_API_KEY=你的 Tavily API Key
 SEARCH_RECENCY=month
 SEARCH_DELAY_SECONDS=2.0
 ```
 
-- `DOUBAO_API_KEY` 和 `DOUBAO_MODEL` 为必填
+- 模型模式需要配置 `MIMO_API_KEY`；`MIMO_MODEL` 默认使用 `mimo-v2.6-pro`
+- 联网搜索需要配置 `TAVILY_API_KEY`
 - 不配置时可使用 `--rule` 模式运行（纯规则引擎，不调用 LLM）
 
 ## CLI 模式
@@ -79,15 +82,17 @@ cd frontend && npm run dev
 在项目根目录创建 `.env`，Compose 会在运行时注入该文件。`.env` 不会被复制进镜像，也不应提交到 Git。
 
 ```env
-DOUBAO_API_KEY=你的豆包 API Key
-DOUBAO_MODEL=你的接入点 ID
-DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+LLM_PROVIDER=mimo
+MIMO_API_KEY=你的 MiMo API Key
+MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
+MIMO_MODEL=mimo-v2.6-pro
 
+TAVILY_API_KEY=你的 Tavily API Key
 SEARCH_RECENCY=month
 SEARCH_DELAY_SECONDS=2.0
 ```
 
-如果没有配置 `DOUBAO_API_KEY`，Web 任务会自动切换到规则引擎模式；配置后默认使用 LLM 模式。
+如果没有配置 `MIMO_API_KEY`，Web 任务会自动切换到规则引擎模式；配置后默认使用 LLM 模式。
 
 ### 2. 构建并启动
 
@@ -266,9 +271,12 @@ python3 -m pytest tests/test_orchestrator_facade.py -v    # 编排器接口测�
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DOUBAO_API_KEY` | 是 | - | 豆包 API Key |
-| `DOUBAO_MODEL` | 是 | - | 豆包接入点 ID |
-| `DOUBAO_BASE_URL` | 否 | `https://ark.cn-beijing.volces.com/api/v3` | API 地址 |
+| `LLM_PROVIDER` | 否 | `mimo` | LLM 提供商 |
+| `MIMO_API_KEY` | 模型模式必填 | - | MiMo API Key |
+| `MIMO_MODEL` | 否 | `mimo-v2.6-pro` | MiMo 模型 ID |
+| `MIMO_BASE_URL` | 否 | `https://token-plan-cn.xiaomimimo.com/v1` | MiMo Token Plan CN API 地址 |
+| `MIMO_USE_SYSTEM_PROXY` | 否 | `false` | 是否读取系统 HTTP(S) 代理 |
+| `TAVILY_API_KEY` | 联网搜索必填 | - | Tavily API Key |
 | `SEARCH_RECENCY` | 否 | `month` | 搜索时效性过滤 |
 | `SEARCH_DELAY_SECONDS` | 否 | `2.0` | 搜索请求间隔 |
 | `USE_LANGGRAPH_WORKFLOW` | 否 | `1` | 是否使用 LangGraph（`0` 为 Legacy） |
