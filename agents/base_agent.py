@@ -112,6 +112,11 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
+            reason = "truncated_output(finish_reason=length)"
+            self.llm_logs[-1]["parse_error"] = reason
+            self._log(f"   ⚠️ JSON响应未完整结束: {reason}")
+            return {}, reason
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -194,6 +199,11 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
+            reason = "truncated_output(finish_reason=length)"
+            self.llm_logs[-1]["parse_error"] = reason
+            self._log(f"   ⚠️ JSON响应未完整结束: {reason}")
+            return {}, reason
         if text:
             parsed = parse_llm_json(text)
             if parsed:

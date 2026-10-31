@@ -8,6 +8,9 @@ from core.prompt_loader import load as load_prompts
 import config
 
 UNKNOWN = "资料不足"
+_SOURCE_LIMIT = re.compile(r"标题|原文截断|表述不完整|原文不完整|不详|未注明|未披露|未知|仅供参考|另有来源|据另一来源")
+_NOT_COMPARABLE = re.compile(
+    r"(?:不可|不能|不宜|无法)[^。；;\n]{0,12}(?:比较|排名|排序)|不具可比性|not\s+(?:directly\s+)?comparable|cannot\s+rank|incomparable", re.I)
 
 @dataclass
 class _PricingBatch:
@@ -54,7 +57,74 @@ class PricingAgent(BaseAgent):
     def _known(value) -> bool:
         return isinstance(value, str) and value.strip() not in {"", UNKNOWN, "未知", "暂无公开信息", "暂无数据", "⚪", "—"}
 
-    def _complete_analysis(self, analysis, product_name, competitors_data, dimensions):
+    @staticmethod
+    def _scope_notes(references):
+        notes = {}
+        for entity, data in references.items():
+            original = []
+            for tier in data.pricing_tiers:
+                for line in [f"{tier.tier_name}: {tier.price}", *tier.features]:
+                    if isinstance(line, str) and _SOURCE_LIMIT.search(line):
+                        original.append(line)
+            if original:
+                notes[entity] = list(dict.fromkeys(original))
+        return notes
+
+    def _validated_basis(self, basis, references):
+        """Bind comparison context to the chosen original tier and its sources."""
+        fields = ("unit", "currency", "region", "period", "offering_scope")
+        if not isinstance(basis, dict) or not references:
+            return {}
+        if any(not isinstance(basis.get(name), str) or not basis[name].strip()
+               or _SOURCE_LIMIT.search(basis[name]) for name in fields):
+            return {}
+        quotes = basis.get("quotes")
+        if not isinstance(quotes, list) or len(quotes) != len(references):
+            return {}
+        selected = {}
+        normalize = lambda value: re.sub(r"\s+", "", value).casefold()
+        for quote in quotes:
+            if not isinstance(quote, dict) or not isinstance(quote.get("entity"), str):
+                return {}
+            entity = quote["entity"]
+            if entity not in references or entity in selected:
+                return {}
+            data = references[entity]
+            known_sources = {cite.id: cite for cite in data.citations}
+            ids = quote.get("citations")
+            if not isinstance(ids, list) or not ids or any(
+                    not isinstance(cid, str) or cid not in known_sources for cid in ids):
+                return {}
+            linked = [known_sources[cid] for cid in ids]
+            source_text = " ".join(cite.title + " " + cite.snippet for cite in linked)
+            supported = False
+            for tier in data.pricing_tiers:
+                if tier.tier_name != quote.get("tier_name") or tier.price != quote.get("price_text"):
+                    continue
+                if not self._known(tier.price) or not re.search(r"\d", tier.price):
+                    continue
+                tier_text = " ".join([tier.tier_name, tier.price, *tier.features])
+                if tier.citations:
+                    if not set(ids).issubset(set(tier.citations)):
+                        continue
+                elif not tier.price or normalize(tier.price) not in normalize(source_text):
+                    continue
+                context = tier_text + " " + source_text
+                if _SOURCE_LIMIT.search(context):
+                    continue
+                if all(normalize(basis[name]) in normalize(context) for name in fields):
+                    supported = True
+                    break
+            if not supported:
+                return {}
+            selected[entity] = quote
+        if set(selected) != set(references):
+            return {}
+        return {**{name: basis[name].strip() for name in fields}, "quotes": [
+            {name: quote[name] for name in ("entity", "tier_name", "price_text", "citations")}
+            for quote in quotes]}
+
+    def _complete_analysis(self, analysis, product_name, competitors_data, dimensions, target_product_data=None):
         entities = list(dict.fromkeys([product_name, *competitors_data]))
         rows = {name: FeatureComparison(name, dict.fromkeys(entities, UNKNOWN)) for name in dimensions}
         for incoming in analysis.dimension_comparison:
@@ -70,6 +140,20 @@ class PricingAgent(BaseAgent):
         items = {item.competitor: item for item in analysis.pricing_comparison if item.competitor in competitors_data}
         analysis.pricing_comparison = [items.get(name, PricingItem(name, paid_tier=UNKNOWN)) for name in competitors_data]
         analysis.value_ranking = list(dict.fromkeys(name for name in analysis.value_ranking if name in competitors_data))
+        references = {product_name: target_product_data} if target_product_data is not None else {}
+        references.update(competitors_data)
+        analysis.source_scope_notes = self._scope_notes(references)
+        basis = self._validated_basis(analysis.comparable_basis, references)
+        prose = " ".join([analysis.summary, analysis.pricing_strategy_analysis,
+                          *(value for row in analysis.dimension_comparison for value in row.values.values())])
+        if product_name not in references or _NOT_COMPARABLE.search(prose):
+            basis = {}
+        analysis.comparable_basis = basis
+        if not basis:
+            analysis.value_ranking = []
+            note = "未确认同一市场、日期、规格/权益和计价单位的可比报价；仅展示来源报价与限制，不可直接排名。"
+            if note not in analysis.summary:
+                analysis.summary += ("\n" if analysis.summary else "") + note
         analysis.citations = list(dict.fromkeys(cid for item in [*analysis.pricing_comparison, *analysis.dimension_comparison] for cid in item.citations))
         return analysis
 
@@ -82,12 +166,12 @@ class PricingAgent(BaseAgent):
             if truncated and len(competitors_data) >= 2:
                 initial = self._parse_pricing_analysis(result) if result else PricingAnalysis()
                 recovered = await self._run_chunked(product_name, competitors_data, target_product_data, feedback, dimensions)
-                return self._merge_batches([self._scoped(initial, competitors_data), recovered], product_name, competitors_data, dimensions, replace_parent=True).analysis
+                return self._merge_batches([self._scoped(initial, competitors_data), recovered], product_name, competitors_data, dimensions, replace_parent=True, target_product_data=target_product_data).analysis
             if result:
                 analysis = self._parse_pricing_analysis(result)
                 if truncated:
                     analysis.summary += "；输出仍截断，降级保留已解析资料，缺口保持未知。"
-                return self._complete_analysis(analysis, product_name, competitors_data, dimensions)
+                return self._complete_analysis(analysis, product_name, competitors_data, dimensions, target_product_data)
         return self._rule_analyze(product_name, competitors_data, target_product_data, dimensions)
 
     async def _request_analysis(self, product_name, competitors_data, target_product_data, feedback, max_tokens):
@@ -108,7 +192,7 @@ class PricingAgent(BaseAgent):
             parsed = self._parse_pricing_analysis(result) if result else PricingAnalysis()
             if truncated and len(chunk) >= 2:
                 recovered = await self._run_chunked(product_name, chunk, target_product_data, feedback, dimensions)
-                batch = self._merge_batches([self._scoped(parsed, chunk), recovered], product_name, chunk, dimensions, replace_parent=True)
+                batch = self._merge_batches([self._scoped(parsed, chunk), recovered], product_name, chunk, dimensions, replace_parent=True, target_product_data=target_product_data)
             else:
                 if not result:
                     parsed = self._rule_analyze(product_name, chunk, target_product_data, dimensions)
@@ -116,13 +200,13 @@ class PricingAgent(BaseAgent):
                     parsed.summary += "；输出仍截断，降级保留已解析资料，缺口保持未知。"
                 batch = self._scoped(parsed, chunk)
             batches.append(batch)
-        return self._merge_batches(batches, product_name, competitors_data, dimensions)
+        return self._merge_batches(batches, product_name, competitors_data, dimensions, target_product_data=target_product_data)
 
     @staticmethod
     def _scoped(analysis, competitors_data):
         return _PricingBatch(analysis, [(tuple(competitors_data), analysis.summary, analysis.pricing_strategy_analysis)])
 
-    def _merge_batches(self, batches, product_name, competitors_data, dimensions, *, replace_parent=False):
+    def _merge_batches(self, batches, product_name, competitors_data, dimensions, *, replace_parent=False, target_product_data=None):
         items = {}
         for batch in batches:
             for item in batch.analysis.pricing_comparison:
@@ -136,7 +220,7 @@ class PricingAgent(BaseAgent):
                           or (name == "free_tier" and withdraw_free) else getattr(previous, name)
                           for name in ("free_tier", "paid_tier", "pricing_model")),
                         list(dict.fromkeys([*previous.citations, *item.citations])))
-        merged = self._complete_analysis(PricingAnalysis(pricing_comparison=list(items.values()), dimension_comparison=[row for batch in batches for row in batch.analysis.dimension_comparison]), product_name, competitors_data, dimensions)
+        merged = self._complete_analysis(PricingAnalysis(pricing_comparison=list(items.values()), dimension_comparison=[row for batch in batches for row in batch.analysis.dimension_comparison]), product_name, competitors_data, dimensions, target_product_data)
         notes = [note for batch in (batches[1:] if replace_parent else batches) for note in batch.notes]
         if replace_parent:
             parent = batches[0].analysis
@@ -171,6 +255,7 @@ class PricingAgent(BaseAgent):
                 merged.pricing_strategy_analysis += f"\n适用竞品（{'、'.join(scope)}）：{strategy}"
         if any("降级" in summary for _, summary, _ in notes):
             merged.summary += "部分请求采用降级结果，未知报价不参与推算或排名。"
+        merged.summary += "\n分组报价未确认全体同口径，不可直接排名。"
         return _PricingBatch(merged, notes)
 
     def _build_competitors_text(self, product_name, competitors_data, target_product_data=None):
@@ -220,11 +305,16 @@ class PricingAgent(BaseAgent):
         if any(not isinstance(name, str) for name in ranking):
             invalid.append("value_ranking")
         strategy, summary = text("pricing_strategy_analysis"), text("summary")
+        basis = result.get("comparable_basis", {})
+        if not isinstance(basis, dict):
+            invalid.append("comparable_basis")
+            basis = {}
         if invalid:
             summary += "；降级：部分模型字段格式异常，缺失内容保持资料不足。"
         return PricingAnalysis(pricing_comparison=items, dimension_comparison=rows,
             pricing_strategy_analysis=strategy,
-            value_ranking=[name for name in ranking if isinstance(name, str)], summary=summary)
+            value_ranking=[name for name in ranking if isinstance(name, str)], summary=summary,
+            comparable_basis=basis)
 
     def _rule_analyze(self, product_name, competitors_data, target_product_data=None, dimensions=None):
         items = []
@@ -236,4 +326,4 @@ class PricingAgent(BaseAgent):
                 zero_price = bool(re.fullmatch(r"(?:[¥￥$]\s*)?0(?:\.0+)?(?:元)?", tier.price.strip()))
                 (free if explicitly_free or zero_price else paid).append(text)
             items.append(PricingItem(name, "；".join(free), "；".join(paid) or UNKNOWN, "；".join(tier.tier_name for tier in data.pricing_tiers), list(dict.fromkeys(cid for tier in data.pricing_tiers for cid in tier.citations))))
-        return self._complete_analysis(PricingAnalysis(pricing_comparison=items, summary="降级：仅保留采集到的价格与方案；未完成定价维度判断，缺口标为资料不足。"), product_name, competitors_data, dimensions or [])
+        return self._complete_analysis(PricingAnalysis(pricing_comparison=items, summary="降级：仅保留采集到的价格与方案；未完成定价维度判断，缺口标为资料不足。"), product_name, competitors_data, dimensions or [], target_product_data)

@@ -224,6 +224,8 @@ class PricingAnalysis:
     summary: str = ""
     citations: list[str] = field(default_factory=list)     # 汇总引用 ID
     dimension_comparison: list[FeatureComparison] = field(default_factory=list)
+    comparable_basis: dict = field(default_factory=dict)
+    source_scope_notes: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass

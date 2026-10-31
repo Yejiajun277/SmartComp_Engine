@@ -148,6 +148,11 @@ class StrategyAgent(BaseAgent):
         for row in pricing_analysis.dimension_comparison:
             lines.append(f"- 定价维度 {row.feature}: {json.dumps(row.values, ensure_ascii=False)}"
                          + (f" [{','.join(row.citations)}]" if row.citations else ""))
+        if pricing_analysis.source_scope_notes:
+            lines.append("原始来源限制（不得扩大为普适政策）: " + json.dumps(
+                pricing_analysis.source_scope_notes, ensure_ascii=False))
+        if pricing_analysis.comparable_basis:
+            lines.append("可比报价原文依据: " + json.dumps(pricing_analysis.comparable_basis, ensure_ascii=False))
         lines.append(f"策略分析: {pricing_analysis.pricing_strategy_analysis}")
         if pricing_analysis.value_ranking:
             lines.append(f"性价比排名: {' > '.join(pricing_analysis.value_ranking)}")
@@ -718,6 +723,19 @@ class StrategyAgent(BaseAgent):
                      if value and value.strip() not in {
                          "未知", "资料不足", "无", "不适用", "无免费版", "无免费方案", "暂无公开信息"}]
             return "；".join(parts)
+
+        def pricing_scope_notes_html(analysis) -> str:
+            if not analysis.source_scope_notes:
+                return ""
+            items = "".join(
+                '<li style="margin-top:6px;"><strong>' + esc(entity) + '</strong>：'
+                + '；'.join(esc(note) for note in notes) + '</li>'
+                for entity, notes in analysis.source_scope_notes.items())
+            return (
+                '<aside role="note" style="margin:14px 0;padding:12px;background:#fffbeb;'
+                'border-radius:8px;font-size:13px;line-height:1.7;">'
+                '<strong>来源范围与未确认事项</strong><p>以下为采集原文限制，不能作为普适优惠或报价承诺。</p>'
+                '<ul style="padding-left:20px;">' + items + '</ul></aside>')
 
         def priority_badge(priority: str) -> str:
             colors = {"P0": "#ef4444", "P1": "#f59e0b", "P2": "#22c55e", "P3": "#94a3b8"}
@@ -1297,7 +1315,7 @@ class StrategyAgent(BaseAgent):
                 </tr>'''
 
             ranking_html = ""
-            if pricing_analysis.value_ranking:
+            if pricing_analysis.value_ranking and pricing_analysis.comparable_basis:
                 rank_items = ""
                 for i, name in enumerate(pricing_analysis.value_ranking, 1):
                     medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
@@ -1339,17 +1357,25 @@ class StrategyAgent(BaseAgent):
             dimension_headers = "".join(
                 '<th style="padding:10px 14px;text-align:left;font-size:13px;">' + esc(entity) + '</th>'
                 for entity in price_entities)
+            scope_html = pricing_scope_notes_html(pricing_analysis)
+            ranking_html = ""
+            if pricing_analysis.value_ranking and pricing_analysis.comparable_basis:
+                ranking_html = '<p style="margin-top:14px;font-size:13px;">同口径比较顺序：' + esc(
+                    ' > '.join(pricing_analysis.value_ranking)) + '</p>'
             pricing_html = (
                 '<div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">'
                 '<h2 style="margin:0 0 20px;font-size:20px;color:#1e293b;">💰 定价维度对比</h2>'
                 '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">'
                 '<thead><tr style="background:#f8fafc;"><th style="padding:10px 14px;text-align:left;">定价维度</th>'
                 + dimension_headers + '</tr></thead><tbody>' + dimension_rows + '</tbody></table></div>'
+                + scope_html + ranking_html
                 + ('<p style="margin-top:14px;font-size:13px;color:#475569;white-space:pre-line;">'
                    + esc(pricing_analysis.pricing_strategy_analysis) + '</p>' if pricing_analysis.pricing_strategy_analysis else '')
                 + ('<div role="note" style="margin-top:12px;font-size:13px;color:#64748b;white-space:pre-line;">'
                    + esc(pricing_analysis.summary) + '</div>' if pricing_analysis.summary else '')
                 + '</div>')
+        elif pricing_analysis and pricing_analysis.source_scope_notes:
+            pricing_html += pricing_scope_notes_html(pricing_analysis)
 
         # ══════════════════════════════════════════════
         # 区块5：市场格局分析

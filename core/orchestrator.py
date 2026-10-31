@@ -217,18 +217,8 @@ class Orchestrator:
                 if qa_collection.passed:
                     break
 
-                # 如果已经做过至少1轮补充搜索，且只剩幻觉问题（无空/截断字段），直接通过
-                if qa_attempt > 1:
-                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
-                    completeness_critical = [i for i in qa_collection.issues
-                                             if i.category == "completeness" and i.severity == "critical"
-                                             and i.field and "." in i.field and not i.field.startswith("所有")]
-                    hallucination_only = not missing_fields and not completeness_critical
-                    if hallucination_only:
-                        print(f"  ℹ️ 采集质检（第{qa_attempt}次）：无缺失字段，仅剩幻觉检测警告，通过")
-                        qa_collection.passed = True
-                        break
-
+                # A full data shape cannot replace an unfinished or failed review.
+                # Preserve the checker result through retries and exhaustion.
                 if qa_attempt <= QualityAgent.MAX_RETRIES:
                     # 提取缺失字段，做针对性补充搜索
                     missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
@@ -337,10 +327,18 @@ class Orchestrator:
                 self.quality_agent.timeline.add_check(qa_skip)
             print("  🐛 调试模式：三维分析质检跳过")
         else:
+            async def check_current_analysis(analysis_type, analysis, attempt=1):
+                return await self.quality_agent.check_analysis(
+                    analysis_type, analysis, competitors_data, attempt=attempt,
+                    target_product_data=target_product_data, product_name=product_name,
+                    sub_dimensions={"product": product_sub_dims_text,
+                                    "pricing": pricing_sub_dims_text}.get(analysis_type, ""),
+                )
+
             qa_product, qa_pricing, qa_market = await asyncio.gather(
-                self.quality_agent.check_analysis("product", product_analysis, competitors_data),
-                self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data),
-                self.quality_agent.check_analysis("market", market_analysis, competitors_data),
+                check_current_analysis("product", product_analysis),
+                check_current_analysis("pricing", pricing_analysis),
+                check_current_analysis("market", market_analysis),
             )
 
             # 打回未通过的分析 Agent
@@ -351,7 +349,6 @@ class Orchestrator:
             ]:
                 self.quality_agent.timeline.add_check(qa_result)
                 qa_attempt = 1
-                prev_score = qa_result.score
                 while not qa_result.passed and qa_attempt <= QualityAgent.MAX_RETRIES:
                     print(f"  ⚠️ {agent_name} 质检未通过（第{qa_attempt}次），打回重做")
                     feedback = self.quality_agent.build_feedback(qa_result)
@@ -376,19 +373,11 @@ class Orchestrator:
 
                     # 重新质检
                     if atype == "product":
-                        qa_result = await self.quality_agent.check_analysis("product", product_analysis, competitors_data)
+                        qa_result = await check_current_analysis("product", product_analysis, qa_attempt + 1)
                     elif atype == "pricing":
-                        qa_result = await self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data)
+                        qa_result = await check_current_analysis("pricing", pricing_analysis, qa_attempt + 1)
                     else:
-                        qa_result = await self.quality_agent.check_analysis("market", market_analysis, competitors_data)
-
-                    # 分数未提升即通过：避免在幻觉误报上无限循环
-                    if qa_result.score <= prev_score:
-                        print(f"  ℹ️ {agent_name} 质检（第{qa_attempt}次）：分数未提升（{prev_score:.1f}→{qa_result.score:.1f}），判定为误报通过")
-                        qa_result.passed = True
-                        self.quality_agent.timeline.add_check(qa_result)
-                        break
-                    prev_score = qa_result.score
+                        qa_result = await check_current_analysis("market", market_analysis, qa_attempt + 1)
 
                     self.quality_agent.timeline.add_check(qa_result)
                     qa_attempt += 1

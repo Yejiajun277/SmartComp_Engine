@@ -17,7 +17,7 @@ from workflow.graph import route_analysis_quality
 from workflow.nodes import AnalysisGraphNodes
 from workflow.state import initial_analysis_state
 
-from tests.test_orchestrator_baseline import FakeQualityAgent, make_orchestrator, pricing_analysis, product_analysis
+from tests.test_orchestrator_baseline import FakeQualityAgent, make_orchestrator, pricing_analysis, product_analysis, run_quietly
 from tests.test_workflow_graph import run_graph_quietly
 
 
@@ -45,6 +45,32 @@ class ScoredProductQualityAgent(FakeQualityAgent):
 
 
 class QualityRetryIntegrityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_analysis_never_promotes_decreasing_failed_scores(self):
+        orch = make_orchestrator()
+        orch.quality_agent = ScoredProductQualityAgent([52, 40, 40])
+        with patch.object(config, "SKIP_QA", False):
+            report = await run_quietly(orch, "Product", 2)
+        checks = [check for check in report.qa_timeline.checks if check.phase == "product"]
+        self.assertEqual([check.attempt for check in checks], [1, 2, 3])
+        self.assertEqual([check.score for check in checks], [52, 40, 40])
+        self.assertTrue(all(not check.passed for check in checks))
+
+    async def test_legacy_analysis_checks_receive_target_and_current_dimensions(self):
+        orch = make_orchestrator()
+        original = orch.quality_agent.check_analysis
+        contexts = {}
+        async def inspect(phase, analysis, competitors_data, attempt=1, **context):
+            contexts[phase] = context
+            return await original(phase, analysis, competitors_data, attempt)
+        orch.quality_agent.check_analysis = inspect
+        with patch.object(config, "SKIP_QA", False):
+            await run_quietly(orch, "Product", 2)
+        for phase in ("product", "pricing", "market"):
+            self.assertEqual(contexts[phase].get("product_name"), "Target")
+            self.assertIsNotNone(contexts[phase].get("target_product_data"))
+        self.assertIn("Core", contexts["product"].get("sub_dimensions", ""))
+        self.assertIn("Model", contexts["pricing"].get("sub_dimensions", ""))
+
     def test_exhausted_product_does_not_consume_another_failed_phases_retry_budget(self):
         state = {
             "qa_product": failed_check(64, 3), "product_retry_count": 2,
@@ -387,6 +413,7 @@ class AnalysisQualityPromptIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 "pricing_strategy_analysis": "Compare equal package sizes", "value_ranking": ["Dymatize"],
                 "summary": "Pricing scope is explicit", "citations": ["price-source"],
                 "dimension_comparison": [],
+                "comparable_basis": {}, "source_scope_notes": {},
             }),
             ("market", MarketAnalysis(
                 market_share_data=[MarketShareItem("Dymatize", "Unknown", "No measured share", ["market-source"])],

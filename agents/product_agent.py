@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Product comparison with category-safe dimensions and bounded recovery."""
 import re
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 
 from agents.base_agent import BaseAgent
 from models.domain import CompetitorData, ProductAnalysis, FeatureComparison, CompetitiveAdvantage
@@ -247,15 +248,16 @@ class ProductAgent(BaseAgent):
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
             if data.product_features:
-                features_text = "; ".join([f"{fi.name}: {fi.description}" for fi in data.product_features[:10]])
-                lines.append(f"- 产品功能: {features_text[:300]}")
+                lines.append("- 产品功能（完整原始条目、限定和引用）: " + json.dumps(
+                    [asdict(feature) for feature in data.product_features], ensure_ascii=False))
             else:
                 lines.append("- 产品功能: 暂无数据")
-            lines.append(f"- 优势: {data.strengths[:200]}")
-            lines.append(f"- 劣势: {data.weaknesses[:200]}")
+            lines.append(f"- 优势: {data.strengths}")
+            lines.append(f"- 劣势: {data.weaknesses}")
             if data.citations:
                 lines.append(f"- 数据来源:")
-                lines.append(self.build_citations_text(data.citations))
+                lines.append(self.build_citations_text(
+                    data.citations, max_snippet=max(len(c.snippet or "") for c in data.citations)))
 
         if target_product_data:
             append_entity(product_name, target_product_data)

@@ -3,7 +3,7 @@
 agents/quality_agent.py — 质检Agent
 
 职责：完整性检查 + 幻觉检测，发现问题后打回对应 Agent 重做
-LLM调用：1次/检查（幻觉检测）
+LLM调用：每次检查最多2次（完整JSON恢复，不改动被检查数据）
 提示词来源：prompts/quality_agent.md
 """
 
@@ -85,6 +85,48 @@ class QualityAgent(BaseAgent):
         """不直接调用，请使用 check_collection / check_analysis / check_strategy"""
         raise NotImplementedError("QualityAgent 不直接运行，请使用 check_collection/check_analysis/check_strategy")
 
+    @staticmethod
+    def _valid_quality_response(result: object) -> bool:
+        """Do not turn an incomplete/foreign response into an empty issue list."""
+        if not isinstance(result, dict) or not isinstance(result.get("issues"), list):
+            return False
+        for issue in result["issues"]:
+            if not isinstance(issue, dict):
+                return False
+            if issue.get("severity") not in {"critical", "warning"}:
+                return False
+            if issue.get("category") not in {"completeness", "schema", "hallucination", "citation"}:
+                return False
+            if any(not isinstance(issue.get(key), str) or not issue[key].strip()
+                   for key in ("field", "description")):
+                return False
+            if any(key in issue and not isinstance(issue[key], str)
+                   for key in ("expected", "actual", "suggestion")):
+                return False
+        return True
+
+    async def _request_quality_json(self, prompt: str) -> tuple[dict, str]:
+        """Recheck the same snapshot once if transport/JSON/schema is incomplete."""
+        reason = "invalid_quality_response"
+        for attempt, budget in enumerate((8192, 12288)):
+            request = prompt
+            if attempt:
+                request += (
+                    "\n\n上一次质检响应未形成完整可用JSON（" + reason + "）。"
+                    "请重新检查上述同一份资料，仅输出一个完整JSON对象，issues必须为数组。"
+                    "每项使用severity、category、field、description、suggestion字段；"
+                    "severity仅critical/warning，category仅completeness/schema/hallucination/citation。"
+                    "合并重复问题，描述和建议简短；不复述整段原文、不输出思考过程。"
+                    "保留所有严重问题；没有问题才返回issues空数组。"
+                )
+            result, failure = await self.async_ask_llm_json_with_reason(request, max_tokens=budget)
+            if self._valid_quality_response(result):
+                return result, ""
+            reason = failure if not result else "invalid_quality_response_schema"
+            reason = reason or "invalid_quality_response"
+            self._log(f"   ⚠️ 质检响应未完成（第{attempt + 1}次）: {reason}")
+        return {}, reason
+
     # ── Phase 2: 采集数据质检 ──
 
     async def check_collection(
@@ -110,14 +152,14 @@ class QualityAgent(BaseAgent):
             # 过滤掉已通过的字段（避免重复标记同一字段为幻觉）
             new_hallucination = []
             for hi in hallucination_issues:
-                if hi.field and hi.field not in self._passed_fields:
+                if hi.severity == "critical" or (hi.field and hi.field not in self._passed_fields):
                     new_hallucination.append(hi)
                 elif not hi.field:
                     new_hallucination.append(hi)
             issues.extend(new_hallucination)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
@@ -136,11 +178,9 @@ class QualityAgent(BaseAgent):
             issues.extend(self._check_citation_validity(all_citations, list(set(all_output_ids))))
 
         score = self._calculate_score(issues, phase="collection", competitor_count=len(competitors_data))
-        has_critical_schema = any(
-            issue.category == "schema" and issue.severity == "critical"
-            for issue in issues
-        )
-        passed = score >= self.PASS_SCORE and not has_critical_schema
+        passed = (score >= self.PASS_SCORE
+                  and hallucination_status != HallucinationCheckStatus.FAILED.value
+                  and not any(issue.severity == "critical" for issue in issues))
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -182,7 +222,7 @@ class QualityAgent(BaseAgent):
                     val = getattr(data, field_name, "")
                     if isinstance(val, str) and len(val.strip()) > 10:
                         self._passed_fields.add(f"{name}.{field_name}")
-        else:
+        elif hallucination_status != HallucinationCheckStatus.FAILED.value:
             # 未通过时，记录本轮没有幻觉问题的字段为"已通过"
             halluc_fields = {i.field for i in issues if i.category == "hallucination" and i.field}
             for name, data in competitors_data.items():
@@ -354,30 +394,17 @@ class QualityAgent(BaseAgent):
         original_search_texts: dict[str, str],
     ) -> tuple[list[QualityIssue], str]:
         """采集数据幻觉检测（LLM）"""
-        # 构建竞品数据摘要
-        data_summary = {}
-        for name, data in competitors_data.items():
-            data_summary[name] = {
-                "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features],
-                "pricing_tiers": [{"tier_name": pt.tier_name, "price": pt.price} for pt in data.pricing_tiers],
-                "market_share": normalize_text_value(data.market_share),
-                "user_reviews": normalize_text_value(data.user_reviews)[:200],
-                "strengths": normalize_text_value(data.strengths)[:200],
-                "weaknesses": normalize_text_value(data.weaknesses)[:200],
-                "citations": [{"id": c.id, "title": c.title[:80], "query": c.query} for c in data.citations[:30]],
-            }
-
-        # 截断原始搜索文本
-        search_texts_limited = {}
-        for name, text in original_search_texts.items():
-            search_texts_limited[name] = text[:8000]
+        # Inspect the saved snapshot, including scope qualifiers and all source
+        # references. Shortening these fields caused false truncation/missing-
+        # source findings about information that existed in the actual report.
+        data_summary = {name: asdict(data) for name, data in competitors_data.items()}
 
         prompt = self._prompt_check_collection.format(
-            original_search_texts=json.dumps(search_texts_limited, ensure_ascii=False, indent=2),
+            original_search_texts=json.dumps(original_search_texts, ensure_ascii=False, indent=2),
             competitors_data_json=json.dumps(data_summary, ensure_ascii=False, indent=2),
         )
 
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self._request_quality_json(prompt)
         if not result:
             self._log(f"   ⚠️ 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -418,14 +445,14 @@ class QualityAgent(BaseAgent):
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
                 ))
 
         score = self._calculate_score(issues, phase=analysis_type)
-        passed = score >= self.PASS_SCORE and not any(
+        passed = score >= self.PASS_SCORE and hallucination_status != HallucinationCheckStatus.FAILED.value and not any(
             issue.severity == "critical" for issue in issues
         )
 
@@ -641,6 +668,12 @@ class QualityAgent(BaseAgent):
             "schema_fields": list(analysis_json),
             "sub_dimensions": sub_dimensions,
             "expected_competitors": list(competitors_data),
+            "scope_policy": {
+                "retain_source_qualifiers": True,
+                "missing_scope": "unknown",
+                "cross_scope_comparison_requires_evidence": True,
+                "unqualified_claim_from_limited_source": "critical_citation",
+            },
         }
         if analysis_type == "product":
             target_name = product_name or (target_product_data.name if target_product_data else "")
@@ -673,7 +706,7 @@ class QualityAgent(BaseAgent):
             feedback="",
         )
 
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self._request_quality_json(prompt)
         if not result:
             self._log(f"   ⚠️ {analysis_type} 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -709,14 +742,16 @@ class QualityAgent(BaseAgent):
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
                 ))
 
         score = self._calculate_score(issues, phase="strategy")
-        passed = score >= self.PASS_SCORE
+        passed = (score >= self.PASS_SCORE
+                  and hallucination_status != HallucinationCheckStatus.FAILED.value
+                  and not any(issue.severity == "critical" for issue in issues))
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -834,28 +869,22 @@ class QualityAgent(BaseAgent):
     ) -> tuple[list[QualityIssue], str]:
         """策略报告幻觉检测（LLM）"""
         three_dim = {
-            "product_summary": product_analysis.summary,
-            "differentiation_points": product_analysis.differentiation_points,
-            "pricing_summary": pricing_analysis.summary,
-            "value_ranking": pricing_analysis.value_ranking,
-            "market_summary": market_analysis.summary,
-            "growth_trends": market_analysis.growth_trends,
+            "product_analysis": asdict(product_analysis),
+            "pricing_analysis": asdict(pricing_analysis),
+            "market_analysis": asdict(market_analysis),
         }
-
-        strategy_json = {
-            "overall_positioning": report.overall_positioning,
-            "differentiation_strategy": report.differentiation_strategy,
-            "action_plan": [{"priority": ai.priority, "action": ai.action, "timeline": ai.timeline} for ai in report.action_plan],
-            "risk_assessment": report.risk_assessment,
-            "summary": report.summary,
-        }
+        # Give the checker the actual saved facts/SWOT/citations. Transport logs
+        # and prior gate outcomes are process history, not evidence for this gate.
+        strategy_json = asdict(report)
+        for process_field in ("raw_llm_logs", "qa_timeline"):
+            strategy_json.pop(process_field, None)
 
         prompt = self._prompt_check_strategy.format(
             three_dimensional_analysis=json.dumps(three_dim, ensure_ascii=False, indent=2),
             strategy_report_json=json.dumps(strategy_json, ensure_ascii=False, indent=2),
         )
 
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self._request_quality_json(prompt)
         if not result:
             self._log(f"   ⚠️ 策略报告幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason

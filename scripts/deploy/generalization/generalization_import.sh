@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import urllib.request
 
-stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101')
+stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-qa')
 source = Path('/opt/apps/smartcomp')
 output = source / 'output'
 state = json.loads((stage / 'promotion-state.json').read_text())
@@ -87,7 +87,7 @@ city_unchanged()
 tasks_before = no_active()
 before = fingerprint(output)
 rows = accepted.get('tasks', [])
-require(len(rows) == 2 and {r['worker'] for r in rows} == {'generalization-vacuum', 'generalization-hotel'},
+require(len(rows) == 2 and {r['worker'] for r in rows} == {'generalization-vacuum-qa', 'generalization-hotel-qa'},
         'Require exactly the vacuum and hotel acceptances')
 require(len({r['task_id'] for r in rows}) == 2, 'Acceptance task IDs must be unique')
 workers = {w['name']: w for w in workers_state['workers']}
@@ -134,11 +134,17 @@ for row in rows:
     qa = json.loads(qa_file.read_text())
     final_checks = {}
     for check in qa.get('checks', []):
-        final_checks[check['phase']] = check
+        previous = final_checks.get(check['phase'])
+        if previous is None or check.get('attempt', 1) >= previous.get('attempt', 1):
+            final_checks[check['phase']] = check
     require(set(final_checks) >= {'collection', 'product', 'pricing', 'market', 'strategy'},
             'Missing QA phases')
-    require(all(c.get('passed') is True and c.get('degraded') is not True for c in final_checks.values()),
+    require(all(c.get('passed') is True and c.get('degraded') is False for c in final_checks.values()),
             'Final QA contains failed/degraded checks; do not treat as passed')
+    require(all(c.get('hallucination_status') in ('passed', 'found') for c in final_checks.values()),
+            'Final hallucination check failed/skipped/missing; require completed live checks')
+    require(all(not any(issue.get('severity') == 'critical' for issue in c.get('issues', []))
+                for c in final_checks.values()), 'Final QA still contains a critical issue')
     require(fetch(worker['port'], '/api/tasks/' + task_id + '/report'), 'HTTP report unavailable')
     payload_copies.append((run_source, output / run_relative, run_hashes))
     event_source = task_file.with_name(task_id + '_events.jsonl')

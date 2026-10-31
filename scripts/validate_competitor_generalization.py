@@ -95,13 +95,15 @@ def audit(base, task_id):
     for phase in ("collection", "product", "pricing", "market", "strategy"):
         last = checks.get(phase, {})
         check(last.get("passed") is True and not last.get("degraded", False), f"{phase}: last QA did not pass")
+        check(last.get("hallucination_status") in ("passed", "found"),
+              f"{phase}: semantic review did not complete")
         check(not any(i.get("severity") == "critical" for i in last.get("issues", [])),
               f"{phase}: unresolved critical QA issue")
     sources = report.get("citation_index", {}).get("citations", {})
     check(bool(sources), "No collected sources")
     return {"pass": not errors, "task_id": task_id, "product_name": report["product_name"],
             "entities": entities, "dimensions": dimension_lists,
-            "qa": {phase: {key: result.get(key) for key in ("passed", "score", "attempt", "issues")}
+            "qa": {phase: {key: result.get(key) for key in ("passed", "score", "attempt", "hallucination_status", "issues")}
                    for phase, result in checks.items()},
             "source_count": len(sources), "citation_links": len(visible.links),
             "errors": errors, "semantic_review_required": True}

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from agents.product_agent import ProductAgent
 from agents.strategy_agent import StrategyAgent
-from models.domain import CompetitorData, FeatureItem, PricingAnalysis, MarketAnalysis
+from models.domain import Citation, CompetitorData, FeatureItem, PricingAnalysis, MarketAnalysis
 
 
 DIMENSIONS = "1. **蛋白含量**：每份蛋白质含量\n2. **配料透明度**：成分及添加物"
@@ -18,6 +18,20 @@ def response(rows):
 
 
 class ProductDimensionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_full_product_scope_and_source_qualifiers_reach_analysis(self):
+        data = CompetitorData("CompA", product_features=[
+            FeatureItem(f"Feature {n}", "Original details " * 30 + f"MODEL_SCOPE_{n}", [f"c{n}"])
+            for n in range(12)],
+            strengths="Original strength " * 20 + "ONLY_ONE_MODEL",
+            weaknesses="Original weakness " * 20 + "OTHER_MODELS_UNKNOWN",
+            citations=[Citation("c11", "Source", "https://example.test/source",
+                                "Source text " * 30 + "SOURCE_SCOPE_END")])
+        await self.run_with_transport({"CompA": data}, [(json.dumps(response([])), False)], target=data)
+        prompt = self.requests[0][1]
+        for retained in ("MODEL_SCOPE_0", "MODEL_SCOPE_11", "ONLY_ONE_MODEL",
+                         "OTHER_MODELS_UNKNOWN", "SOURCE_SCOPE_END", "c11"):
+            self.assertIn(retained, prompt)
+
     async def run_with_transport(self, competitors, replies, dimensions=DIMENSIONS,
                                  target=None):
         """Replace only the network boundary; keep prompt/JSON/recovery logic real."""
