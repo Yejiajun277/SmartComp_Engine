@@ -1,12 +1,17 @@
 """Failed analysis checks remain failures throughout retries and exhaustion."""
 
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
 import config
 from agents.quality_agent import QualityAgent
 from core.artifact_store import to_jsonable
-from models.domain import Citation, CompetitorData, FeatureItem, PricingTier, QualityCheckResult, QualityIssue
+from models.domain import (
+    Citation, CompetitorData, CompetitiveAdvantage, FeatureComparison, FeatureItem,
+    MarketAnalysis, MarketShareItem, PricingAnalysis, PricingItem, PricingTier,
+    ProductAnalysis, QualityCheckResult, QualityIssue, UserProfile, UserReputation,
+)
 from server.services.event_bus import EventBus
 from workflow.graph import route_analysis_quality
 from workflow.nodes import AnalysisGraphNodes
@@ -33,13 +38,44 @@ class ScoredProductQualityAgent(FakeQualityAgent):
         self.scores = iter(scores)
 
     async def check_analysis(self, analysis_type, analysis, competitors_data, attempt=1,
-                             *, target_product_data=None, product_name=""):
+                             *, target_product_data=None, product_name="", sub_dimensions=""):
         if analysis_type == "product":
             return failed_check(next(self.scores), attempt)
         return await super().check_analysis(analysis_type, analysis, competitors_data, attempt)
 
 
 class QualityRetryIntegrityTests(unittest.IsolatedAsyncioTestCase):
+    def test_exhausted_product_does_not_consume_another_failed_phases_retry_budget(self):
+        state = {
+            "qa_product": failed_check(64, 3), "product_retry_count": 2,
+            "qa_pricing": QualityCheckResult("pricing", "PricingAgent", True, 100),
+            "qa_market": QualityCheckResult("market", "MarketAgent", False, 34),
+            "market_retry_count": 0,
+        }
+        self.assertEqual(route_analysis_quality(state), "retry_market")
+        state["market_retry_count"] = 1
+        self.assertEqual(route_analysis_quality(state), "retry_market")
+        state["market_retry_count"] = 2
+        self.assertEqual(route_analysis_quality(state), "exhausted")
+
+    async def test_graph_retries_other_failed_phases_after_product_exhaustion(self):
+        orch = make_orchestrator(analysis_passes={
+            "product": [False, False, False], "pricing": [True], "market": [False, False, True],
+        })
+        with patch.object(config, "SKIP_QA", False):
+            state = await run_graph_quietly(orch, "Protein powder", 2)
+
+        self.assertEqual(state["status"], "completed_degraded")
+        self.assertEqual(state["product_retry_count"], 2)
+        self.assertEqual(state["market_retry_count"], 2)
+        self.assertTrue(state["qa_market"].passed)
+        self.assertFalse(state["qa_market"].degraded)
+        self.assertEqual(state["quality_exhausted"], {"product": True})
+        self.assertEqual(len(orch.market_agent.feedbacks), 3)
+        market_checks = [c for c in state["report"].qa_timeline.checks if c.phase == "market"]
+        self.assertEqual([c.attempt for c in market_checks], [1, 2, 3])
+        self.assertEqual([c.passed for c in market_checks], [False, False, True])
+
     async def test_analysis_nodes_supply_target_reference_separately_from_rivals(self):
         for phase in ("product", "pricing", "market"):
             with self.subTest(phase=phase):
@@ -57,6 +93,8 @@ class QualityRetryIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 state.update({
                     "product_name": "OPTIMUM NUTRITION", "competitors_data": rivals,
                     "target_product_data": target,
+                    "product_sub_dims_text": "1. **Safety certification**",
+                    "pricing_sub_dims_text": "1. **Package price**",
                 })
 
                 with patch.object(config, "SKIP_QA", False):
@@ -65,6 +103,10 @@ class QualityRetryIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(calls[0][0], rivals)
                 self.assertEqual(calls[0][1].get("target_product_data"), target)
                 self.assertEqual(calls[0][1].get("product_name"), "OPTIMUM NUTRITION")
+                self.assertEqual(calls[0][1].get("sub_dimensions"), {
+                    "product": "1. **Safety certification**",
+                    "pricing": "1. **Package price**", "market": "",
+                }[phase])
                 self.assertEqual(list(rivals), ["Rival"])
 
     async def test_target_facts_and_citations_reach_qa_without_expanding_pricing_coverage(self):
@@ -250,3 +292,135 @@ class QualityRetryIntegrityTests(unittest.IsolatedAsyncioTestCase):
             saved["07_strategy_report.json"]["qa_timeline"].get("terminal_dispositions"),
             saved["qa_timeline.json"]["terminal_dispositions"],
         )
+
+
+def prompt_json_objects(prompt):
+    """Read actual serialized payloads passed to the external model boundary."""
+    objects = []
+    decoder = json.JSONDecoder()
+    offset = 0
+    while (start := prompt.find("{", offset)) >= 0:
+        try:
+            obj, length = decoder.raw_decode(prompt[start:])
+        except json.JSONDecodeError:
+            offset = start + 1
+        else:
+            objects.append(obj)
+            offset = start + length
+    return objects
+
+
+class AnalysisQualityPromptIntegrityTests(unittest.IsolatedAsyncioTestCase):
+    async def capture_payloads(self, phase, analysis, rivals, **context):
+        prompts = []
+
+        async def external_model(prompt, **kwargs):
+            prompts.append(prompt)
+            return {"issues": []}, ""
+
+        agent = QualityAgent()
+        with (
+            patch.object(config, "ENABLE_LLM", True),
+            patch.object(agent, "async_ask_llm_json_with_reason", external_model),
+        ):
+            try:
+                await agent.check_analysis(phase, analysis, rivals, **context)
+            except TypeError as exc:
+                self.fail(f"Analysis QA cannot accept the current analysis contract: {exc}")
+        return prompt_json_objects(prompts[0])
+
+    async def test_rival_reference_keeps_late_features_complete_facts_and_source_metadata(self):
+        rival = CompetitorData(
+            name="Dymatize",
+            product_features=[FeatureItem(f"Feature {i}", "Collected fact") for i in range(7)] + [
+                FeatureItem("Safety certification", "Batch screening certificate", ["Dymatize:q6:r32"]),
+            ],
+            pricing_tiers=[PricingTier("2 lb", "$55", ["Whey isolate"], ["Dymatize:q6:r31"])],
+            strengths="a" * 220 + "Traceable supplier quality process",
+            channels="Official distributor",
+            citations=[
+                Citation("Dymatize:q6:r31", "Product facts", "https://example.test/dymatize", "Whey isolate"),
+                Citation("Dymatize:q6:r32", "Safety source", "https://example.test/cert", "Batch screening certificate"),
+            ],
+        )
+        payloads = await self.capture_payloads("product", product_analysis(), {"Dymatize": rival})
+        references = next(p for p in payloads if "Dymatize" in p)
+        reference = references["Dymatize"]
+        self.assertEqual(len(reference["product_features"]), 8)
+        self.assertEqual(reference["product_features"][-1], {
+            "name": "Safety certification", "description": "Batch screening certificate",
+            "citations": ["Dymatize:q6:r32"],
+        })
+        self.assertEqual(reference["pricing_tiers"][0]["price"], "$55")
+        self.assertTrue(reference["strengths"].endswith("Traceable supplier quality process"))
+        self.assertEqual(reference["channels"], "Official distributor")
+        self.assertEqual(reference["citations"][-1]["id"], "Dymatize:q6:r32")
+        self.assertEqual(reference["citations"][-1]["url"], "https://example.test/cert")
+        self.assertEqual(reference["citations"][-1]["snippet"], "Batch screening certificate")
+
+    async def test_full_product_snapshot_keeps_existing_advantages_and_row_citations(self):
+        analysis = ProductAnalysis(
+            feature_matrix=[FeatureComparison("Safety certification", {"ON": "⚪", "Dymatize": "🔶"}, ["Dymatize:q6:r32"])],
+            competitive_advantages=[CompetitiveAdvantage("Dymatize", "Unknown", "Batch screening", ["Dymatize:q6:r32"])],
+            differentiation_points=["Available batch screening evidence"],
+            summary="分片恢复后仍有资料缺口，未知格保持⚪。",
+            citations=["Dymatize:q6:r32"],
+        )
+        payloads = await self.capture_payloads("product", analysis, {})
+        snapshot = next(p for p in payloads if "feature_matrix" in p)
+        self.assertEqual(snapshot, {
+            "feature_matrix": [{"feature": "Safety certification", "values": {"ON": "⚪", "Dymatize": "🔶"}, "citations": ["Dymatize:q6:r32"]}],
+            "competitive_advantages": [{"competitor": "Dymatize", "our_advantage": "Unknown", "their_advantage": "Batch screening", "citations": ["Dymatize:q6:r32"]}],
+            "differentiation_points": ["Available batch screening evidence"],
+            "summary": "分片恢复后仍有资料缺口，未知格保持⚪。",
+            "citations": ["Dymatize:q6:r32"],
+        })
+
+    async def test_full_pricing_and_market_snapshots_keep_explanations_profiles_and_citations(self):
+        cases = [
+            ("pricing", PricingAnalysis(
+                pricing_comparison=[PricingItem("Dymatize", "Unknown", "$55", "One-time retail", ["price-source"])],
+                pricing_strategy_analysis="Compare equal package sizes", value_ranking=["Dymatize"],
+                summary="Pricing scope is explicit", citations=["price-source"],
+            ), {
+                "pricing_comparison": [{"competitor": "Dymatize", "free_tier": "Unknown", "paid_tier": "$55", "pricing_model": "One-time retail", "citations": ["price-source"]}],
+                "pricing_strategy_analysis": "Compare equal package sizes", "value_ranking": ["Dymatize"],
+                "summary": "Pricing scope is explicit", "citations": ["price-source"],
+            }),
+            ("market", MarketAnalysis(
+                market_share_data=[MarketShareItem("Dymatize", "Unknown", "No measured share", ["market-source"])],
+                growth_trends="More low-sugar launches",
+                user_reputation={"Dymatize": UserReputation("Unknown", ["Taste"], ["review-source"])},
+                user_profiles={"Dymatize": UserProfile(target_audience="Strength athletes", citations=["profile-source"])},
+                channel_analysis="Official retail", summary="Qualitative market signals", citations=["market-source"],
+            ), {
+                "market_share_data": [{"competitor": "Dymatize", "share_estimate": "Unknown", "trend": "No measured share", "citations": ["market-source"]}],
+                "growth_trends": "More low-sugar launches",
+                "user_reputation": {"Dymatize": {"score": "Unknown", "keywords": ["Taste"], "citations": ["review-source"]}},
+                "user_profiles": {"Dymatize": {"target_audience": "Strength athletes", "age_range": "", "occupation_distribution": [], "use_cases": [], "pain_points": [], "citations": ["profile-source"]}},
+                "channel_analysis": "Official retail", "summary": "Qualitative market signals", "citations": ["market-source"],
+            }),
+        ]
+        for phase, analysis, expected in cases:
+            with self.subTest(phase=phase):
+                payloads = await self.capture_payloads(phase, analysis, {})
+                snapshot = next(p for p in payloads if "summary" in p)
+                self.assertEqual(snapshot, expected)
+
+    async def test_current_product_contract_is_sent_with_scope_dimensions_and_status_meanings(self):
+        analysis = ProductAnalysis(
+            feature_matrix=[FeatureComparison("Safety certification", {"ON": "⚪", "Dymatize": "🔶"})],
+            summary="分片恢复：来源不足，未知格保持⚪。",
+        )
+        payloads = await self.capture_payloads(
+            "product", analysis, {"Dymatize": CompetitorData(name="Dymatize")},
+            product_name="ON", sub_dimensions="1. **Safety certification**: available batch tests",
+        )
+        contract = next((p for p in payloads if p.get("analysis_type") == "product"), None)
+        self.assertIsNotNone(contract)
+        self.assertEqual(contract["schema_fields"], ["feature_matrix", "competitive_advantages", "differentiation_points", "summary", "citations"])
+        self.assertEqual(contract["sub_dimensions"], "1. **Safety certification**: available batch tests")
+        self.assertEqual(contract["feature_dimensions"], ["Safety certification"])
+        self.assertEqual(contract["compared_entities"], ["ON", "Dymatize"])
+        self.assertEqual(contract["status_legend"]["⚪"], "unknown_evidence")
+        self.assertEqual(contract["status_legend"]["❌"], "explicitly_unsupported")

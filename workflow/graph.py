@@ -48,8 +48,10 @@ def route_analysis_quality(state: AnalysisState) -> str:
         if result and not result.passed:
             if state.get(f"{analysis_type}_retry_count", 0) < QualityAgent.MAX_RETRIES:
                 return f"retry_{analysis_type}"
-            return "exhausted"
-    if all(state.get(f"qa_{analysis_type}") for analysis_type in ("product", "pricing", "market")):
+    if all(
+        state.get(f"qa_{analysis_type}") and state[f"qa_{analysis_type}"].passed
+        for analysis_type in ("product", "pricing", "market")
+    ):
         return "passed"
     return "exhausted"
 

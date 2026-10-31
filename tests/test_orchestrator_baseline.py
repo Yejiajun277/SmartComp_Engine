@@ -346,7 +346,7 @@ class FakeQualityAgent:
         return qa_result("collection", "CollectionAgent", passed, attempt)
 
     async def check_analysis(self, analysis_type, analysis, competitors_data, attempt=1,
-                             *, target_product_data=None, product_name=""):
+                             *, target_product_data=None, product_name="", sub_dimensions=""):
         passed = self.analysis_passes[analysis_type].pop(0)
         target = {
             "product": "ProductAgent",

@@ -684,6 +684,7 @@ class AnalysisGraphNodes:
                 attempt=attempt,
                 target_product_data=state.get("target_product_data"),
                 product_name=state.get("product_name", ""),
+                sub_dimensions=state.get(f"{analysis_type}_sub_dims_text", ""),
             )
 
         result = await self._retry_node(state, f"check_{analysis_type}_quality", call)

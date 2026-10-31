@@ -398,6 +398,7 @@ class QualityAgent(BaseAgent):
         *,
         target_product_data: CompetitorData | None = None,
         product_name: str = "",
+        sub_dimensions: str = "",
     ) -> QualityCheckResult:
         """Phase 3 质检：检查分析结果"""
         self._log(f"🔍 质检{analysis_type}分析（第{attempt}次）...")
@@ -412,6 +413,7 @@ class QualityAgent(BaseAgent):
             hallucination_issues, hallucination_status, fail_reason = await self._check_analysis_hallucination(
                 analysis_type, analysis, competitors_data,
                 target_product_data=target_product_data, product_name=product_name,
+                sub_dimensions=sub_dimensions,
             )
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
@@ -597,6 +599,12 @@ class QualityAgent(BaseAgent):
 
         return issues
 
+    @staticmethod
+    def _analysis_reference_snapshot(data: CompetitorData) -> dict:
+        # The structured facts and all citation metadata are shared references.
+        # Raw search page copies duplicate those sources and are not assertions.
+        return {key: value for key, value in asdict(data).items() if key != "search_sources"}
+
     async def _check_analysis_hallucination(
         self,
         analysis_type: str,
@@ -605,63 +613,53 @@ class QualityAgent(BaseAgent):
         *,
         target_product_data: CompetitorData | None = None,
         product_name: str = "",
+        sub_dimensions: str = "",
     ) -> tuple[list[QualityIssue], str, str]:
         """分析结果幻觉检测（LLM）"""
-        # 构建采集数据摘要
-        data_summary = {}
-        for name, data in competitors_data.items():
-            data_summary[name] = {
-                "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features[:5]],
-                "market_share": normalize_text_value(data.market_share)[:200],
-                "strengths": normalize_text_value(data.strengths)[:200],
-                "weaknesses": normalize_text_value(data.weaknesses)[:200],
-            }
+        data_summary = {
+            name: self._analysis_reference_snapshot(data)
+            for name, data in competitors_data.items()
+        }
 
         # Target facts are reference context, never an extra expected rival.
         if target_product_data is not None or product_name:
             target_reference = {"product_name": product_name, "collected_data": None}
             if target_product_data is not None:
                 target_reference["product_name"] = product_name or target_product_data.name
-                target_reference["collected_data"] = {
-                    "name": target_product_data.name,
-                    "product_features": [asdict(item) for item in target_product_data.product_features],
-                    "pricing_tiers": [asdict(item) for item in target_product_data.pricing_tiers],
-                    **{
-                        field: normalize_text_value(getattr(target_product_data, field))
-                        for field in CompetitorData.TEXT_FIELDS
-                    },
-                    "citations": [asdict(item) for item in target_product_data.citations],
-                }
+                target_reference["collected_data"] = self._analysis_reference_snapshot(target_product_data)
             data_summary = {
                 "competitors": data_summary,
                 "target_reference": target_reference,
                 "reference_scope": "target_reference 是目标产品的采集参考，不属于待覆盖竞品；采集参考不等于独立事实核验。",
             }
 
-        # 序列化分析结果
+        # QA sees the actual saved schema, including row/advantage citations and
+        # any recovery warning, rather than a projection that invents omissions.
+        analysis_json = asdict(analysis)
+        analysis_contract = {
+            "analysis_type": analysis_type,
+            "schema_fields": list(analysis_json),
+            "sub_dimensions": sub_dimensions,
+            "expected_competitors": list(competitors_data),
+        }
         if analysis_type == "product":
-            analysis_json = {
-                "feature_matrix": [{"feature": fm.feature, "values": fm.values} for fm in analysis.feature_matrix],
-                "differentiation_points": analysis.differentiation_points,
-                "summary": analysis.summary,
-            }
-        elif analysis_type == "pricing":
-            analysis_json = {
-                "pricing_comparison": [{"competitor": pc.competitor, "free_tier": pc.free_tier, "paid_tier": pc.paid_tier} for pc in analysis.pricing_comparison],
-                "value_ranking": analysis.value_ranking,
-                "summary": analysis.summary,
-            }
-        else:
-            analysis_json = {
-                "market_share_data": [{"competitor": ms.competitor, "share_estimate": ms.share_estimate} for ms in analysis.market_share_data],
-                "growth_trends": analysis.growth_trends,
-                "summary": analysis.summary,
-            }
+            target_name = product_name or (target_product_data.name if target_product_data else "")
+            analysis_contract.update({
+                "feature_dimensions": [row.feature for row in analysis.feature_matrix],
+                "compared_entities": list(dict.fromkeys(
+                    ([target_name] if target_name else []) + list(competitors_data)
+                )),
+                "status_legend": {
+                    "✅": "supported_by_evidence", "🔶": "partially_supported",
+                    "⚪": "unknown_evidence", "❌": "explicitly_unsupported",
+                },
+            })
 
         prompt = self._prompt_check_analysis.format(
             analysis_type=analysis_type,
             competitors_data_summary=json.dumps(data_summary, ensure_ascii=False, indent=2),
             analysis_json=json.dumps(analysis_json, ensure_ascii=False, indent=2),
+            analysis_contract=json.dumps(analysis_contract, ensure_ascii=False, indent=2),
             feedback="",
         )
 

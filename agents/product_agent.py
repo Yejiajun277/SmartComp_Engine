@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 """Product comparison with category-safe dimensions and bounded recovery."""
 import re
+from dataclasses import dataclass, field
 
 from agents.base_agent import BaseAgent
 from models.domain import CompetitorData, ProductAnalysis, FeatureComparison, CompetitiveAdvantage
 from core.prompt_loader import load as load_prompts
 import config
+
+
+@dataclass
+class _ProductBatch:
+    """Transient recovery provenance; rendered notes live in the public summary."""
+    analysis: ProductAnalysis
+    notes: list[tuple[tuple[str, ...], str]] = field(default_factory=list)
 
 
 class ProductAgent(BaseAgent):
@@ -93,14 +101,16 @@ class ProductAgent(BaseAgent):
             f"{i}. **{name}**" for i, name in enumerate(dimensions, 1)))
         if config.ENABLE_LLM:
             result, truncated = await self._request_analysis(
-                product_name, competitors_data, target_product_data, feedback)
+                product_name, competitors_data, target_product_data, feedback, max_tokens=8192)
             if truncated and len(competitors_data) >= 2:
                 self._log("⚠️ 输出截断，启动有界分片恢复")
                 chunked = await self._run_chunked(
                     product_name, competitors_data, target_product_data, feedback, dimensions)
                 initial = self._parse_product_analysis(result) if result else ProductAnalysis()
                 return self._merge_analyses(
-                    [initial, chunked], product_name, competitors_data, dimensions)
+                    [self._scoped_batch(initial, competitors_data), chunked],
+                    product_name, competitors_data, dimensions,
+                    replace_parent=True).analysis
             if result:
                 analysis = self._parse_product_analysis(result)
                 if truncated:
@@ -109,18 +119,19 @@ class ProductAgent(BaseAgent):
             self._log("⚠️ LLM产品分析失败，降级保留维度与数据缺口")
         return self._rule_analyze(product_name, competitors_data, target_product_data, dimensions)
 
-    async def _request_analysis(self, product_name, competitors_data, target_product_data, feedback):
+    async def _request_analysis(self, product_name, competitors_data, target_product_data,
+                                feedback, max_tokens: int = 4096):
         text = self._build_competitors_text(product_name, competitors_data, target_product_data)
         if feedback:
             text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
         prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=text)
-        return await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
+        return await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=max_tokens)
 
     async def _run_chunked(self, product_name: str,
                            competitors_data: dict[str, CompetitorData],
                            target_product_data: CompetitorData | None,
                            feedback: str,
-                           dimensions: list[str] | None = None) -> ProductAnalysis:
+                           dimensions: list[str] | None = None) -> _ProductBatch:
         """Split malformed truncated chunks too, down to one rival per leaf.
 
         Recovery uses at most 2*N-2 calls in addition to the initial request.
@@ -130,7 +141,8 @@ class ProductAgent(BaseAgent):
             dimensions = self._collected_dimensions(competitors_data, target_product_data)
         names = list(competitors_data)
         if len(names) < 2:
-            return self._rule_analyze(product_name, competitors_data, target_product_data, dimensions)
+            return self._scoped_batch(self._rule_analyze(
+                product_name, competitors_data, target_product_data, dimensions), competitors_data)
         mid = len(names) // 2
         analyses = []
         for subset in (names[:mid], names[mid:]):
@@ -141,30 +153,88 @@ class ProductAgent(BaseAgent):
             if truncated and len(chunk) >= 2:
                 recovered = await self._run_chunked(
                     product_name, chunk, target_product_data, feedback, dimensions)
-                parsed = self._merge_analyses(
-                    [parsed, recovered], product_name, chunk, dimensions)
-            elif not result:
-                parsed = self._rule_analyze(product_name, chunk, target_product_data, dimensions)
-            elif truncated:
-                parsed.summary += "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。"
-            analyses.append(parsed)
+                batch = self._merge_analyses(
+                    [self._scoped_batch(parsed, chunk), recovered], product_name, chunk, dimensions,
+                    replace_parent=True)
+            else:
+                if not result:
+                    parsed = self._rule_analyze(product_name, chunk, target_product_data, dimensions)
+                elif truncated:
+                    parsed.summary += "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。"
+                batch = self._scoped_batch(parsed, chunk)
+            analyses.append(batch)
         return self._merge_analyses(analyses, product_name, competitors_data, dimensions)
 
-    def _merge_analyses(self, analyses, product_name, competitors_data, dimensions):
+    @staticmethod
+    def _scoped_batch(analysis, competitors_data):
+        notes = [(tuple(competitors_data), analysis.summary)] if analysis.summary else []
+        return _ProductBatch(analysis, notes)
+
+    def _merge_analyses(self, batches, product_name, competitors_data, dimensions,
+                        *, replace_parent: bool = False):
+        analyses = [batch.analysis for batch in batches]
         # Later recovered chunks replace earlier truncated judgments for that rival.
         # Keep a parsed parent judgment when recovery supplies no replacement.
         advantages = {}
         for analysis in analyses:
             for advantage in analysis.competitive_advantages:
                 advantages[advantage.competitor] = advantage
+        # A truncated parent's global conclusions are obsolete after recovery.
+        # Peer batches contribute scoped points in order, with exact duplicates removed.
+        point_sources = analyses[1:] if replace_parent else analyses
         merged = ProductAnalysis(
             feature_matrix=[row for analysis in analyses for row in analysis.feature_matrix],
             competitive_advantages=list(advantages.values()),
             differentiation_points=list(dict.fromkeys(
-                point for analysis in analyses for point in analysis.differentiation_points)),
-            summary="；".join(dict.fromkeys(analysis.summary for analysis in analyses if analysis.summary)),
+                point.strip() for analysis in point_sources
+                for point in analysis.differentiation_points
+                if isinstance(point, str) and point.strip()))[:3],
         )
-        return self._complete_analysis(merged, product_name, competitors_data, dimensions)
+        merged = self._complete_analysis(merged, product_name, competitors_data, dimensions)
+        # Batch-local narratives cannot describe the scope of the merged report.
+        # Build its coverage statement from the final rows and retained judgments.
+        cells = [value for row in merged.feature_matrix for value in row.values.values()]
+        unknown = cells.count("⚪")
+        degraded = any("降级" in analysis.summary for analysis in analyses)
+        merged.summary = (
+            f"分片恢复合并：我方{product_name}与{len(competitors_data)}家竞品"
+            f"（{'、'.join(competitors_data)}），共{len(merged.feature_matrix)}个维度，"
+            f"未知{unknown}/{len(cells)}格（⚪）。"
+            f"保留{len(merged.competitive_advantages)}项逐竞品优劣势判断，"
+            "具体引用和适用范围见逐项记录，不作全品牌外推。"
+        )
+        if degraded:
+            merged.summary += "部分请求失败或仍截断，采用降级结果；未知不代表支持或不支持。"
+        # Keep original qualifications under the actual request subset, including
+        # nested batches. Never re-label nested notes as a larger parent request.
+        note_batches = batches[1:] if replace_parent else batches
+        notes = [note for batch in note_batches for note in batch.notes]
+        if replace_parent:
+            parent = analyses[0]
+            retained = [adv.competitor for adv in parent.competitive_advantages
+                        if advantages.get(adv.competitor) is adv
+                        and adv.competitor in competitors_data]
+            # Parent cells can survive even without a retained advantage entry.
+            recovered_cells = {
+                (self._canonical_feature(row.feature, dimensions), entity)
+                for analysis in analyses[1:] for row in analysis.feature_matrix
+                for entity, value in row.values.items()
+                if isinstance(value, str) and value.strip() and value != "⚪"
+            }
+            for row in parent.feature_matrix:
+                dimension = self._canonical_feature(row.feature, dimensions)
+                for entity, value in row.values.items():
+                    if (dimension and isinstance(value, str) and value.strip() and value != "⚪"
+                            and entity in (product_name, *competitors_data)
+                            and (dimension, entity) not in recovered_cells and entity not in retained):
+                        retained.append(entity)
+            if retained:
+                suffix = f"【保留原批次判断：{'、'.join(retained)}；其余以恢复结果为准】"
+                notes = [(scope, text + suffix) for scope, text in batches[0].notes] + notes
+        notes = list(dict.fromkeys(notes))
+        for scope, text in notes:
+            merged.summary += f"\n局部比较（仅包含 {'、'.join(scope)}）：{text}"
+        return _ProductBatch(merged, notes)
 
 
     def _build_competitors_text(self, product_name: str,

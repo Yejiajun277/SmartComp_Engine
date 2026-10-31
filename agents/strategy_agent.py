@@ -1214,6 +1214,40 @@ class StrategyAgent(BaseAgent):
         # ══════════════════════════════════════════════
         feature_matrix_html = ""
         if product_analysis and product_analysis.feature_matrix:
+            # Read persisted scope notes, not transient recovery metadata. The
+            # model's condensed strategy summary can omit SKU/region/date limits.
+            product_scope_html = ""
+            source_summary = product_analysis.summary or ""
+            if source_summary:
+                scope_notes = re.findall(
+                    r"(?:^|\n)局部比较（仅包含 ([^\n]*?)）：(.*?)(?=\n局部比较（仅包含 |\Z)",
+                    source_summary, re.S,
+                )
+                if not scope_notes:
+                    scope_notes = [("、".join(competitor_names), source_summary)]
+                note_items = []
+                for scope, note in scope_notes:
+                    if note.startswith(("规则降级：", "分片恢复合并：")):
+                        note = "资料不足，尚不能作出该范围的产品判断。"
+                    for internal_suffix in (
+                        "；模型输出截断，降级保留已解析内容，缺失数据标为⚪。",
+                        "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。",
+                    ):
+                        note = note.replace(internal_suffix, "")
+                    note = re.sub(
+                        r"【保留原批次判断：(.*?)；其余以恢复结果为准】",
+                        r"【本条限定适用于：\1】", note,
+                    )
+                    note_items.append(
+                        f'<li style="margin-top:8px;"><strong>适用竞品：{esc(scope)}</strong>'
+                        f'<p style="margin:4px 0;white-space:pre-line;">{esc(note)}</p></li>'
+                    )
+                product_scope_html = (
+                    '<div role="note" style="margin-bottom:16px;padding:12px 16px;background:#f8fafc;'
+                    'border-radius:8px;font-size:13px;color:#475569;line-height:1.7;">'
+                    '<h3 style="margin:0;font-size:14px;">比较范围与限定</h3>'
+                    '<ul style="margin:0;padding-left:20px;">' + "".join(note_items) + '</ul></div>'
+                )
             header_cells = "".join(f'<th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">{esc(n)}</th>' for n in all_names)
             rows = ""
             for fm in product_analysis.feature_matrix:
@@ -1226,6 +1260,7 @@ class StrategyAgent(BaseAgent):
             feature_matrix_html = f'''
             <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
                 <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">🔧 功能对比矩阵（总览）</h2>
+                {product_scope_html}
                 <div style="overflow-x:auto;">
                     <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
                         <thead>
