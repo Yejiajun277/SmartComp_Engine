@@ -291,13 +291,33 @@ class BaseAgent(ABC):
     @staticmethod
     def extract_citation_ids(data: dict) -> list[str]:
         """从 LLM 输出的 dict 中提取所有引用 ID"""
-        ids = list(data.get("citations", []))
-        if isinstance(ids, str):
-            ids = [ids]
-        # 也从文本中用正则提取 [xxx:qN:rN] 格式
-        text = json.dumps(data, ensure_ascii=False)
-        ids.extend(re.findall(r'\[(\w+:q\d+:r\d+)\]', text))
-        return list(set(ids))
+        from core.report_citations import extract_inline_citation_ids
+
+        explicit = data.get("citations", [])
+        explicit = [explicit] if isinstance(explicit, str) else explicit
+        ids = []
+        for value in explicit if isinstance(explicit, (list, tuple)) else []:
+            if not isinstance(value, str):
+                continue
+            value = value.strip()
+            wrapped = extract_inline_citation_ids(value)
+            if wrapped:
+                ids.extend(wrapped)
+            elif value:
+                ids.append(value[1:-1].strip() if value.startswith("[") and value.endswith("]") else value)
+
+        def collect(value):
+            if isinstance(value, str):
+                ids.extend(extract_inline_citation_ids(value))
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    collect(nested)
+            elif isinstance(value, (list, tuple)):
+                for nested in value:
+                    collect(nested)
+
+        collect(data)
+        return list(dict.fromkeys(ids))
 
     @abstractmethod
     async def run(self, *args, **kwargs):

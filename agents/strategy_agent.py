@@ -392,7 +392,7 @@ class StrategyAgent(BaseAgent):
     def _parse_intro_item(self, data: dict) -> IntroItem:
         citations = []
         if isinstance(data, dict):
-            citations = self._dedupe_ids(list(data.get("citations", [])) + self.extract_citation_ids(data))
+            citations = self.extract_citation_ids(data)
         return IntroItem(
             title=data.get("title", "") if isinstance(data, dict) else "",
             summary=data.get("summary", "") if isinstance(data, dict) else "",
@@ -801,7 +801,7 @@ class StrategyAgent(BaseAgent):
                     if cite:
                         used_cite_ids.add(cid)
                         parts.append(
-                            f'<sup><a href="#cite-{cid}" title="{esc(cite.title)} - {esc(cite.url)}" '
+                            f'<sup><a href="#cite-{esc(cid)}" title="{esc(cite.title)} - {esc(cite.url)}" '
                             f'style="color:#3b82f6;text-decoration:none;font-size:11px;">[{num}]</a></sup>'
                         )
             return " ".join(parts)
@@ -1820,6 +1820,12 @@ class StrategyAgent(BaseAgent):
             </div>
             {metrics_html}'''
 
+        # Register target introduction references before building the appendix.
+        target_product_intro_html = (
+            render_target_product_intro_from_llm(report.target_product_intro, report.target_product_data)
+            or render_target_product_intro(report.target_product_data)
+        )
+
         # 对正文实际引用的来源重新从 1 开始编号，消除序号空洞
         # 构建旧编号→新编号的映射，用于字符串替换
         old_to_new: dict[int, int] = {}
@@ -1856,7 +1862,7 @@ class StrategyAgent(BaseAgent):
                 query_label = f' <span style="color:#94a3b8;font-size:11px;">搜索词: {esc(cite.query)}</span>' if cite.query else ""
                 url_link = f'<a href="{esc(cite.url)}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;">{esc(cite.title or cite.url)}</a>' if cite.url else esc(cite.title)
                 ref_items += f'''
-                <div id="cite-{cid}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                <div id="cite-{esc(cid)}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
                     {num_label}{url_link}{site_label}{query_label}
                 </div>'''
             references_html = f'''
@@ -1900,7 +1906,7 @@ class StrategyAgent(BaseAgent):
 	    </div>
 
 	    <!-- 目标产品介绍 -->
-	    {render_target_product_intro_from_llm(report.target_product_intro, report.target_product_data) or render_target_product_intro(report.target_product_data)}
+	    {target_product_intro_html}
 
 	    <!-- 竞品发现 -->
 	    {"<div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>" + competitor_cards + '</div></div>' if competitor_cards else ''}
@@ -1961,4 +1967,9 @@ class StrategyAgent(BaseAgent):
                 return m.group(0)
             html = re.sub(r'\[(\d+)\](?=(</a></sup>))', _replace_cite_num, html)
 
-        return html
+        from dataclasses import asdict
+        from core.report_citations import normalize_report_citations
+
+        sources = ({cid: asdict(cite) for cid, cite in report.citation_index.citations.items()}
+                   if report.citation_index else {})
+        return normalize_report_citations(html, sources)
