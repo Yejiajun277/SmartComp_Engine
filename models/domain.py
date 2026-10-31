@@ -223,6 +223,7 @@ class PricingAnalysis:
     value_ranking: list[str] = field(default_factory=list)
     summary: str = ""
     citations: list[str] = field(default_factory=list)     # 汇总引用 ID
+    dimension_comparison: list[FeatureComparison] = field(default_factory=list)
 
 
 @dataclass

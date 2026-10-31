@@ -263,7 +263,9 @@ class Orchestrator:
         # ── Phase 2.5: 维度生成 ──
         phase2_5_start = time.time()
         dim_config = await self.dimension_agent.run(
-            product_description, competitor_list
+            product_description, competitor_list,
+            competitors_data=competitors_data,
+            target_product_data=target_product_data,
         )
         self.timings["dimension"] = time.time() - phase2_5_start
 

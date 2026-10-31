@@ -515,7 +515,9 @@ class AnalysisGraphNodes:
 
         async def call():
             return await self.orchestrator.dimension_agent.run(
-                state["product_description"], state["competitor_list"]
+                state["product_description"], state["competitor_list"],
+                competitors_data=state.get("competitors_data", {}),
+                target_product_data=state.get("target_product_data"),
             )
 
         start = time.perf_counter()

@@ -654,6 +654,16 @@ class QualityAgent(BaseAgent):
                     "⚪": "unknown_evidence", "❌": "explicitly_unsupported",
                 },
             })
+        elif analysis_type == "pricing":
+            target_name = product_name or (target_product_data.name if target_product_data else "")
+            analysis_contract.update({
+                "pricing_dimensions": [row.feature for row in getattr(analysis, "dimension_comparison", [])],
+                "compared_entities": list(dict.fromkeys(
+                    ([target_name] if target_name else []) + list(competitors_data)
+                )),
+                "value_kind": "native_price_or_terms_text",
+                "unknown_value": "资料不足",
+            })
 
         prompt = self._prompt_check_analysis.format(
             analysis_type=analysis_type,

@@ -261,7 +261,7 @@ class FakeDimensionAgent:
         self.calls = []
         self.llm_logs = []
 
-    async def run(self, product_description, competitors):
+    async def run(self, product_description, competitors, competitors_data=None, target_product_data=None):
         self.calls.append((product_description, competitors.product_name))
         return dimension_config()
 

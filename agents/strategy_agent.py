@@ -144,7 +144,10 @@ class StrategyAgent(BaseAgent):
         if pricing_analysis.pricing_comparison:
             for pc in pricing_analysis.pricing_comparison[:5]:
                 cite_tag = f" [{','.join(pc.citations)}]" if pc.citations else ""
-                lines.append(f"- {pc.competitor}: 免费={pc.free_tier}, 付费={pc.paid_tier}, 模式={pc.pricing_model}{cite_tag}")
+                lines.append(f"- {pc.competitor}: 价格与方案={pc.paid_tier}, 免费方案（如有）={pc.free_tier}, 计价方式={pc.pricing_model}{cite_tag}")
+        for row in pricing_analysis.dimension_comparison:
+            lines.append(f"- 定价维度 {row.feature}: {json.dumps(row.values, ensure_ascii=False)}"
+                         + (f" [{','.join(row.citations)}]" if row.citations else ""))
         lines.append(f"策略分析: {pricing_analysis.pricing_strategy_analysis}")
         if pricing_analysis.value_ranking:
             lines.append(f"性价比排名: {' > '.join(pricing_analysis.value_ranking)}")
@@ -710,6 +713,12 @@ class StrategyAgent(BaseAgent):
         def esc(text: str) -> str:
             return html_mod.escape(str(text)) if text else ""
 
+        def pricing_offer(item) -> str:
+            parts = [value for value in (item.paid_tier, item.free_tier)
+                     if value and value.strip() not in {
+                         "未知", "资料不足", "无", "不适用", "无免费版", "无免费方案", "暂无公开信息"}]
+            return "；".join(parts)
+
         def priority_badge(priority: str) -> str:
             colors = {"P0": "#ef4444", "P1": "#f59e0b", "P2": "#22c55e", "P3": "#94a3b8"}
             bg = colors.get(priority, "#94a3b8")
@@ -1088,34 +1097,15 @@ class StrategyAgent(BaseAgent):
             if report.target_product_data and report.target_product_data.pricing_tiers:
                 tiers = report.target_product_data.pricing_tiers
                 # 从所有定价层级中提取信息
-                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
-                for t in tiers:
-                    tn = t.tier_name or ""
-                    tp = t.price or ""
-                    combined = tn + tp
-                    if any(k in combined for k in free_keywords) and not our_free:
-                        our_free = tp or tn
-                    elif tp and not our_paid:
-                        our_paid = tp
-                # 如果没有明确的免费/付费区分，用第一个tier的价格作为付费信息
-                if not our_paid and tiers:
-                    for t in tiers:
-                        if t.price:
-                            our_paid = t.price
-                            break
+                our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in tiers if t.price)
                 our_model = "；".join(t.tier_name for t in tiers[:4] if t.tier_name) if tiers else ""
 
             if pi:
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_free) if our_free else no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else no_data_label}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">价格与方案</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_paid) if our_paid else no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pricing_offer(pi)) if pricing_offer(pi) else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
@@ -1290,23 +1280,11 @@ class StrategyAgent(BaseAgent):
                 our_free = ""
                 our_paid = ""
                 our_model = ""
-                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
-                for t in tpd.pricing_tiers:
-                    combined = (t.tier_name or "") + (t.price or "")
-                    if any(k in combined for k in free_keywords) and not our_free:
-                        our_free = t.price or t.tier_name
-                    elif t.price and not our_paid:
-                        our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
-                if not our_paid:
-                    for t in tpd.pricing_tiers:
-                        if t.price:
-                            our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
-                            break
+                our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in tpd.pricing_tiers if t.price)
                 our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4] if t.tier_name)
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#f0fdf4;">
                     <td style="padding:10px 16px;font-weight:600;font-size:13px;color:#166534;">⭐ {esc(report.product_name)}（我方）</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(our_free) if our_free else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(our_paid.rstrip("；")) if our_paid else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(our_model) if our_model else no_data_cell}</td>
                 </tr>'''
@@ -1314,8 +1292,7 @@ class StrategyAgent(BaseAgent):
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}{cite_sup(pc.citations)}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else no_data_cell}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pricing_offer(pc)) if pricing_offer(pc) else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else no_data_cell}</td>
                 </tr>'''
 
@@ -1337,8 +1314,7 @@ class StrategyAgent(BaseAgent):
                     <thead>
                         <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
                             <th style="padding:12px 16px;text-align:left;font-size:13px;">竞品</th>
-                            <th style="padding:12px 16px;text-align:left;font-size:13px;">免费版</th>
-                            <th style="padding:12px 16px;text-align:left;font-size:13px;">付费版</th>
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">价格与方案</th>
                             <th style="padding:12px 16px;text-align:left;font-size:13px;">定价模式</th>
                         </tr>
                     </thead>
@@ -1347,6 +1323,33 @@ class StrategyAgent(BaseAgent):
                 {ranking_html}
                 {'<div style="margin-top:16px;padding:12px 16px;background:#fffbeb;border-radius:8px;font-size:14px;line-height:1.8;"><strong>策略分析：</strong>' + esc(pricing_analysis.pricing_strategy_analysis) + '</div>' if pricing_analysis.pricing_strategy_analysis else ''}
             </div>'''
+
+        if pricing_analysis and pricing_analysis.dimension_comparison:
+            price_entities = list(dict.fromkeys(
+                [report.product_name] + [item.competitor for item in pricing_analysis.pricing_comparison]
+                + [entity for row in pricing_analysis.dimension_comparison for entity in row.values]))
+            dimension_rows = ""
+            for row in pricing_analysis.dimension_comparison:
+                cells = "".join(
+                    '<td style="padding:10px 14px;border:1px solid #e2e8f0;font-size:13px;vertical-align:top;">'
+                    + esc(row.values.get(entity, "资料不足")) + '</td>' for entity in price_entities)
+                dimension_rows += (
+                    '<tr><th style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;font-size:13px;">'
+                    + esc(row.feature) + cite_sup(row.citations) + '</th>' + cells + '</tr>')
+            dimension_headers = "".join(
+                '<th style="padding:10px 14px;text-align:left;font-size:13px;">' + esc(entity) + '</th>'
+                for entity in price_entities)
+            pricing_html = (
+                '<div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">'
+                '<h2 style="margin:0 0 20px;font-size:20px;color:#1e293b;">💰 定价维度对比</h2>'
+                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">'
+                '<thead><tr style="background:#f8fafc;"><th style="padding:10px 14px;text-align:left;">定价维度</th>'
+                + dimension_headers + '</tr></thead><tbody>' + dimension_rows + '</tbody></table></div>'
+                + ('<p style="margin-top:14px;font-size:13px;color:#475569;white-space:pre-line;">'
+                   + esc(pricing_analysis.pricing_strategy_analysis) + '</p>' if pricing_analysis.pricing_strategy_analysis else '')
+                + ('<div role="note" style="margin-top:12px;font-size:13px;color:#64748b;white-space:pre-line;">'
+                   + esc(pricing_analysis.summary) + '</div>' if pricing_analysis.summary else '')
+                + '</div>')
 
         # ══════════════════════════════════════════════
         # 区块5：市场格局分析

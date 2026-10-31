@@ -386,6 +386,7 @@ class AnalysisQualityPromptIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 "pricing_comparison": [{"competitor": "Dymatize", "free_tier": "Unknown", "paid_tier": "$55", "pricing_model": "One-time retail", "citations": ["price-source"]}],
                 "pricing_strategy_analysis": "Compare equal package sizes", "value_ranking": ["Dymatize"],
                 "summary": "Pricing scope is explicit", "citations": ["price-source"],
+                "dimension_comparison": [],
             }),
             ("market", MarketAnalysis(
                 market_share_data=[MarketShareItem("Dymatize", "Unknown", "No measured share", ["market-source"])],
@@ -424,3 +425,17 @@ class AnalysisQualityPromptIntegrityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(contract["compared_entities"], ["ON", "Dymatize"])
         self.assertEqual(contract["status_legend"]["⚪"], "unknown_evidence")
         self.assertEqual(contract["status_legend"]["❌"], "explicitly_unsupported")
+
+    async def test_pricing_contract_carries_actual_dimensions_and_native_price_text(self):
+        analysis = PricingAnalysis(summary="同一入住日期、房型与取消条件才可比价")
+        analysis.dimension_comparison = [FeatureComparison(
+            "取消条件", {"全季": "资料不足", "酒店B": "提前24小时可取消"})]
+        payloads = await self.capture_payloads(
+            "pricing", analysis, {"酒店B": CompetitorData(name="酒店B")},
+            product_name="全季", sub_dimensions="1. **取消条件**：同日期房型的退订条件",
+        )
+        contract = next(p for p in payloads if p.get("analysis_type") == "pricing")
+        self.assertEqual(contract.get("pricing_dimensions"), ["取消条件"])
+        self.assertEqual(contract.get("compared_entities"), ["全季", "酒店B"])
+        self.assertEqual(contract.get("value_kind"), "native_price_or_terms_text")
+        self.assertEqual(contract.get("unknown_value"), "资料不足")
