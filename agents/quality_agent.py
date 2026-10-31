@@ -15,6 +15,7 @@ from models.domain import (
 )
 from core.prompt_loader import load as load_prompts
 from datetime import datetime
+from dataclasses import asdict
 import config
 import json
 
@@ -394,6 +395,9 @@ class QualityAgent(BaseAgent):
         analysis: ProductAnalysis | PricingAnalysis | MarketAnalysis,
         competitors_data: dict[str, CompetitorData],
         attempt: int = 1,
+        *,
+        target_product_data: CompetitorData | None = None,
+        product_name: str = "",
     ) -> QualityCheckResult:
         """Phase 3 质检：检查分析结果"""
         self._log(f"🔍 质检{analysis_type}分析（第{attempt}次）...")
@@ -406,7 +410,8 @@ class QualityAgent(BaseAgent):
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_analysis_hallucination(
-                analysis_type, analysis, competitors_data
+                analysis_type, analysis, competitors_data,
+                target_product_data=target_product_data, product_name=product_name,
             )
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
@@ -418,7 +423,9 @@ class QualityAgent(BaseAgent):
                 ))
 
         score = self._calculate_score(issues, phase=analysis_type)
-        passed = score >= self.PASS_SCORE
+        passed = score >= self.PASS_SCORE and not any(
+            issue.severity == "critical" for issue in issues
+        )
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -595,7 +602,10 @@ class QualityAgent(BaseAgent):
         analysis_type: str,
         analysis: ProductAnalysis | PricingAnalysis | MarketAnalysis,
         competitors_data: dict[str, CompetitorData],
-    ) -> tuple[list[QualityIssue], str]:
+        *,
+        target_product_data: CompetitorData | None = None,
+        product_name: str = "",
+    ) -> tuple[list[QualityIssue], str, str]:
         """分析结果幻觉检测（LLM）"""
         # 构建采集数据摘要
         data_summary = {}
@@ -605,6 +615,27 @@ class QualityAgent(BaseAgent):
                 "market_share": normalize_text_value(data.market_share)[:200],
                 "strengths": normalize_text_value(data.strengths)[:200],
                 "weaknesses": normalize_text_value(data.weaknesses)[:200],
+            }
+
+        # Target facts are reference context, never an extra expected rival.
+        if target_product_data is not None or product_name:
+            target_reference = {"product_name": product_name, "collected_data": None}
+            if target_product_data is not None:
+                target_reference["product_name"] = product_name or target_product_data.name
+                target_reference["collected_data"] = {
+                    "name": target_product_data.name,
+                    "product_features": [asdict(item) for item in target_product_data.product_features],
+                    "pricing_tiers": [asdict(item) for item in target_product_data.pricing_tiers],
+                    **{
+                        field: normalize_text_value(getattr(target_product_data, field))
+                        for field in CompetitorData.TEXT_FIELDS
+                    },
+                    "citations": [asdict(item) for item in target_product_data.citations],
+                }
+            data_summary = {
+                "competitors": data_summary,
+                "target_reference": target_reference,
+                "reference_scope": "target_reference 是目标产品的采集参考，不属于待覆盖竞品；采集参考不等于独立事实核验。",
             }
 
         # 序列化分析结果

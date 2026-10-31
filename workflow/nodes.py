@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
@@ -681,16 +682,11 @@ class AnalysisGraphNodes:
                 analysis,
                 state["competitors_data"],
                 attempt=attempt,
+                target_product_data=state.get("target_product_data"),
+                product_name=state.get("product_name", ""),
             )
 
         result = await self._retry_node(state, f"check_{analysis_type}_quality", call)
-        # 分数未提升即通过：处于重试态且新分数未高于上一轮，判定为误报通过
-        if (
-            not result.passed
-            and state.get(retry_key, 0) > 0
-            and result.score <= state.get(f"{analysis_type}_prev_score", 0)
-        ):
-            result.passed = True
         # 重试后设置修正率
         if state.get(retry_key, 0) > 0:
             result.correction_count = state.get("analysis_pending_fields", 0)
@@ -717,8 +713,9 @@ class AnalysisGraphNodes:
         for key in ("qa_product", "qa_pricing", "qa_market"):
             result = state.get(key)
             if result and result not in checks:
-                checks.append(result)
-                self.orchestrator.quality_agent.timeline.add_check(result)
+                # Audit attempts must not follow later mutations of live state.
+                checks.append(deepcopy(result))
+                self.orchestrator.quality_agent.timeline.add_check(deepcopy(result))
         timings = self._merge_timing(
             state,
             "qa_analysis",
@@ -767,12 +764,20 @@ class AnalysisGraphNodes:
             key = f"qa_{analysis_type}"
             result = state.get(key)
             if result and not result.passed:
+                # Degradation is a terminal workflow decision, not a new check
+                # or permission to rewrite the failed attempt in the audit.
+                result = deepcopy(result)
                 result.degraded = True
                 updates[key] = result
                 updates["quality_exhausted"][analysis_type] = True
-                await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", analysis_type,
+                self.orchestrator.quality_agent.timeline.terminal_dispositions[analysis_type] = {
+                    "status": "degraded",
+                    "attempt": result.attempt,
+                    "reason": "retry_exhausted",
+                }
+                await self._emit(state, EventType.QA_CHECK_FAILED, "QualityAgent", analysis_type,
                                  progress=0.75,
-                                 message=f"{analysis_type}分析质检降级通过 (分数: {result.score:.0f})",
+                                 message=f"{analysis_type}分析质检未通过，重试已耗尽，继续生成降级报告 (分数: {result.score:.0f})",
                                  data={
                                      "score": result.score,
                                      "passed": result.passed,

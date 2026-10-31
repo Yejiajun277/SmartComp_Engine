@@ -6,7 +6,7 @@ agents/base_agent.py — Agent基类
 """
 
 from abc import ABC, abstractmethod
-from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error, is_last_call_truncated
+from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error
 import config
 import json
 import re
@@ -216,7 +216,7 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
-        truncated = is_last_call_truncated()
+        truncated = bool(self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length")
 
         if text:
             parsed = parse_llm_json(text)
@@ -251,7 +251,7 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
-        truncated = is_last_call_truncated()
+        truncated = bool(self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length")
 
         if text:
             parsed = parse_llm_json(text)

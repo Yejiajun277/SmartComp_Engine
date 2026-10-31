@@ -1,4 +1,5 @@
 import { getQaResultState } from './taskEvents.js';
+import { getTimelineQaResults } from './quality.js';
 
 const PRIORITY_ORDER = new Map([
   ['P0', 0],
@@ -50,7 +51,7 @@ function prioritizeActions(actions) {
 }
 
 export function buildReportOverview(report = {}) {
-  const checks = Array.isArray(report.qa_timeline?.checks) ? report.qa_timeline.checks : [];
+  const checks = getTimelineQaResults(report.qa_timeline);
   const actions = Array.isArray(report.action_plan) ? report.action_plan : [];
 
   return {

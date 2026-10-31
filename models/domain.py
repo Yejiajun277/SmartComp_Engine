@@ -319,6 +319,8 @@ class QATimeline:
     checks: list[QualityCheckResult] = field(default_factory=list)
     max_retries: int = 2
     total_retries: int = 0
+    # Terminal workflow decisions are separate from immutable check attempts.
+    terminal_dispositions: dict[str, dict] = field(default_factory=dict)
 
     def add_check(self, result: QualityCheckResult):
         self.checks.append(result)
