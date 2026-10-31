@@ -15,6 +15,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from agents.quality_agent import QualityAgent
+from core.collection_retry import collection_retry_mode
 import config
 from models.domain import (
     MarketAnalysis,
@@ -422,7 +423,16 @@ class AnalysisGraphNodes:
         )
         # 计算本轮缺失字段总数（用于修正率）
         pending_count = sum(len(fields) for fields in missing_fields.values())
-        if missing_fields:
+        repair_mode = collection_retry_mode(state["qa_collection"], missing_fields)
+        if repair_mode == "recheck":
+            return {
+                "collection_supplemented": True,
+                "collection_feedback": "",
+                "latest_feedback": "语义质检未完成，保留原始采集快照重新检查。",
+                "collection_retry_count": state.get("collection_retry_count", 0) + 1,
+                "collection_pending_fields": 0,
+            }
+        if repair_mode == "supplement":
             # 定向补充搜索：仅针对缺失/截断字段补搜，不整体重跑采集
             supplemented = await collection_agent.async_supplement_missing_fields(
                 state["product_name"],

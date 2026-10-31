@@ -20,6 +20,7 @@ from models.domain import (
     StrategyReport, QualityCheckResult
 )
 from core.artifact_store import ArtifactStore
+from core.collection_retry import collection_retry_mode
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
 from agents.dimension_agent import DimensionAgent
@@ -223,7 +224,10 @@ class Orchestrator:
                     # 提取缺失字段，做针对性补充搜索
                     missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
 
-                    if missing_fields:
+                    repair_mode = collection_retry_mode(qa_collection, missing_fields)
+                    if repair_mode == "recheck":
+                        print("  ⚠️ 语义质检未完成，保留原始采集快照重新检查")
+                    elif repair_mode == "supplement":
                         total_missing = sum(len(fs) for fs in missing_fields.values())
                         affected = len(missing_fields)
                         print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），{affected}个竞品共{total_missing}个字段缺失，执行针对性补充搜索")

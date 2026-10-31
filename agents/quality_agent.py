@@ -898,6 +898,9 @@ class QualityAgent(BaseAgent):
 
     def build_feedback(self, result: QualityCheckResult) -> str:
         """根据质检结果构造给被打回 Agent 的反馈消息"""
+        if result.phase == "collection":
+            from core.collection_retry import collection_feedback
+            return collection_feedback(result)
         if config.ENABLE_LLM:
             prompt = self._prompt_build_feedback.format(
                 qa_result_json=json.dumps({
@@ -923,6 +926,9 @@ class QualityAgent(BaseAgent):
 
     async def async_build_feedback(self, result: QualityCheckResult) -> str:
         """根据质检结果异步构造给被打回 Agent 的反馈消息"""
+        if result.phase == "collection":
+            from core.collection_retry import collection_feedback
+            return collection_feedback(result)
         if config.ENABLE_LLM:
             prompt = self._prompt_build_feedback.format(
                 qa_result_json=json.dumps({
@@ -1076,7 +1082,8 @@ class QualityAgent(BaseAgent):
         issues = []
         citation_id_set = {c.id for c in citations}
 
-        # 只在有输出引用 ID 时才检查孤立引用（避免空列表导致全部标记为孤立）
+        # The collection catalog includes unused search candidates. It is not a
+        # promise to cite every result; forcing that would invent support.
         if citation_ids_in_output:
             # 输出中引用的 ID 在 citations 列表中不存在
             for cid in citation_ids_in_output:
@@ -1086,17 +1093,6 @@ class QualityAgent(BaseAgent):
                         field=f"citations.{cid}",
                         description=f"引用了不存在的来源 ID: '{cid}'",
                         suggestion="移除无效引用或补充来源数据",
-                    ))
-
-            # citations 中的引用在输出中从未被使用
-            used_set = set(citation_ids_in_output)
-            for c in citations:
-                if c.id not in used_set:
-                    issues.append(QualityIssue(
-                        severity="warning", category="citation",
-                        field=f"citations.{c.id}",
-                        description=f"引用来源 '{c.id}' 未被使用（孤立引用）",
-                        suggestion="在分析中引用该来源或移除冗余数据",
                     ))
 
         # 始终检查引用信息完整性
