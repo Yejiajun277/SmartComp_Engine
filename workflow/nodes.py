@@ -15,7 +15,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from agents.quality_agent import QualityAgent
-from core.collection_retry import collection_retry_mode
+from core.collection_retry import repair_collection
 import config
 from models.domain import (
     MarketAnalysis,
@@ -417,47 +417,20 @@ class AnalysisGraphNodes:
                              "retry_count": state.get("collection_retry_count", 0) + 1,
                          })
         quality_agent = self.orchestrator.quality_agent
-        collection_agent = self.orchestrator.collection_agent
         missing_fields = quality_agent.extract_missing_fields(
             state["qa_collection"], state.get("competitors_data")
         )
         # 计算本轮缺失字段总数（用于修正率）
         pending_count = sum(len(fields) for fields in missing_fields.values())
-        repair_mode = collection_retry_mode(state["qa_collection"], missing_fields)
-        if repair_mode == "recheck":
-            return {
-                "collection_supplemented": True,
-                "collection_feedback": "",
-                "latest_feedback": "语义质检未完成，保留原始采集快照重新检查。",
-                "collection_retry_count": state.get("collection_retry_count", 0) + 1,
-                "collection_pending_fields": 0,
-            }
-        if repair_mode == "supplement":
-            # 定向补充搜索：仅针对缺失/截断字段补搜，不整体重跑采集
-            supplemented = await collection_agent.async_supplement_missing_fields(
-                state["product_name"],
-                state["competitors_data"],
-                missing_fields,
-            )
-            search_texts = collection_agent.get_search_texts() or state.get(
-                "original_search_texts", {}
-            )
-            feedback = quality_agent.build_supplement_feedback(missing_fields)
-            return {
-                "competitors_data": supplemented,
-                "original_search_texts": search_texts,
-                "collection_supplemented": True,
-                "collection_feedback": "",
-                "latest_feedback": feedback,
-                "collection_retry_count": state.get("collection_retry_count", 0) + 1,
-                "collection_pending_fields": pending_count,
-            }
-
-        # 无缺失字段：保持整体重跑路径
-        feedback = await quality_agent.async_build_feedback(state["qa_collection"])
+        data, search_texts, feedback = await repair_collection(
+            self.orchestrator, state["product_name"], state["product_description"],
+            state["competitors_data"], state.get("original_search_texts", {}),
+            state["qa_collection"], state.get("collection_retry_count", 0) + 1, missing_fields)
         return {
-            "collection_supplemented": False,
-            "collection_feedback": feedback,
+            "competitors_data": data,
+            "original_search_texts": search_texts,
+            "collection_supplemented": True,
+            "collection_feedback": "",
             "latest_feedback": feedback,
             "collection_retry_count": state.get("collection_retry_count", 0) + 1,
             "collection_pending_fields": pending_count,

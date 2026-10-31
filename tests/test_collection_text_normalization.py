@@ -97,6 +97,7 @@ def make_offline_collection_agent(payload, *, truncated=False, supplement_payloa
     agent.ask_llm_json = (
         lambda *_args, **_kwargs: dict(supplement_payload or payload)
     )
+    agent.ask_llm_json_with_reason = lambda *args, **kwargs: (agent.ask_llm_json(*args, **kwargs), "success")
     agent._supplement_pricing = (
         lambda _entity, _product, pricing_tiers, _citations: (pricing_tiers, [])
     )
@@ -110,6 +111,10 @@ def make_offline_collection_agent(payload, *, truncated=False, supplement_payloa
     async def async_pricing(_entity, _product, pricing_tiers, _citations):
         return pricing_tiers, []
 
+    async def async_supplement_with_reason(*args, **kwargs):
+        return await async_supplement(*args, **kwargs), "success"
+
+    agent.async_ask_llm_json_with_reason = async_supplement_with_reason
     agent.async_ask_llm_json_with_truncation_check = async_initial
     agent.async_ask_llm_json = async_supplement
     agent._async_supplement_pricing = async_pricing
@@ -223,7 +228,7 @@ class CollectionAgentIngressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(market_share, "estimate：20%；source：industry report")
         self.assertEqual(citations, [])
 
-    def test_sync_qa_supplement_normalizes_object_text_value(self):
+    def test_sync_qa_supplement_rejects_object_text_without_mutating_snapshot(self):
         agent = make_offline_collection_agent(
             {},
             supplement_payload={
@@ -239,10 +244,10 @@ class CollectionAgentIngressTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             result["Competitor"].channels,
-            "direct：website；partner：delivery、retail",
+            "",
         )
 
-    async def test_async_qa_supplement_normalizes_object_text_value(self):
+    async def test_async_qa_supplement_rejects_object_text_without_mutating_snapshot(self):
         agent = make_offline_collection_agent(
             {},
             supplement_payload={
@@ -258,7 +263,7 @@ class CollectionAgentIngressTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             result["Competitor"].strengths,
-            "brand：strong；network：urban、regional",
+            "",
         )
 
 

@@ -9,7 +9,7 @@ import subprocess
 import time
 import urllib.request
 
-stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-sources')
+stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-repair')
 source = Path('/opt/apps/smartcomp')
 state = json.loads((stage / 'promotion-state.json').read_text())
 manifest_path = stage / 'candidate/candidate-manifest.json'
@@ -40,7 +40,7 @@ require(city['Image'] == state['city_before']['image'] and
         fetch(18080, '/api/health') == {'status': 'ok'}, 'City changed')
 record_path = stage / 'workers-state.json'
 require(not record_path.exists(), 'Worker record exists; refuse replacement')
-workers = [('generalization-vacuum-sources', 18082), ('generalization-hotel-sources', 18083)]
+workers = [('generalization-vacuum-repair', 18082), ('generalization-hotel-repair', 18083)]
 for name, _ in workers:
     require(subprocess.run(['sudo', '-n', 'docker', 'container', 'inspect', name],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0,

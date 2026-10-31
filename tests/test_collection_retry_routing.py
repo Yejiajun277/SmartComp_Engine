@@ -37,8 +37,9 @@ class CollectionRetryRoutingTests(unittest.IsolatedAsyncioTestCase):
         orch.quality_agent = MixedCollectionIssues()
         with patch.object(config, "SKIP_QA", False):
             await run_graph_quietly(orch, "Category-specific product", 2)
-        self.assertEqual(len(orch.collection_agent.run_feedbacks), 2)
-        retry_feedback = orch.collection_agent.run_feedbacks[-1]
+        self.assertEqual(orch.collection_agent.run_feedbacks, [""])
+        self.assertEqual(len(orch.collection_agent.reextract_feedbacks), 1)
+        retry_feedback = orch.collection_agent.reextract_feedbacks[-1]
         for field in ("Alpha.weaknesses", "product_features[*].citations",
                       "Alpha.pricing_tiers[4].price", "Beta.market_share"):
             self.assertIn(field, retry_feedback)
@@ -48,8 +49,9 @@ class CollectionRetryRoutingTests(unittest.IsolatedAsyncioTestCase):
         orch.quality_agent = MixedCollectionIssues()
         with patch.object(config, "SKIP_QA", False):
             await run_quietly(orch, "Category-specific product", 2)
-        self.assertEqual(len(orch.collection_agent.run_feedbacks), 2)
-        retry_feedback = orch.collection_agent.run_feedbacks[-1]
+        self.assertEqual(orch.collection_agent.run_feedbacks, [""])
+        self.assertEqual(len(orch.collection_agent.reextract_feedbacks), 1)
+        retry_feedback = orch.collection_agent.reextract_feedbacks[-1]
         self.assertIn("product_features[*].citations", retry_feedback)
         self.assertIn("Alpha.pricing_tiers[4].price", retry_feedback)
         self.assertIn("Beta.market_share", retry_feedback)

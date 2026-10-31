@@ -232,8 +232,10 @@ class CollectionCitationBindingTests(unittest.IsolatedAsyncioTestCase):
                     else:
                         agent.supplement_missing_fields("Target", data, {"Rival": ["strengths"]})
                 self.assertEqual(data["Rival"].strengths, "")
-                self.assertEqual({c.id for c in data["Rival"].citations},
-                                 {"Rival:q0:r0", "Rival:sup_strengths_0:r1", "Rival:sup_strengths_1:r2"})
+                self.assertEqual({c.id for c in data["Rival"].citations}, {"Rival:q0:r0"})
+                acquired = agent.get_repair_outcomes()[0]["acquired_citations"]
+                self.assertEqual({c["id"] for c in acquired},
+                                 {"Rival:sup_strengths_0:r1", "Rival:sup_strengths_1:r2"})
                 self.assertEqual(data["Rival"].product_features, [])
 
     async def test_invalid_array_repair_cannot_replace_typed_lists_with_text(self):

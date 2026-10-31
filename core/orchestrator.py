@@ -20,7 +20,7 @@ from models.domain import (
     StrategyReport, QualityCheckResult
 )
 from core.artifact_store import ArtifactStore
-from core.collection_retry import collection_retry_mode
+from core.collection_retry import repair_collection
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
 from agents.dimension_agent import DimensionAgent
@@ -224,25 +224,10 @@ class Orchestrator:
                     # 提取缺失字段，做针对性补充搜索
                     missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
 
-                    repair_mode = collection_retry_mode(qa_collection, missing_fields)
-                    if repair_mode == "recheck":
-                        print("  ⚠️ 语义质检未完成，保留原始采集快照重新检查")
-                    elif repair_mode == "supplement":
-                        total_missing = sum(len(fs) for fs in missing_fields.values())
-                        affected = len(missing_fields)
-                        print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），{affected}个竞品共{total_missing}个字段缺失，执行针对性补充搜索")
-                        competitors_data = self.collection_agent.supplement_missing_fields(
-                            product_name, competitors_data, missing_fields
-                        )
-                        original_search_texts = self.collection_agent.get_search_texts()
-                    else:
-                        # 没有可补充的字段（可能是幻觉问题），用 LLM 反馈整体重做
-                        print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），存在非字段缺失问题，整体重做")
-                        feedback = self.quality_agent.build_feedback(qa_collection)
-                        competitors_data = await self.collection_agent.run(
-                            product_description, competitor_list, feedback=feedback
-                        )
-                        original_search_texts = self.collection_agent.get_search_texts()
+                    competitors_data, original_search_texts, _ = await repair_collection(
+                        self, product_name, product_description, competitors_data,
+                        original_search_texts, qa_collection, qa_attempt, missing_fields)
+
                 else:
                     print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
                     qa_collection.degraded = True
