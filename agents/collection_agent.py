@@ -137,8 +137,20 @@ class CollectionAgent(BaseAgent):
                 if not config.ENABLE_LLM:
                     outcome["reason"] = "llm_disabled"
                 continue
-            context, visible_ids = self._source_context(original.citations, source_text)
+            # QA sees these complete saved snippets. A repair must not lose the
+            # same evidence behind the initial collection's 16k/700 view limits.
+            context, visible_ids = self._source_context(
+                original.citations, source_text, max_chars=None, excerpt_chars=None)
+            if original.citations:
+                context += "\n### 当前实体完整保存的原始搜索文本（非新搜索）\n" + source_text
             prompt = self._repair_prompt(name, fields, context, feedback)
+            previous = asdict(original)
+            prompt += ("\n### 待修复提取快照（背景，不是来源证据）\n"
+                       + json.dumps({field: previous[field] for field in fields}, ensure_ascii=False, indent=2)
+                       + "\n只修复质检指出的问题或校正上述已有事实的范围和引用。"
+                         "未指出问题的字段和条目保持原样；不新增无关功能、报价或评价，"
+                         "不得因为看到更多原文就扩写整份采集。旧快照中的断言不是证据，"
+                         "原断言不受来源支持时可以撤回或保留未知，不能把背景内容当作来源补证。")
             prompt += "\n来源来自已保存快照，本轮没有重新联网搜索。"
             prompt += f"\n### 当前产品背景（非来源证据）\n{product_name}\n{product_description}"
             result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=8192, temperature=0)
@@ -166,14 +178,16 @@ class CollectionAgent(BaseAgent):
 
     @staticmethod
     def _source_context(citations: list[Citation], fallback_text: str,
-                        max_chars: int = 16000) -> tuple[str, set[str]]:
+                        max_chars: int | None = 16000, *,
+                        excerpt_chars: int | None = 700) -> tuple[str, set[str]]:
         """Bound whole source records, round-robin across searches, with real IDs."""
         heading = ("以下是本轮真实来源ID与原文摘录。只引用已显示的ID，不根据平台名猜ID。"
                    "excerpt_truncated=true只表示本次可见摘录被截短，不能据此断言原始全文未披露。"
                    "未显示的单位、条件或事实保持未知，描述为本次摘录未显示，不要写成原文没有。\n")
         if not citations:
             notice = "没有可绑定的来源ID；搜索文字仅供提取，不能伪造引用。\n"
-            return notice + fallback_text[:max(0, max_chars - len(notice))], set()
+            return notice + (fallback_text if max_chars is None
+                             else fallback_text[:max(0, max_chars - len(notice))]), set()
         groups = {}
         for citation in citations:
             groups.setdefault(citation.query, []).append(citation)
@@ -184,11 +198,12 @@ class CollectionAgent(BaseAgent):
                 if citation is None or citation.id in visible_ids:
                     continue
                 snippet = citation.snippet or ""
+                excerpt = snippet if excerpt_chars is None else snippet[:excerpt_chars]
                 record = json.dumps({
                     "id": citation.id, "title": citation.title, "url": citation.url,
-                    "excerpt": snippet[:700], "excerpt_truncated": len(snippet) > 700,
+                    "excerpt": excerpt, "excerpt_truncated": len(excerpt) < len(snippet),
                 }, ensure_ascii=False)
-                if used + len(record) + 1 > max_chars:
+                if max_chars is not None and used + len(record) + 1 > max_chars:
                     return heading + "\n".join(rows), visible_ids
                 rows.append(record)
                 visible_ids.add(citation.id)
