@@ -12,6 +12,7 @@ from agents.base_agent import BaseAgent
 from models.domain import CompetitorInfo, CompetitorList
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
+from core.competitor_search_scope import sanitize_scope
 import config
 import json
 
@@ -149,6 +150,7 @@ class DiscoveryAgent(BaseAgent):
                 product_description=product_description,
                 search_results=all_text[:6000],  # 限制长度
                 max_competitors=max_competitors,
+                search_keywords_used=json.dumps([sr.get("query", "") for sr in search_results], ensure_ascii=False),
             )
             result = await self.async_ask_llm_json(prompt, max_tokens=4096)
             if result and "competitors" in result:
@@ -164,6 +166,9 @@ class DiscoveryAgent(BaseAgent):
                     product_category=result.get("product_category", ""),
                     competitors=competitors[:max_competitors],
                     search_keywords_used=[sr.get("query", "") for sr in search_results],
+                    search_scope=sanitize_scope(result.get("search_scope", []), product_description,
+                        [sr.get("query", "") for sr in search_results],
+                        product_name=result.get("product_name", product_description)),
                 )
             else:
                 self._log("   LLM筛选失败，降级到规则引擎")

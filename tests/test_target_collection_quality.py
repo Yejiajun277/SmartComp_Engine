@@ -41,7 +41,7 @@ class ResettingTargetCollection(FakeCollectionAgent):
         self.fail_repair = fail_repair
         self.repair_inputs = []
 
-    def collect_target_product(self, product_description, product_name, feedback=""):
+    def collect_target_product(self, product_description, product_name, feedback="", search_scope=None):
         self.target_calls.append((product_description, product_name, feedback))
         self._search_texts = {product_name: TARGET_SOURCE}
         return entity(product_name)
@@ -51,7 +51,7 @@ class ResettingTargetCollection(FakeCollectionAgent):
         self._search_texts = {c.name: "Rival's original saved source." for c in competitors.competitors}
         return {c.name: entity(c.name) for c in competitors.competitors}
 
-    async def async_reextract_saved_sources(self, product_name, description, data, sources, feedback=""):
+    async def async_reextract_saved_sources(self, product_name, description, data, sources, feedback="", *, repair_plan=None):
         self.repair_inputs.append(deepcopy((data, sources)))
         self._repair_entities = list(data)
         data[product_name].product_features[0].description = FIXED
@@ -217,7 +217,7 @@ class TargetCollectionIntegrityTests(unittest.IsolatedAsyncioTestCase):
         original = {"Target": entity("Target")}
         sources = {"Target": TARGET_SOURCE}
 
-        async def cancel(*args):
+        async def cancel(*args, **kwargs):
             orch.collection_agent._search_texts = {"Target": "Partial source cache"}
             raise asyncio.CancelledError()
         orch.collection_agent.async_reextract_saved_sources = cancel
@@ -302,7 +302,7 @@ class TargetCollectionIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 before = deepcopy(original)
                 saved = capture(orch)
 
-                async def corrupt(*args):
+                async def corrupt(*args, **kwargs):
                     data = deepcopy(args[2])
                     if failure == "drop_target":
                         data.pop("Target")
@@ -326,7 +326,7 @@ class TargetCollectionIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 orch.quality_agent = QualityAgent()
                 received = []
 
-                async def reextract(product, description, data, sources, feedback):
+                async def reextract(product, description, data, sources, feedback, *, repair_plan=None):
                     received.append((set(data), feedback))
                     orch.collection_agent._repair_entities = list(data)
                     return deepcopy(data)

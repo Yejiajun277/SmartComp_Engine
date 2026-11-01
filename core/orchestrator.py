@@ -176,8 +176,10 @@ class Orchestrator:
 
         target_collection_start = time.time()
         validate_collection_names(competitor_list)
+        search_scope = getattr(competitor_list, "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
         target_product_data = self.collection_agent.collect_target_product(
-            product_description, competitor_list.product_name
+            product_description, competitor_list.product_name, **scope_options
         )
         self.timings["target_collection"] = time.time() - target_collection_start
         target_search_texts = target_source_snapshot(self.collection_agent.get_search_texts(),
@@ -240,7 +242,8 @@ class Orchestrator:
                     repaired, original_search_texts, _ = await repair_collection(
                         self, product_name, product_description, entities,
                         original_search_texts, qa_collection, qa_attempt, missing_fields,
-                        target_name=(product_name or target_product_data.name) if target_product_data is not None else None)
+                        target_name=(product_name or target_product_data.name) if target_product_data is not None else None,
+                        **scope_options)
                     competitors_data, target_product_data = split_collection_entities(
                         repaired, target_product_data, product_name)
                     target_search_texts = target_source_snapshot(original_search_texts, target_product_data, product_name)

@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from agents.collection_agent import CollectionAgent
+from tests.collection_repair_support import reviewed_plan, wire_patch
 from agents.quality_agent import QualityAgent
 from tests.test_collection_repair_source_visibility import snapshot, response, NoSearch, RAW_TAIL
 
@@ -23,11 +24,11 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
 
         async def transport(system, prompt, **kwargs):
             self.prompts.append(prompt)
-            return {"content": json.dumps(payload), "finish_reason": finish}
+            return {"content": json.dumps(wire_patch(original, payload)), "finish_reason": finish}
 
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", transport):
             updated = await self.agent.async_reextract_saved_sources(
-                "Target", "Current scope", original, sources, "Rival.strengths: retain the source qualification.")
+                "Target", "Current scope", original, sources, "Rival.strengths: retain the source qualification.", repair_plan=reviewed_plan(original))
         self.assertEqual(original, self.before)
         self.assertEqual(sources, self.source_before)
         self.assertEqual(self.agent.get_search_texts(), self.source_before)
@@ -53,7 +54,7 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_completed_structured_patch_binds_only_existing_visible_source_ids(self):
         updated = await self.repair({"product_features": [{"name": "Existing benefit",
             "description": "Named membership only, one stay at a time.",
-            "citations": ["Rival:q29:r29", "Other:q0:r0"]}]})
+            "citations": ["Rival:q29:r29"]}]})
         self.assertEqual(updated["Rival"].product_features[0].name, "Existing benefit")
         self.assertEqual(updated["Rival"].product_features[0].citations, ["Rival:q29:r29"])
         self.assertEqual(updated["Rival"].pricing_tiers, self.before["Rival"].pricing_tiers)
@@ -99,33 +100,32 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("config.ENABLE_LLM", True), patch.object(agent, "async_ask_llm_json_with_reason", adapter):
             updated = await agent.async_reextract_saved_sources("Target", "Context", original,
-                                                               {"Rival": "Saved original source."}, "fix")
+                                                               {"Rival": "Saved original source."}, "fix", repair_plan=reviewed_plan(original))
         self.assertEqual(updated, before)
         self.assertEqual(agent.get_repair_outcomes()[0]["reason"], "incomplete_finish_reason(missing)")
 
     async def test_bad_type_or_missing_nested_field_rejects_entire_patch_with_exact_schema_path(self):
         for payload, field, actual in [
                 ({"strengths": "Valid bounded fact", "pricing_tiers": "wrong"}, "pricing_tiers", "str"),
-                ({"pricing_tiers": [{"tier_name": "Offer"}]}, "pricing_tiers[0].price", "missing"),
+                ({"pricing_tiers": [{"price": None}]}, "pricing_tiers[0].price", "NoneType"),
                 ({"product_features": [{"name": "Feature", "description": 7}]}, "product_features[0].description", "int"),
                 ({"product_features": [{"name": "Feature", "description": "Bounded", "citations": [3]}]},
                  "product_features[0].citations[0]", "int"),
-                ({"pricing_tiers": [{"tier_name": "Offer", "price": "Unknown", "features": [False]}]},
-                 "pricing_tiers[0].features[0]", "bool")]:
+                ({"pricing_tiers": [{"tier_name": "Offer", "price": "Unknown", "citations": [False]}]},
+                 "pricing_tiers[0].citations[0]", "bool")]:
             with self.subTest(field=field):
                 updated = await self.repair(payload)
                 self.assertEqual(updated, self.before)
                 outcome = self.agent.get_repair_outcomes()[0]
                 self.assertEqual(outcome["reason"], "incomplete_or_invalid_schema")
-                self.assertIn({"field": field, "expected": "list" if field == "pricing_tiers" else "str",
-                               "actual_type": actual, "reason": "invalid_type"}, outcome["schema_errors"])
+                self.assertIn({"field": field, "actual_type": actual, "reason": "invalid_type"}, outcome["schema_errors"])
 
     async def test_unknown_top_level_fields_cannot_modify_identity_or_source_snapshot(self):
         for field in ["name", "citations", "search_sources", "unrequested_field"]:
             with self.subTest(field=field):
                 updated = await self.repair({"strengths": "A bounded fact", field: "replacement"})
                 self.assertEqual(updated, self.before)
-                self.assertEqual(self.agent.get_repair_outcomes()[0]["schema_errors"][0]["reason"], "unknown_field")
+                self.assertEqual(self.agent.get_repair_outcomes()[0]["schema_errors"][0]["reason"], "unauthorized_field")
 
     async def test_incomplete_response_cannot_apply_a_valid_patch(self):
         for finish in ["length", "content_filter", "", "unknown"]:

@@ -124,6 +124,7 @@ class CompetitorList:
     product_category: str = ""              # 产品类别
     competitors: list[CompetitorInfo] = field(default_factory=list)
     search_keywords_used: list[str] = field(default_factory=list)
+    search_scope: list[str] = field(default_factory=list)  # 调研限定，不是事实证据
 
 
 @dataclass

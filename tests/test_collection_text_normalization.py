@@ -99,7 +99,7 @@ def make_offline_collection_agent(payload, *, truncated=False, supplement_payloa
     )
     agent.ask_llm_json_with_reason = lambda *args, **kwargs: (agent.ask_llm_json(*args, **kwargs), "success")
     agent._supplement_pricing = (
-        lambda _entity, _product, pricing_tiers, _citations: (pricing_tiers, [])
+        lambda _entity, _product, pricing_tiers, _citations, search_scope=None: (pricing_tiers, [])
     )
 
     async def async_initial(*_args, **_kwargs):
@@ -108,7 +108,7 @@ def make_offline_collection_agent(payload, *, truncated=False, supplement_payloa
     async def async_supplement(*_args, **_kwargs):
         return dict(supplement_payload or payload)
 
-    async def async_pricing(_entity, _product, pricing_tiers, _citations):
+    async def async_pricing(_entity, _product, pricing_tiers, _citations, search_scope=None):
         return pricing_tiers, []
 
     async def async_supplement_with_reason(*args, **kwargs):

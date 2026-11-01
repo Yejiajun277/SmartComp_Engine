@@ -236,18 +236,18 @@ class FakeCollectionAgent:
         self.llm_logs = []
         self._search_texts = {"CompA": "source text A", "CompB": "source text B"}
 
-    def collect_target_product(self, product_description, product_name, feedback=""):
+    def collect_target_product(self, product_description, product_name, feedback="", search_scope=None):
         self.target_calls.append((product_description, product_name, feedback))
         return target_data()
 
-    async def async_collect_target_product(self, product_description, product_name, feedback=""):
+    async def async_collect_target_product(self, product_description, product_name, feedback="", search_scope=None):
         return self.collect_target_product(product_description, product_name, feedback)
 
     async def run(self, product_description, competitors, feedback=""):
         self.run_feedbacks.append(feedback)
         return {c.name: competitor_data(c.name) for c in competitors.competitors}
 
-    async def async_reextract_saved_sources(self, product_name, product_description, data, sources, feedback=""):
+    async def async_reextract_saved_sources(self, product_name, product_description, data, sources, feedback="", *, repair_plan=None):
         from copy import deepcopy
         self.reextract_feedbacks.append(feedback)
         self._repair_entities = list(data)
@@ -263,12 +263,12 @@ class FakeCollectionAgent:
     def get_search_texts(self):
         return dict(self._search_texts)
 
-    def supplement_missing_fields(self, product_name, competitors_data, missing_fields):
+    def supplement_missing_fields(self, product_name, competitors_data, missing_fields, search_scope=None):
         self.supplement_calls.append((product_name, dict(missing_fields)))
         self._repair_entities = list(missing_fields)
         return competitors_data
 
-    async def async_supplement_missing_fields(self, product_name, competitors_data, missing_fields):
+    async def async_supplement_missing_fields(self, product_name, competitors_data, missing_fields, search_scope=None):
         return self.supplement_missing_fields(product_name, competitors_data, missing_fields)
 
 

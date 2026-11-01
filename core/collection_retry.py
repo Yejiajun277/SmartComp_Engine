@@ -8,6 +8,7 @@ import hashlib
 import unicodedata
 
 from core.artifact_store import to_jsonable
+from core.collection_repair_plan import build_collection_repair_plan
 
 
 def _identity(name):
@@ -146,7 +147,7 @@ def source_fingerprint(data, source_texts):
 
 
 async def repair_collection(orchestrator, product_name, product_description, data,
-                            source_texts, qa_result, attempt, missing_fields, *, target_name=None):
+                            source_texts, qa_result, attempt, missing_fields, *, target_name=None, search_scope=None):
     """Archive first, then repair staged facts; QA remains the only acceptance gate."""
     mode = collection_retry_mode(qa_result, missing_fields, data)
     if mode == "supplement" and target_name in missing_fields:
@@ -182,17 +183,20 @@ async def repair_collection(orchestrator, product_name, product_description, dat
             audit.update(status="not_attempted", reason="qa_incomplete_recheck_same_snapshot")
         elif mode == "supplement":
             result_data = await agent.async_supplement_missing_fields(
-                product_name, deepcopy(before_data), missing_fields)
+                product_name, deepcopy(before_data), missing_fields, search_scope=search_scope)
             result_sources = {**before_sources, **agent.get_search_texts()}
         else:
             selected = (completed_collection_repairs(before_data, qa_result)
                         if qa_result.hallucination_status == "failed"
                         else affected_collection_entities(before_data, qa_result.issues))
             audit["repair_entities"] = list(selected)
+            repair_plan = build_collection_repair_plan(selected, qa_result.issues)
+            audit["repair_plan"] = repair_plan
             if qa_result.hallucination_status == "failed":
                 audit["incomplete_review_preserved"] = True
             repaired = await agent.async_reextract_saved_sources(
-                product_name, product_description, deepcopy(selected), deepcopy(before_sources), feedback)
+                product_name, product_description, deepcopy(selected), deepcopy(before_sources), feedback,
+                repair_plan=repair_plan)
             if set(repaired) != set(selected):
                 raise ValueError("Collection repair changed target/rival identities")
             result_data = {**before_data, **repaired}

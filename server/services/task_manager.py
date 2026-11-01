@@ -373,6 +373,10 @@ class TaskManager:
                             "duration_ms", "max_tokens",
                         )},
                         **{k: log_entry.get(k, 0.0) for k in ("temperature",)},
+                        **{k: log_entry.get(k) for k in (
+                            "cached_tokens", "uncached_tokens", "reasoning_tokens", "content_chars",
+                            "thinking", "max_completion_tokens", "requested_temperature",
+                        )},
                         "success": log_entry.get("success", True),
                     })
                     # fire-and-forget 事件发射（不阻塞 Agent 执行）
@@ -565,6 +569,10 @@ def _collect_llm_logs(orchestrator) -> list[dict]:
                     "finish_reason": log.get("finish_reason", ""),
                     "temperature": log.get("temperature", 0.0),
                     "max_tokens": log.get("max_tokens", 0),
+                    **{key: log.get(key) for key in (
+                        "cached_tokens", "uncached_tokens", "reasoning_tokens", "content_chars",
+                        "thinking", "max_completion_tokens", "requested_temperature",
+                    )},
                     "success": log.get("success", True),
                     "parse_error": log.get("parse_error", ""),
                 })

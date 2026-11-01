@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from agents.collection_agent import CollectionAgent
+from tests.collection_repair_support import reviewed_plan, wire_patch
 from core.artifact_store import to_jsonable
 from core.collection_retry import collection_retry_mode, repair_collection
 from models.domain import Citation, CompetitorData, FeatureItem, PricingTier, QualityCheckResult, QualityIssue
@@ -54,10 +55,14 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
         sources = {"Rival": "Original source snapshot " * 1200}
         response = payload()
         response["market_share"] = ""  # Explicitly remove an unsupported scope claim.
+        for field in ("product_features", "pricing_tiers"):
+            response[field][0]["citations"] = ["Rival:q0:r0"]
+        response["pricing_tiers"][0]["features"] = list(original["Rival"].pricing_tiers[0].features)
+        response = wire_patch(original, response)
         sync_call, async_call = self.transport(response)
         feedback = "ALL_ISSUES_BEGIN " + "scope condition; " * 1200 + " ALL_ISSUES_END"
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", async_call):
-            updated = await agent.async_reextract_saved_sources("Target", "Product context", original, sources, feedback)
+            updated = await agent.async_reextract_saved_sources("Target", "Product context", original, sources, feedback, repair_plan=reviewed_plan(original))
         self.assertEqual(agent.search_client.queries, [])
         self.assertIn("ALL_ISSUES_END", self.requests[0])
         self.assertIn("Rival:q0:r0", self.requests[0])
@@ -85,7 +90,7 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
                 sources = {"Rival": "Existing real source."}
                 _, async_call = self.transport(response, finish)
                 with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", async_call):
-                    updated = await agent.async_reextract_saved_sources("Target", "Context", original, sources, "fix scope")
+                    updated = await agent.async_reextract_saved_sources("Target", "Context", original, sources, "fix scope", repair_plan=reviewed_plan(original))
                 self.assertEqual(updated, before)
                 self.assertEqual(original, before)
                 self.assertEqual(agent.get_search_texts(), sources)
@@ -107,7 +112,7 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
                          patch("agents.base_agent.async_llm_call", async_call):
                         if repair == "saved":
                             updated = await agent.async_reextract_saved_sources(
-                                "Target", "Context", original, {"Rival": "Original source."}, "fix")
+                                "Target", "Context", original, {"Rival": "Original source."}, "fix", repair_plan=reviewed_plan(original))
                         elif repair == "sync_supplement":
                             updated = agent.supplement_missing_fields("Target", original, {"Rival": ["market_share"]})
                         else:
@@ -140,7 +145,7 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
         _, async_call = self.transport(response)
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", async_call):
             updated = await agent.async_reextract_saved_sources("Target", "Context", original,
-                                                               {"Rival": "Original source."}, "fix")
+                                                               {"Rival": "Original source."}, "fix", repair_plan=reviewed_plan(original))
         self.assertEqual(updated, original)
         self.assertEqual(agent.get_repair_outcomes()[0]["status"], "failed")
 
@@ -150,7 +155,7 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
         original = {"Rival": CompetitorData("Rival", strengths="Unreviewed old claim.")}
         _, async_call = self.transport(payload())
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", async_call):
-            updated = await agent.async_reextract_saved_sources("Target", "Context", original, {}, "fix")
+            updated = await agent.async_reextract_saved_sources("Target", "Context", original, {}, "fix", repair_plan=reviewed_plan(original))
         self.assertEqual(updated, original)
         self.assertEqual(self.requests, [])
         self.assertEqual(agent.search_client.queries, [])
@@ -200,7 +205,7 @@ class RepairObserverCollection(FakeCollectionAgent):
         self._search_texts = {name: ("Full original evidence " * 1200 + " FULL_SOURCE_TAIL")
                               for name in ("CompA", "CompB")}
 
-    async def async_reextract_saved_sources(self, product_name, product_description, data, sources, feedback):
+    async def async_reextract_saved_sources(self, product_name, product_description, data, sources, feedback, *, repair_plan=None):
         self.before_repair()
         self.reextract_feedbacks.append(feedback)
         return deepcopy(data)

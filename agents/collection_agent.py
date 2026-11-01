@@ -19,6 +19,8 @@ from models.domain import (
 )
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
+from core.competitor_search_scope import scope_queries
+from core.collection_repair_plan import apply_collection_repair_patch, repair_changes
 import config
 import json
 import re
@@ -150,7 +152,7 @@ class CollectionAgent(BaseAgent):
     async def async_reextract_saved_sources(self, product_name: str, product_description: str,
                                              competitors_data: dict[str, CompetitorData],
                                              original_search_texts: dict[str, str],
-                                             feedback: str = "") -> dict[str, CompetitorData]:
+                                             feedback: str = "", *, repair_plan: dict | None = None) -> dict[str, CompetitorData]:
         """Repair against the same immutable evidence; never search or auto-supplement."""
         self._repair_outcomes = []
         self._last_search_texts = deepcopy(original_search_texts)
@@ -161,6 +163,11 @@ class CollectionAgent(BaseAgent):
             has_evidence = source_text.strip() or any(c.snippet.strip() for c in original.citations)
             outcome = {"entity": name, "status": "failed", "reason": "missing_saved_sources"}
             self._repair_outcomes.append(outcome)
+            authority = repair_plan.get(name) if isinstance(repair_plan, dict) else None
+            if not isinstance(authority, dict) or not (authority.get("text_fields") or authority.get("arrays")):
+                outcome.update(status="not_attempted", reason="no_structured_repair_authority")
+                continue
+            outcome["repair_plan"] = deepcopy(authority)
             if not has_evidence or not config.ENABLE_LLM:
                 if not config.ENABLE_LLM:
                     outcome["reason"] = "llm_disabled"
@@ -171,7 +178,16 @@ class CollectionAgent(BaseAgent):
                 original.citations, source_text, max_chars=None, excerpt_chars=None)
             if original.citations:
                 context += "\n### 当前实体完整保存的原始搜索文本（非新搜索）\n" + source_text
-            prompt = self._repair_prompt(name, fields, context, feedback, allow_partial=True)
+            prompt = (f"仅修复 {name} 的结构化授权范围。完整质检反馈仅解释问题，不能授予额外写权限。"
+                      "只输出JSON字段补丁。未返回字段保持原值；文本字段可显式空字符串撤回。"
+                      "数组是更新操作列表，不是完整替换；未返回条目和空列表都保留全部旧条目。"
+                      "更新格式为 {\"item_id\":\"授权表中的原始ID\",\"changes\":{\"获准子字段\":\"修正值\"}}；"
+                      "仅allow_add=true的数组可用 {\"add\":{完整新条目}}，新增条目包含全部字段和真实引用。"
+                      "不得返回未授权字段/子字段、未知或重复item_id、删除操作、伪造来源ID。"
+                      "数值、SKU、地区、日期、单位和条件必须来自当前实体真实来源，不补全截断资料。\n"
+                      f"### 结构化写入授权（内部item_id仅用于定位，不是来源证据）\n{json.dumps(authority, ensure_ascii=False)}\n"
+                      f"### 真实来源（仅使用以下ID和完整原文）\n{context}\n"
+                      f"### 完整质检反馈（不是事实来源或写权限）\n{feedback}")
             previous = asdict(original)
             prompt += ("\n### 待修复提取快照（背景，不是来源证据）\n"
                        + json.dumps({field: previous[field] for field in fields}, ensure_ascii=False, indent=2)
@@ -184,25 +200,23 @@ class CollectionAgent(BaseAgent):
             log_count = len(self.llm_logs)
             result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=8192, temperature=0)
             response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
-            if reason != "success" or response.get("finish_reason") != "stop":
+            if (reason != "success" or response.get("finish_reason") != "stop"
+                    or response.get("success") is not True or response.get("parse_error")):
                 outcome["reason"] = (reason if reason != "success" else
                                      f"incomplete_finish_reason({response.get('finish_reason') or 'missing'})")
                 continue
-            patch_fields = [field for field in fields if isinstance(result, dict) and field in result]
-            errors = self._extraction_schema_errors(result, patch_fields)
-            if isinstance(result, dict):
-                errors.extend({"field": field, "reason": "unknown_field"} for field in result if field not in fields)
-                if not result:
-                    errors.append({"field": "$", "reason": "empty_patch"})
+            candidate, errors = apply_collection_repair_patch(original, result, authority, visible_ids)
             if errors:
                 outcome.update(reason="incomplete_or_invalid_schema", schema_errors=errors)
                 continue
-            candidate = self._apply_extraction(original, result, patch_fields, visible_ids)
+            patch_fields = set(result)
             self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet for c in original.citations),
                                           field_names=set(patch_fields))
             updated[name] = candidate
-            outcome.update(status="accepted", reason="complete_json_from_saved_sources",
-                           applied_fields=patch_fields, preserved_fields=[field for field in fields if field not in patch_fields])
+            changes = repair_changes(original, candidate)
+            outcome.update(changes)
+            outcome.update(status="accepted" if changes["applied_fields"] else "not_changed",
+                           reason="complete_authorized_patch" if changes["applied_fields"] else "no_fact_changes")
         return updated
 
     @staticmethod
@@ -335,7 +349,7 @@ class CollectionAgent(BaseAgent):
 
     def collect_target_product(self, product_description: str,
                                product_name: str,
-                               feedback: str = "") -> CompetitorData:
+                               feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """采集目标产品自身信息"""
         self._log(f"   采集目标产品: {product_name}")
         queries = [
@@ -354,11 +368,12 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def async_collect_target_product(self, product_description: str,
                                            product_name: str,
-                                           feedback: str = "") -> CompetitorData:
+                                           feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集目标产品自身信息"""
         self._log(f"   采集目标产品: {product_name}")
         queries = [
@@ -377,11 +392,12 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def run(self, product_description: str,
                   competitor_list: CompetitorList,
-                  feedback: str = "") -> dict[str, CompetitorData]:
+                  feedback: str = "", search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
         """
         主运行逻辑：逐竞品搜索+汇总
 
@@ -402,7 +418,8 @@ class CollectionAgent(BaseAgent):
 
         for i, comp in enumerate(competitor_list.competitors):
             self._log(f"   采集 {i+1}/{len(competitor_list.competitors)}: {comp.name}")
-            data = await self._async_collect_competitor(product_name, product_description, comp.name, feedback)
+            data = await self._async_collect_competitor(product_name, product_description, comp.name, feedback,
+                search_scope=getattr(competitor_list, "search_scope", []) if search_scope is None else search_scope)
             result_data[comp.name] = data
 
         self._log(f"✅ 数据采集完成: {len(result_data)}个竞品")
@@ -411,7 +428,7 @@ class CollectionAgent(BaseAgent):
     def _collect_competitor(self, product_name: str,
                             product_description: str,
                             competitor_name: str,
-                            feedback: str = "") -> CompetitorData:
+                            feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """采集单个竞品数据，同时构建结构化引用"""
         queries = [
             f"{competitor_name} 产品功能介绍",
@@ -429,12 +446,13 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def _async_collect_competitor(self, product_name: str,
                                         product_description: str,
                                         competitor_name: str,
-                                        feedback: str = "") -> CompetitorData:
+                                        feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集单个竞品数据，同时构建结构化引用"""
         queries = [
             f"{competitor_name} 产品功能介绍",
@@ -452,6 +470,7 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     def _collect_entity(self, product_name: str,
@@ -459,10 +478,10 @@ class CollectionAgent(BaseAgent):
                         entity_name: str,
                         queries: list[str],
                         feedback: str = "",
-                        cache_search_text: bool = True) -> CompetitorData:
+                        cache_search_text: bool = True, search_scope: list[str] | None = None) -> CompetitorData:
         """采集单个实体数据，同时构建结构化引用"""
         # 执行搜索
-        search_results = self.search_client.batch_search(queries)
+        search_results = self.search_client.batch_search(scope_queries(queries, search_scope))
 
         # 提取搜索文本 + 构建结构化引用
         all_text = ""
@@ -525,11 +544,11 @@ class CollectionAgent(BaseAgent):
 
                 # 补充搜索：如果定价或市场份额数据缺失，执行专项搜索
                 pricing_tiers, extra_cites1 = self._supplement_pricing(
-                    entity_name, product_name, pricing_tiers, citations
+                    entity_name, product_name, pricing_tiers, citations, search_scope=search_scope
                 )
                 market_share = result.get("market_share", "")
                 market_share, extra_cites2 = self._supplement_market_share(
-                    entity_name, market_share, citations
+                    entity_name, market_share, citations, search_scope=search_scope
                 )
                 citations.extend(extra_cites1)
                 citations.extend(extra_cites2)
@@ -565,9 +584,9 @@ class CollectionAgent(BaseAgent):
                                     entity_name: str,
                                     queries: list[str],
                                     feedback: str = "",
-                                    cache_search_text: bool = True) -> CompetitorData:
+                                    cache_search_text: bool = True, search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集单个实体数据，同时构建结构化引用"""
-        search_results = await self.search_client.async_batch_search(queries)
+        search_results = await self.search_client.async_batch_search(scope_queries(queries, search_scope))
 
         all_text = ""
         sources = []
@@ -625,11 +644,11 @@ class CollectionAgent(BaseAgent):
                 pricing_tiers = self._parse_prices(result.get("pricing_tiers"), visible_ids)
 
                 pricing_tiers, extra_cites1 = await self._async_supplement_pricing(
-                    entity_name, product_name, pricing_tiers, citations
+                    entity_name, product_name, pricing_tiers, citations, search_scope=search_scope
                 )
                 market_share = result.get("market_share", "")
                 market_share, extra_cites2 = await self._async_supplement_market_share(
-                    entity_name, market_share, citations
+                    entity_name, market_share, citations, search_scope=search_scope
                 )
                 citations.extend(extra_cites1)
                 citations.extend(extra_cites2)
@@ -715,14 +734,14 @@ class CollectionAgent(BaseAgent):
         return result
 
     def _supplement_pricing(self, entity_name: str, product_name: str,
-                            pricing_tiers: list, existing_cites: list) -> tuple:
+                            pricing_tiers: list, existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果定价数据缺失，执行补充搜索"""
         if pricing_tiers and any(pt.price for pt in pricing_tiers):
             return pricing_tiers, []
 
         self._log(f"   📝 {entity_name} 定价数据缺失，执行补充搜索")
         extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("pricing_tiers")]
-        extra_results = self.search_client.batch_search(extra_queries)
+        extra_results = self.search_client.batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -761,7 +780,7 @@ class CollectionAgent(BaseAgent):
 
     def _supplement_market_share(self, entity_name: str,
                                   market_share: str,
-                                  existing_cites: list) -> tuple:
+                                  existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果市场份额数据缺失，执行补充搜索"""
         market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
@@ -769,7 +788,7 @@ class CollectionAgent(BaseAgent):
 
         self._log(f"   📝 {entity_name} 市场份额数据缺失，执行补充搜索")
         extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("market_share")]
-        extra_results = self.search_client.batch_search(extra_queries)
+        extra_results = self.search_client.batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -807,14 +826,14 @@ class CollectionAgent(BaseAgent):
         return market_share, extra_cites
 
     async def _async_supplement_pricing(self, entity_name: str, product_name: str,
-                                        pricing_tiers: list, existing_cites: list) -> tuple:
+                                        pricing_tiers: list, existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果定价数据缺失，异步执行补充搜索"""
         if pricing_tiers and any(pt.price for pt in pricing_tiers):
             return pricing_tiers, []
 
         self._log(f"   📝 {entity_name} 定价数据缺失，执行补充搜索")
         extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("pricing_tiers")]
-        extra_results = await self.search_client.async_batch_search(extra_queries)
+        extra_results = await self.search_client.async_batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -853,7 +872,7 @@ class CollectionAgent(BaseAgent):
 
     async def _async_supplement_market_share(self, entity_name: str,
                                              market_share: str,
-                                             existing_cites: list) -> tuple:
+                                             existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果市场份额数据缺失，异步执行补充搜索"""
         market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
@@ -861,7 +880,7 @@ class CollectionAgent(BaseAgent):
 
         self._log(f"   📝 {entity_name} 市场份额数据缺失，执行补充搜索")
         extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("market_share")]
-        extra_results = await self.search_client.async_batch_search(extra_queries)
+        extra_results = await self.search_client.async_batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -942,7 +961,7 @@ class CollectionAgent(BaseAgent):
 
     def supplement_missing_fields(self, product_name: str,
                                   competitors_data: dict[str, CompetitorData],
-                                  missing_fields: dict[str, list[str]]) -> dict[str, CompetitorData]:
+                                  missing_fields: dict[str, list[str]], search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
         """Stage a targeted search and commit only a complete typed response."""
         self._repair_outcomes = []
         updated = deepcopy(competitors_data)
@@ -950,7 +969,7 @@ class CollectionAgent(BaseAgent):
             if name not in competitors_data:
                 continue
             batches = [(field, self.search_client.batch_search(
-                [f"{name} {term}" for term in self._field_search_terms(field)])) for field in fields]
+                scope_queries([f"{name} {term}" for term in self._field_search_terms(field)], search_scope))) for field in fields]
             prepared = self._prepare_field_repair(name, competitors_data[name], fields, batches)
             if not config.ENABLE_LLM or not (prepared[3].strip() or prepared[2]):
                 continue
@@ -960,7 +979,7 @@ class CollectionAgent(BaseAgent):
 
     async def async_supplement_missing_fields(self, product_name: str,
                                               competitors_data: dict[str, CompetitorData],
-                                              missing_fields: dict[str, list[str]]) -> dict[str, CompetitorData]:
+                                              missing_fields: dict[str, list[str]], search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
         """Async equivalent of the same transactional supplement contract."""
         self._repair_outcomes = []
         updated = deepcopy(competitors_data)
@@ -969,7 +988,7 @@ class CollectionAgent(BaseAgent):
                 continue
             batches = []
             for field in fields:
-                queries = [f"{name} {term}" for term in self._field_search_terms(field)]
+                queries = scope_queries([f"{name} {term}" for term in self._field_search_terms(field)], search_scope)
                 batches.append((field, await self.search_client.async_batch_search(queries)))
             prepared = self._prepare_field_repair(name, competitors_data[name], fields, batches)
             if not config.ENABLE_LLM or not (prepared[3].strip() or prepared[2]):

@@ -27,6 +27,8 @@ class QualityAgent(BaseAgent):
 
     MAX_RETRIES = 2
     PASS_SCORE = 75
+    _QUALITY_THINKING = "enabled"
+    _QUALITY_BUDGETS = (16384, 16384)
 
     # 阶段权重：(critical扣分, warning扣分)
     PHASE_WEIGHTS = {
@@ -118,7 +120,7 @@ class QualityAgent(BaseAgent):
         # same agent. Accumulate locally across awaits; publish only when this
         # call returns, so a caller can copy its own trace immediately.
         request_trace = {"requests": [], "cacheable": False}
-        for attempt, budget in enumerate((8192, 16384)):
+        for attempt, budget in enumerate(self._QUALITY_BUDGETS):
             request = prompt
             if attempt:
                 request += (
@@ -130,7 +132,8 @@ class QualityAgent(BaseAgent):
                     "保留所有严重问题；没有问题才返回issues空数组。"
                 )
             log_count = len(self.llm_logs)
-            result, failure = await self.async_ask_llm_json_with_reason(request, max_tokens=budget)
+            result, failure = await self.async_ask_llm_json_with_reason(
+                request, max_tokens=budget, thinking=self._QUALITY_THINKING)
             # Use this agent's newly appended response, never module-global or
             # stale last-call state. Test/custom adapters without response
             # metadata remain compatible but cannot populate a reuse cache.
@@ -147,6 +150,7 @@ class QualityAgent(BaseAgent):
             if response is not None:
                 request_trace["requests"].append({
                     "max_tokens": budget, "finish_reason": finish,
+                    "thinking": self._QUALITY_THINKING,
                     "checked_at": datetime.now().isoformat(timespec="microseconds"),
                     "fingerprint": self._collection_review_fingerprint(request),
                     "failure_reason": "" if completed and valid else failure or "invalid_quality_response",
@@ -166,8 +170,9 @@ class QualityAgent(BaseAgent):
         contract = {"system_prompt": self.system_prompt, "entity_prompt": prompt,
                     "provider": config.LLM_PROVIDER, "model": config.MIMO_MODEL,
                     "base_url": config.MIMO_BASE_URL,
-                    "temperature": config.LLM_TEMPERATURE,
-                    "budgets": [8192, 16384], "review_contract": 1}
+                    "thinking": self._QUALITY_THINKING,
+                    "temperature": None if self._QUALITY_THINKING == "enabled" else config.LLM_TEMPERATURE,
+                    "budgets": list(self._QUALITY_BUDGETS), "review_contract": 2}
         return hashlib.sha256(json.dumps(contract, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
     # ── Phase 2: 采集数据质检 ──
@@ -457,6 +462,13 @@ class QualityAgent(BaseAgent):
                 competitors_data_json=json.dumps({name: asdict(data)}, ensure_ascii=False, indent=2),
             )
             prompt += "\n本次仅检查一个实体；问题field必须以该实体名和英文句点开头：" + name + "."
+            prompt += (
+                "\n已有数组条目的问题必须使用当前快照从0开始的数字索引和明确属性，例如"
+                f"{name}.pricing_tiers[0].price、{name}.product_features[0].description。"
+                "不要用条目别名或仅写整数组代替精确路径；所有现有条目的同一属性都有问题时，才可使用"
+                f"{name}.pricing_tiers[*].citations等通配属性路径。"
+                "确实缺少新条目时可用completeness加整数组路径表示新增，不授权删除或改写已有条目。"
+            )
             fingerprint = self._collection_review_fingerprint(prompt)
             checked_at = datetime.now().isoformat(timespec="microseconds")
             trace = {"entity": name, "mode": "live", "completed": False,
@@ -991,59 +1003,19 @@ class QualityAgent(BaseAgent):
     # ── 通用工具方法 ──
 
     def build_feedback(self, result: QualityCheckResult) -> str:
-        """根据质检结果构造给被打回 Agent 的反馈消息"""
+        """Pass the complete immutable findings through, without a model summary."""
         if result.phase == "collection":
             from core.collection_retry import collection_feedback
             return collection_feedback(result)
-        if config.ENABLE_LLM:
-            prompt = self._prompt_build_feedback.format(
-                qa_result_json=json.dumps({
-                    "phase": result.phase,
-                    "target_agent": result.target_agent,
-                    "score": result.score,
-                    "issues": [
-                        {"severity": i.severity, "field": i.field, "description": i.description, "suggestion": i.suggestion}
-                        for i in result.issues
-                    ],
-                }, ensure_ascii=False, indent=2)
-            )
-            feedback = self.ask_llm(prompt, max_tokens=512)
-            if feedback:
-                return feedback
-
-        # 规则引擎 fallback
-        critical_issues = [i for i in result.issues if i.severity == "critical"]
-        if critical_issues:
-            descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
-            return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
-        return "质检未通过，请检查输出完整性。"
+        return json.dumps({"phase": result.phase, "target_agent": result.target_agent,
+                           "attempt": result.attempt, "passed": result.passed,
+                           "score": result.score, "hallucination_status": result.hallucination_status,
+                           "issues": [asdict(issue) for issue in result.issues]},
+                          ensure_ascii=False, indent=2)
 
     async def async_build_feedback(self, result: QualityCheckResult) -> str:
-        """根据质检结果异步构造给被打回 Agent 的反馈消息"""
-        if result.phase == "collection":
-            from core.collection_retry import collection_feedback
-            return collection_feedback(result)
-        if config.ENABLE_LLM:
-            prompt = self._prompt_build_feedback.format(
-                qa_result_json=json.dumps({
-                    "phase": result.phase,
-                    "target_agent": result.target_agent,
-                    "score": result.score,
-                    "issues": [
-                        {"severity": i.severity, "field": i.field, "description": i.description, "suggestion": i.suggestion}
-                        for i in result.issues
-                    ],
-                }, ensure_ascii=False, indent=2)
-            )
-            feedback = await self.async_ask_llm(prompt, max_tokens=512)
-            if feedback:
-                return feedback
-
-        critical_issues = [i for i in result.issues if i.severity == "critical"]
-        if critical_issues:
-            descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
-            return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
-        return "质检未通过，请检查输出完整性。"
+        """Async-compatible entry point for the same complete deterministic record."""
+        return self.build_feedback(result)
 
     def extract_missing_fields(self, result: QualityCheckResult,
                                competitors_data: dict[str, 'CompetitorData'] | None = None) -> dict[str, list[str]]:

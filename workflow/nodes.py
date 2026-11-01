@@ -288,12 +288,14 @@ class AnalysisGraphNodes:
 
     async def collect_target_product(self, state: AnalysisState) -> AnalysisState:
         validate_collection_names(state["competitor_list"])
+        search_scope = getattr(state["competitor_list"], "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
         await self._emit(state, EventType.AGENT_STARTED, "CollectionAgent", "collection",
                          progress=0.15, message="正在采集目标产品数据...")
 
         async def call():
             return await self.orchestrator.collection_agent.async_collect_target_product(
-                state["product_description"], state["product_name"]
+                state["product_description"], state["product_name"], **scope_options
             )
 
         start = time.perf_counter()
@@ -439,12 +441,15 @@ class AnalysisGraphNodes:
         )
         # 计算本轮缺失字段总数（用于修正率）
         pending_count = sum(len(fields) for fields in missing_fields.values())
+        search_scope = getattr(state.get("competitor_list"), "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
         data, search_texts, feedback = await repair_collection(
             self.orchestrator, state["product_name"], state["product_description"],
             entities, state.get("original_search_texts", {}),
             state["qa_collection"], state.get("collection_retry_count", 0) + 1, missing_fields,
             target_name=(state.get("product_name") or state["target_product_data"].name)
-                        if state.get("target_product_data") is not None else None)
+                        if state.get("target_product_data") is not None else None,
+            **scope_options)
         rivals, target = split_collection_entities(data, state.get("target_product_data"), state.get("product_name", ""))
         return {
             "competitors_data": rivals,

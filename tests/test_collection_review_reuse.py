@@ -138,7 +138,7 @@ class CollectionReviewReuseTests(unittest.IsolatedAsyncioTestCase):
                     result = await self.review()
                 self.assertFalse(result.passed)
                 self.assertEqual(result.hallucination_status, "failed")
-                self.assertEqual(calls, [8192, 16384])
+                self.assertEqual(calls, [16384, 16384])
                 self.assertFalse(result.entity_review_trace[0]["completed"])
                 self.assertEqual(result.entity_review_trace[0]["failure_reason"], failure)
                 self.assertEqual(self.agent._collection_review_cache, {})
@@ -171,7 +171,7 @@ class CollectionReviewReuseTests(unittest.IsolatedAsyncioTestCase):
         self.responses = [({"issues": []}, "length"), ({"issues": [finding()]}, "stop")]
         first = await self.review()
         second = await self.review(2)
-        self.assertEqual([call[2] for call in self.calls], [8192, 16384])
+        self.assertEqual([call[2] for call in self.calls], [16384, 16384])
         self.assertEqual(first.entity_review_trace[0]["request_count"], 2)
         self.assertEqual([r["finish_reason"] for r in first.entity_review_trace[0]["requests"]],
                          ["length", "stop"])

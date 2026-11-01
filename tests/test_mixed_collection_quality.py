@@ -48,7 +48,7 @@ class RecordingCollection(FakeCollectionAgent):
         self.failure = failure
         self.corrupt_source = corrupt_source
 
-    async def async_reextract_saved_sources(self, product, description, data, sources, feedback=""):
+    async def async_reextract_saved_sources(self, product, description, data, sources, feedback="", *, repair_plan=None):
         self.received.append(deepcopy((data, sources, feedback)))
         self._repair_entities = list(data)
         if self.failure:

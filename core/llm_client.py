@@ -21,12 +21,66 @@ _EMPTY_RESULT = {
     "content": "",
     "prompt_tokens": 0,
     "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "cached_tokens": None,
+    "uncached_tokens": None,
+    "content_chars": 0,
     "total_tokens": 0,
     "model": "",
     "finish_reason": "",
     "duration_ms": 0.0,
     "timestamp": "",
 }
+
+
+def _mimo_payload(system_prompt, user_message, temperature, max_tokens, json_mode, thinking=None):
+    """Keep the public max_tokens argument; send only MiMo's documented field."""
+    payload = {
+        "model": config.MIMO_MODEL,
+        "messages": [{"role": "system", "content": system_prompt},
+                     {"role": "user", "content": user_message}],
+        "max_completion_tokens": max_tokens,
+        "stream": False,
+    }
+    if thinking is not None:
+        if thinking not in ("enabled", "disabled"):
+            raise ValueError("thinking must be enabled or disabled")
+        payload["thinking"] = {"type": thinking}
+    if thinking != "enabled":
+        payload["temperature"] = temperature
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    return payload
+
+
+def _mimo_response(result, duration_ms, thinking=None):
+    """Reasoning is never a final answer; retain counts without storing its text."""
+    choice = (result.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    content = message.get("content")
+    content = content if isinstance(content, str) else ""
+    usage = result.get("usage") or {}
+    details = usage.get("completion_tokens_details") or {}
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    prompt_details = usage.get("prompt_tokens_details")
+    cached_tokens = prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None
+    # Missing/invalid metadata is unknown, never evidence of a complete miss.
+    if ("prompt_tokens" not in usage or type(prompt_tokens) is not int or prompt_tokens < 0
+            or type(cached_tokens) is not int or not 0 <= cached_tokens <= prompt_tokens):
+        cached_tokens = None
+    uncached_tokens = prompt_tokens - cached_tokens if cached_tokens is not None else None
+    return {
+        "content": content, "content_chars": len(content),
+        "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+        "reasoning_tokens": details.get("reasoning_tokens", 0) or 0,
+        "cached_tokens": cached_tokens, "uncached_tokens": uncached_tokens,
+        "total_tokens": usage.get("total_tokens", prompt_tokens + completion_tokens),
+        "model": result.get("model", config.MIMO_MODEL),
+        "finish_reason": choice.get("finish_reason", "unknown"),
+        "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "thinking": thinking,
+    }
 
 
 def _normalize_provider(provider: str) -> str:
@@ -51,7 +105,7 @@ def _response_format_is_unsupported(status_code: int, result: dict) -> bool:
 
 def _call_mimo(system_prompt: str, user_message: str,
                temperature: float, max_tokens: int,
-               agent_id: str, json_mode: bool = False) -> dict:
+               agent_id: str, json_mode: bool = False, thinking: str | None = None) -> dict:
     """调用 MiMo OpenAI 兼容接口，返回结构化结果。"""
     import requests
     global _last_call_error, _last_finish_reason, _last_usage
@@ -67,18 +121,7 @@ def _call_mimo(system_prompt: str, user_message: str,
         "Authorization": f"Bearer {config.MIMO_API_KEY}",
     }
     prompt_len = len(system_prompt) + len(user_message)
-    payload = {
-        "model": config.MIMO_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": False,
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
+    payload = _mimo_payload(system_prompt, user_message, temperature, max_tokens, json_mode, thinking)
 
     def post_completion():
         with requests.Session() as session:
@@ -115,44 +158,28 @@ def _call_mimo(system_prompt: str, user_message: str,
                     continue
                 return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-            message = result.get("choices", [{}])[0].get("message", {})
-            content = message.get("content", "") or message.get("reasoning", "") or message.get("reasoning_content", "")
-            finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
+            response = _mimo_response(result, duration_ms, thinking)
+            content, finish_reason = response["content"], response["finish_reason"]
+            _last_finish_reason = finish_reason
+            _last_usage = {key: response[key] for key in
+                           ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
+                            "cached_tokens", "uncached_tokens", "content_chars")}
 
             if not content:
                 _last_call_error = f"empty_response(finish_reason={finish_reason})"
-                _last_finish_reason = finish_reason
-                _last_usage = {}
                 print(f"  [mimo] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
-                return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                return response
 
-            usage = result.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+            prompt_tokens, completion_tokens = response["prompt_tokens"], response["completion_tokens"]
+            total_tokens = response["total_tokens"]
             _last_call_error = ""
-            _last_finish_reason = finish_reason
-            _last_usage = {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
             truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
             print(
                 f"  [mimo] [{agent_id}] ✅ 调用成功 "
                 f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
                 f"finish={finish_reason}){truncation_warn}"
             )
-            return {
-                "content": content,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens,
-                "model": result.get("model", config.MIMO_MODEL),
-                "finish_reason": result.get("choices", [{}])[0].get("finish_reason", ""),
-                "duration_ms": duration_ms,
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-            }
+            return response
         except requests.exceptions.Timeout:
             duration_ms = (time.time() - t0) * 1000
             _last_call_error = f"timeout(300s, attempt {attempt + 1})"
@@ -178,7 +205,7 @@ def _call_mimo(system_prompt: str, user_message: str,
 
 async def _async_call_mimo(system_prompt: str, user_message: str,
                            temperature: float, max_tokens: int,
-                           agent_id: str, json_mode: bool = False) -> dict:
+                           agent_id: str, json_mode: bool = False, thinking: str | None = None) -> dict:
     """异步调用 MiMo OpenAI 兼容接口，返回结构化结果。"""
     import httpx
     import ssl
@@ -201,18 +228,7 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
         "Authorization": f"Bearer {config.MIMO_API_KEY}",
     }
     prompt_len = len(system_prompt) + len(user_message)
-    payload = {
-        "model": config.MIMO_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": False,
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
+    payload = _mimo_payload(system_prompt, user_message, temperature, max_tokens, json_mode, thinking)
 
     async with httpx.AsyncClient(
         timeout=300,
@@ -248,44 +264,28 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
                         continue
                     return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-                message = result.get("choices", [{}])[0].get("message", {})
-                content = message.get("content", "") or message.get("reasoning", "") or message.get("reasoning_content", "")
-                finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
+                response = _mimo_response(result, duration_ms, thinking)
+                content, finish_reason = response["content"], response["finish_reason"]
+                _last_finish_reason = finish_reason
+                _last_usage = {key: response[key] for key in
+                               ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
+                                "cached_tokens", "uncached_tokens", "content_chars")}
 
                 if not content:
                     _last_call_error = f"empty_response(finish_reason={finish_reason})"
-                    _last_finish_reason = finish_reason
-                    _last_usage = {}
                     print(f"  [mimo] [{agent_id}] ❌ 返回内容为空 (finish_reason={finish_reason})")
-                    return {**_EMPTY_RESULT, "finish_reason": finish_reason, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                    return response
 
-                usage = result.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-                total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+                prompt_tokens, completion_tokens = response["prompt_tokens"], response["completion_tokens"]
+                total_tokens = response["total_tokens"]
                 _last_call_error = ""
-                _last_finish_reason = finish_reason
-                _last_usage = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
                 truncation_warn = " ⚠️ 输出被截断(max_tokens耗尽)" if finish_reason == "length" else ""
                 print(
                     f"  [mimo] [{agent_id}] ✅ 异步调用成功 "
                     f"(tokens: {prompt_tokens}+{completion_tokens}={total_tokens}, 输出长度: {len(content)}字, "
                     f"finish={finish_reason}){truncation_warn}"
                 )
-                return {
-                    "content": content,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                    "model": result.get("model", config.MIMO_MODEL),
-                    "finish_reason": finish_reason,
-                    "duration_ms": duration_ms,
-                    "timestamp": datetime.now().isoformat(timespec="seconds"),
-                }
+                return response
             except httpx.TimeoutException:
                 duration_ms = (time.time() - t0) * 1000
                 _last_call_error = f"timeout(300s, attempt {attempt + 1})"
@@ -311,7 +311,7 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
 
 def llm_call(system_prompt: str, user_message: str,
              temperature: float = 0.3, max_tokens: int = 4096,
-             agent_id: str = "", json_mode: bool = False) -> dict:
+             agent_id: str = "", json_mode: bool = False, *, thinking: str | None = None) -> dict:
     """统一 LLM 调用入口。返回 dict，包含 content 和元数据。"""
     global _last_call_error
     _call_stats["total"] += 1
@@ -337,7 +337,7 @@ def llm_call(system_prompt: str, user_message: str,
             temperature,
             max_tokens,
             agent_id,
-            json_mode=json_mode,
+            json_mode=json_mode, **({"thinking": thinking} if thinking is not None else {}),
         )
         if result["content"]:
             _call_stats["success"] += 1
@@ -360,7 +360,7 @@ def llm_call(system_prompt: str, user_message: str,
 
 async def async_llm_call(system_prompt: str, user_message: str,
                          temperature: float = 0.3, max_tokens: int = 4096,
-                         agent_id: str = "", json_mode: bool = False) -> dict:
+                         agent_id: str = "", json_mode: bool = False, *, thinking: str | None = None) -> dict:
     """统一异步 LLM 调用入口。返回 dict，包含 content 和元数据。"""
     global _last_call_error
     _call_stats["total"] += 1
@@ -386,7 +386,7 @@ async def async_llm_call(system_prompt: str, user_message: str,
             temperature,
             max_tokens,
             agent_id,
-            json_mode=json_mode,
+            json_mode=json_mode, **({"thinking": thinking} if thinking is not None else {}),
         )
         if result["content"]:
             _call_stats["success"] += 1
