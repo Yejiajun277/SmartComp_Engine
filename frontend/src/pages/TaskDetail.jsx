@@ -45,6 +45,7 @@ import {
   resolveTaskStatus,
 } from '../utils/presentation';
 import { createTaskLoadScope, getTaskLoadFailureAction } from '../utils/taskNavigation';
+import { getTimelineQaResults } from '../utils/quality';
 
 const AGENT_TO_PHASE = {
   DiscoveryAgent: 'discovery',
@@ -164,7 +165,7 @@ export default function TaskDetail() {
           requestGeneration,
           latestRequestGeneration: qaRequestGenerationRef.current,
         })) return null;
-        const checks = data?.checks || [];
+        const checks = getTimelineQaResults(data);
         cacheArtifact('qa', data);
         setPersistedQaPresentation(previous => updateTaskQaPresentationState(previous, taskId, {
           results: checks,
@@ -275,7 +276,7 @@ export default function TaskDetail() {
     : buildQaSummaries(timelineQaResults);
   const taskArtifacts = selectTaskArtifactCache(artifactCache, taskId);
   const rawCockpitChecks = taskArtifacts.qa?.checks?.length > 0
-    ? taskArtifacts.qa.checks
+    ? getTimelineQaResults(taskArtifacts.qa)
     : timelineQaResults;
   const cockpitChecks = resolvedTaskStatus === 'failed'
     ? terminalizeQaResultsForTaskFailure(rawCockpitChecks, failureEvent)

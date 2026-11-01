@@ -124,15 +124,15 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
 
         state = merge_state(state, await nodes.prepare_collection_retry(state))
         self.assertEqual(state["collection_retry_count"], 1)
-        self.assertEqual(state["collection_feedback"], "feedback:collection:CollectionAgent:1")
+        self.assertEqual(state["collection_feedback"], "")
+        self.assertEqual(state["latest_feedback"], "feedback:collection:CollectionAgent:1")
 
-        state = merge_state(state, await nodes.collect_competitors(state))
         state = merge_state(state, await nodes.check_collection_quality(state))
         self.assertTrue(state["qa_collection"].passed)
         self.assertEqual(state["qa_collection"].attempt, 2)
         self.assertEqual(
-            orch.collection_agent.run_feedbacks,
-            ["", "feedback:collection:CollectionAgent:1"],
+            orch.collection_agent.reextract_feedbacks,
+            ["feedback:collection:CollectionAgent:1"],
         )
 
     async def test_dimension_and_analysis_nodes_wrap_existing_agents(self):

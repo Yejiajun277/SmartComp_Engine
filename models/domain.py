@@ -124,6 +124,7 @@ class CompetitorList:
     product_category: str = ""              # 产品类别
     competitors: list[CompetitorInfo] = field(default_factory=list)
     search_keywords_used: list[str] = field(default_factory=list)
+    search_scope: list[str] = field(default_factory=list)  # 调研限定，不是事实证据
 
 
 @dataclass
@@ -223,6 +224,9 @@ class PricingAnalysis:
     value_ranking: list[str] = field(default_factory=list)
     summary: str = ""
     citations: list[str] = field(default_factory=list)     # 汇总引用 ID
+    dimension_comparison: list[FeatureComparison] = field(default_factory=list)
+    comparable_basis: dict = field(default_factory=dict)
+    source_scope_notes: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -240,6 +244,7 @@ class UserReputation:
     score: str = ""                         # 评分
     keywords: list[str] = field(default_factory=list)  # 关键词
     citations: list[str] = field(default_factory=list)     # 引用 ID 列表
+    source_text: str = ""                   # 原采集评价及评分范围，不等于统一口径评分
 
 
 @dataclass
@@ -311,6 +316,10 @@ class QualityCheckResult:
     coverage_rate: float = 100.0        # 覆盖率 0-100（已填充字段占比）
     correction_count: int = 0           # 本轮被修正/补充的字段数
     total_fields: int = 0               # 本轮检查的总字段数
+    # Collection entity checks: real requests and exact snapshot reuse have
+    # separate provenance. Older saved checks default to no invented trace.
+    entity_review_trace: list[dict] = field(default_factory=list)
+    non_retryable_reason: str = ""      # Explicit provider refusal; never repair/degrade into success.
 
 
 @dataclass
@@ -319,6 +328,8 @@ class QATimeline:
     checks: list[QualityCheckResult] = field(default_factory=list)
     max_retries: int = 2
     total_retries: int = 0
+    # Terminal workflow decisions are separate from immutable check attempts.
+    terminal_dispositions: dict[str, dict] = field(default_factory=dict)
 
     def add_check(self, result: QualityCheckResult):
         self.checks.append(result)

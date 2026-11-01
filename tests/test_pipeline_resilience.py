@@ -43,12 +43,13 @@ class _JsonCompletionHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        truncated = payload.get("messages", [{}])[-1].get("content") == "Return truncated JSON."
         body = json.dumps(
             {
                 "choices": [
                     {
-                        "message": {"content": '{"ok": true}'},
-                        "finish_reason": "stop",
+                        "message": {"content": '{"ok":' if truncated else '{"ok": true}'},
+                        "finish_reason": "length" if truncated else "stop",
                     }
                 ],
                 "usage": {
@@ -90,6 +91,48 @@ class LlmClientResilienceTests(unittest.IsolatedAsyncioTestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+
+    async def test_async_truncation_uses_own_response_after_another_agent_call(self):
+        agent = _JsonAgent()
+        agent.on_log_added = lambda _entry: _JsonAgent().ask_llm("Return ok=true.")
+        with (
+            patch.object(config, "ENABLE_LLM", True),
+            patch.object(config, "MIMO_API_KEY", "test-key"),
+            patch.object(config, "MIMO_BASE_URL", self.base_url),
+            patch.object(config, "MIMO_MODEL", "test-model"),
+            patch.object(config, "MIMO_USE_SYSTEM_PROXY", False),
+        ):
+            parsed, truncated = await agent.async_ask_llm_json_with_truncation_check("Return truncated JSON.")
+        self.assertEqual(parsed, {})
+        self.assertTrue(truncated, "another agent's completed call must not hide truncation")
+
+    def test_sync_truncation_uses_own_response_after_another_agent_call(self):
+        agent = _JsonAgent()
+        agent.on_log_added = lambda _entry: _JsonAgent().ask_llm("Return ok=true.")
+        with (
+            patch.object(config, "ENABLE_LLM", True),
+            patch.object(config, "MIMO_API_KEY", "test-key"),
+            patch.object(config, "MIMO_BASE_URL", self.base_url),
+            patch.object(config, "MIMO_MODEL", "test-model"),
+            patch.object(config, "MIMO_USE_SYSTEM_PROXY", False),
+        ):
+            parsed, truncated = agent.ask_llm_json_with_truncation_check("Return truncated JSON.")
+        self.assertEqual(parsed, {})
+        self.assertTrue(truncated)
+
+    async def test_complete_response_does_not_inherit_another_agent_truncation(self):
+        agent = _JsonAgent()
+        agent.on_log_added = lambda _entry: _JsonAgent().ask_llm("Return truncated JSON.")
+        with (
+            patch.object(config, "ENABLE_LLM", True),
+            patch.object(config, "MIMO_API_KEY", "test-key"),
+            patch.object(config, "MIMO_BASE_URL", self.base_url),
+            patch.object(config, "MIMO_MODEL", "test-model"),
+            patch.object(config, "MIMO_USE_SYSTEM_PROXY", False),
+        ):
+            parsed, truncated = await agent.async_ask_llm_json_with_truncation_check("Return ok=true.")
+        self.assertEqual(parsed, {"ok": True})
+        self.assertFalse(truncated)
 
     async def test_async_json_call_bypasses_a_broken_environment_proxy(self):
         broken_proxy = "http://127.0.0.1:1"

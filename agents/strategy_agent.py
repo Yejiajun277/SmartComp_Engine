@@ -19,6 +19,8 @@ from core.search_client import SearchClient
 from core.prompt_loader import load as load_prompts
 import config
 import json
+from copy import deepcopy
+from dataclasses import asdict
 
 
 class StrategyAgent(BaseAgent):
@@ -110,14 +112,49 @@ class StrategyAgent(BaseAgent):
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
                 report.target_product_data = target_product_data
+                self._seal_report_context(report, product_analysis, pricing_analysis, market_analysis)
                 self._log(f"✅ 策略建议完成: {len(report.action_plan)}项行动方案")
                 return report
             else:
                 self._log("⚠️ LLM策略建议失败，降级到规则引擎")
 
-        return self._rule_strategy(product_name, competitor_count,
-                                    product_analysis, pricing_analysis, market_analysis,
-                                    citation_index, target_product_data)
+        report = self._rule_strategy(product_name, competitor_count,
+                                     product_analysis, pricing_analysis, market_analysis,
+                                     citation_index, target_product_data)
+        return self._seal_report_context(report, product_analysis, pricing_analysis, market_analysis)
+
+    @staticmethod
+    def _seal_report_context(report, product_analysis=None, pricing_analysis=None, market_analysis=None):
+        """The report may propose strategy, but cannot rewrite upstream facts."""
+        for field, analysis in (("product_analysis_summary", product_analysis),
+                                ("pricing_analysis_summary", pricing_analysis),
+                                ("market_analysis_summary", market_analysis)):
+            if analysis is not None:
+                setattr(report, field, analysis.summary)
+        data = report.target_product_data
+        if data is not None:
+            allowed = {citation.id for citation in data.citations}
+            def citations(values):
+                return list(dict.fromkeys(value for value in values if value in allowed))
+            def text_item(title, value):
+                return IntroItem(title=title, summary=value,
+                                 citations=citations(BaseAgent.extract_citation_ids({"text": value})))
+            report.target_product_intro = TargetProductIntro(
+                hero_summary=data.strengths,
+                core_capabilities=[IntroItem(title=item.name, summary=item.description,
+                                             citations=citations(item.citations))
+                                   for item in data.product_features],
+                monetization=[IntroItem(title=item.tier_name,
+                                        summary="；".join([item.price, *item.features]),
+                                        citations=citations(item.citations))
+                              for item in data.pricing_tiers],
+                market_user=[text_item(title, value) for title, value in
+                             (("市场信息", data.market_share), ("用户评价", data.user_reviews)) if value],
+                strengths=[text_item("优势", data.strengths)] if data.strengths else [],
+                weaknesses=[text_item("局限", data.weaknesses)] if data.weaknesses else [],
+                channel=text_item("渠道", data.channels) if data.channels else None,
+            )
+        return report
 
     def _build_analysis_text(self, product_name: str,
                               product_analysis: ProductAnalysis,
@@ -130,21 +167,32 @@ class StrategyAgent(BaseAgent):
         lines.append("## 一、产品分析")
         if product_analysis.feature_matrix:
             features = [fm.feature for fm in product_analysis.feature_matrix]
-            lines.append(f"对比功能维度: {', '.join(features[:10])}")
+            lines.append(f"对比功能维度: {', '.join(features)}")
+            for row in product_analysis.feature_matrix:
+                lines.append(f"- 产品维度 {row.feature}: {json.dumps(row.values, ensure_ascii=False)}"
+                             + (f" [{','.join(row.citations)}]" if row.citations else ""))
         if product_analysis.competitive_advantages:
-            for adv in product_analysis.competitive_advantages[:5]:
+            for adv in product_analysis.competitive_advantages:
                 cite_tag = f" [{','.join(adv.citations)}]" if adv.citations else ""
                 lines.append(f"- vs {adv.competitor}: 我方优势={adv.our_advantage}, 对方优势={adv.their_advantage}{cite_tag}")
         if product_analysis.differentiation_points:
-            lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points[:5])}")
+            lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points)}")
         lines.append(f"摘要: {product_analysis.summary}")
 
         # 定价分析
         lines.append("\n## 二、定价分析")
         if pricing_analysis.pricing_comparison:
-            for pc in pricing_analysis.pricing_comparison[:5]:
+            for pc in pricing_analysis.pricing_comparison:
                 cite_tag = f" [{','.join(pc.citations)}]" if pc.citations else ""
-                lines.append(f"- {pc.competitor}: 免费={pc.free_tier}, 付费={pc.paid_tier}, 模式={pc.pricing_model}{cite_tag}")
+                lines.append(f"- {pc.competitor}: 价格与方案={pc.paid_tier}, 免费方案（如有）={pc.free_tier}, 计价方式={pc.pricing_model}{cite_tag}")
+        for row in pricing_analysis.dimension_comparison:
+            lines.append(f"- 定价维度 {row.feature}: {json.dumps(row.values, ensure_ascii=False)}"
+                         + (f" [{','.join(row.citations)}]" if row.citations else ""))
+        if pricing_analysis.source_scope_notes:
+            lines.append("原始来源限制（不得扩大为普适政策）: " + json.dumps(
+                pricing_analysis.source_scope_notes, ensure_ascii=False))
+        if pricing_analysis.comparable_basis:
+            lines.append("可比报价原文依据: " + json.dumps(pricing_analysis.comparable_basis, ensure_ascii=False))
         lines.append(f"策略分析: {pricing_analysis.pricing_strategy_analysis}")
         if pricing_analysis.value_ranking:
             lines.append(f"性价比排名: {' > '.join(pricing_analysis.value_ranking)}")
@@ -153,9 +201,13 @@ class StrategyAgent(BaseAgent):
         # 市场分析
         lines.append("\n## 三、市场分析")
         if market_analysis.market_share_data:
-            for ms in market_analysis.market_share_data[:5]:
+            for ms in market_analysis.market_share_data:
                 cite_tag = f" [{','.join(ms.citations)}]" if ms.citations else ""
                 lines.append(f"- {ms.competitor}: 份额={ms.share_estimate}, 趋势={ms.trend}{cite_tag}")
+        for name, reputation in market_analysis.user_reputation.items():
+            lines.append(f"- {name} 用户口碑及原文范围: " + json.dumps(asdict(reputation), ensure_ascii=False))
+        for name, profile in market_analysis.user_profiles.items():
+            lines.append(f"- {name} 用户画像及限制: " + json.dumps(asdict(profile), ensure_ascii=False))
         lines.append(f"增长趋势: {market_analysis.growth_trends}")
         lines.append(f"渠道分析: {market_analysis.channel_analysis}")
         lines.append(f"摘要: {market_analysis.summary}")
@@ -392,7 +444,7 @@ class StrategyAgent(BaseAgent):
     def _parse_intro_item(self, data: dict) -> IntroItem:
         citations = []
         if isinstance(data, dict):
-            citations = self._dedupe_ids(list(data.get("citations", [])) + self.extract_citation_ids(data))
+            citations = self.extract_citation_ids(data)
         return IntroItem(
             title=data.get("title", "") if isinstance(data, dict) else "",
             summary=data.get("summary", "") if isinstance(data, dict) else "",
@@ -544,9 +596,9 @@ class StrategyAgent(BaseAgent):
                            expected_impact="提升市场份额"),
             ],
             risk_assessment="(规则引擎分析，详情请启用LLM)",
-            product_analysis_summary=product_analysis.summary[:100],
-            pricing_analysis_summary=pricing_analysis.summary[:100],
-            market_analysis_summary=market_analysis.summary[:100],
+            product_analysis_summary=product_analysis.summary,
+            pricing_analysis_summary=pricing_analysis.summary,
+            market_analysis_summary=market_analysis.summary,
             summary="基于SWOT模板的简单策略建议（建议启用LLM获得深度分析）",
             citation_index=citation_index or CitationIndex(),
         )
@@ -704,11 +756,51 @@ class StrategyAgent(BaseAgent):
         from datetime import datetime
         from models.domain import CompetitorData, FeatureComparison, CompetitiveAdvantage, PricingItem, MarketShareItem
 
+        # Rendering a saved report must not modify its authoritative JSON.
+        report = self._seal_report_context(deepcopy(report), product_analysis, pricing_analysis, market_analysis)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         # ── 辅助函数 ──
         def esc(text: str) -> str:
             return html_mod.escape(str(text)) if text else ""
+
+        def product_scope_notes(summary: str, default_scope: str = ""):
+            notes = re.findall(
+                r"(?:^|\n)局部比较（仅包含 ([^\n]*?)）：(.*?)(?=\n局部比较（仅包含 |\Z)",
+                summary or "", re.S,
+            ) or [(default_scope, summary or "")]
+            cleaned = []
+            for scope, note in notes:
+                if note.startswith(("规则降级：", "分片恢复合并：")):
+                    note = "资料不足，尚不能作出该范围的产品判断。"
+                for suffix in (
+                    "；模型输出截断，降级保留已解析内容，缺失数据标为⚪。",
+                    "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。",
+                ):
+                    note = note.replace(suffix, "")
+                note = re.sub(r"【保留原批次判断：(.*?)；其余以恢复结果为准】",
+                              r"【本条限定适用于：\1】", note)
+                cleaned.append((scope, note))
+            return cleaned
+
+        def pricing_offer(item) -> str:
+            parts = [value for value in (item.paid_tier, item.free_tier)
+                     if value and value.strip() not in {
+                         "未知", "资料不足", "无", "不适用", "无免费版", "无免费方案", "暂无公开信息"}]
+            return "；".join(parts)
+
+        def pricing_scope_notes_html(analysis) -> str:
+            if not analysis.source_scope_notes:
+                return ""
+            items = "".join(
+                '<li style="margin-top:6px;"><strong>' + esc(entity) + '</strong>：'
+                + '；'.join(esc(note) for note in notes) + '</li>'
+                for entity, notes in analysis.source_scope_notes.items())
+            return (
+                '<aside role="note" style="margin:14px 0;padding:12px;background:#fffbeb;'
+                'border-radius:8px;font-size:13px;line-height:1.7;">'
+                '<strong>来源范围与未确认事项</strong><p>以下为采集原文限制，不能作为普适优惠或报价承诺。</p>'
+                '<ul style="padding-left:20px;">' + items + '</ul></aside>')
 
         def priority_badge(priority: str) -> str:
             colors = {"P0": "#ef4444", "P1": "#f59e0b", "P2": "#22c55e", "P3": "#94a3b8"}
@@ -801,7 +893,7 @@ class StrategyAgent(BaseAgent):
                     if cite:
                         used_cite_ids.add(cid)
                         parts.append(
-                            f'<sup><a href="#cite-{cid}" title="{esc(cite.title)} - {esc(cite.url)}" '
+                            f'<sup><a href="#cite-{esc(cid)}" title="{esc(cite.title)} - {esc(cite.url)}" '
                             f'style="color:#3b82f6;text-decoration:none;font-size:11px;">[{num}]</a></sup>'
                         )
             return " ".join(parts)
@@ -820,14 +912,8 @@ class StrategyAgent(BaseAgent):
             return None
 
         def normalize_trend(trend: str) -> str:
-            """标准化趋势描述为枚举值：上升/稳定/下降"""
-            t = trend.strip()
-            if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑", "高速", "快速增长", "大幅增长"]):
-                return "上升"
-            elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓", "小幅下降", "大幅下降"]):
-                return "下降"
-            else:
-                return "稳定"
+            """Only explicit stored direction enums receive a direction icon."""
+            return (trend or "").strip() or "未知"
 
         def trend_icon(trend: str) -> str:
             normalized = normalize_trend(trend)
@@ -835,8 +921,9 @@ class StrategyAgent(BaseAgent):
                 return f'<span style="color:#22c55e;">↗ {esc(normalized)}</span>'
             elif normalized == "下降":
                 return f'<span style="color:#ef4444;">↘ {esc(normalized)}</span>'
-            else:
+            elif normalized == "稳定":
                 return f'<span style="color:#64748b;">→ {esc(normalized)}</span>'
+            return f'<span style="color:#64748b;">{esc(normalized)}</span>'
 
         def render_intro_items(items: list[IntroItem], empty_text: str = "暂无公开信息") -> str:
             if not items:
@@ -1088,34 +1175,15 @@ class StrategyAgent(BaseAgent):
             if report.target_product_data and report.target_product_data.pricing_tiers:
                 tiers = report.target_product_data.pricing_tiers
                 # 从所有定价层级中提取信息
-                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
-                for t in tiers:
-                    tn = t.tier_name or ""
-                    tp = t.price or ""
-                    combined = tn + tp
-                    if any(k in combined for k in free_keywords) and not our_free:
-                        our_free = tp or tn
-                    elif tp and not our_paid:
-                        our_paid = tp
-                # 如果没有明确的免费/付费区分，用第一个tier的价格作为付费信息
-                if not our_paid and tiers:
-                    for t in tiers:
-                        if t.price:
-                            our_paid = t.price
-                            break
+                our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in tiers if t.price)
                 our_model = "；".join(t.tier_name for t in tiers[:4] if t.tier_name) if tiers else ""
 
             if pi:
                 comparison_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">免费版</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_free) if our_free else no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.free_tier) if pi.free_tier else no_data_label}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
-                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">付费版</td>
+                    <td style="padding:8px 14px;font-size:13px;color:#64748b;">价格与方案</td>
                     <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(our_paid) if our_paid else no_data_label}</td>
-                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pi.paid_tier) if pi.paid_tier else no_data_label}</td>
+                    <td style="padding:8px 14px;font-size:13px;text-align:center;">{esc(pricing_offer(pi)) if pricing_offer(pi) else no_data_label}</td>
                 </tr>
                 <tr style="border-bottom:1px solid #f1f5f9;background:#fafaf9;">
                     <td style="padding:8px 14px;font-size:13px;color:#64748b;">定价模式</td>
@@ -1129,12 +1197,10 @@ class StrategyAgent(BaseAgent):
                     <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
-            # 市场份额行（从 target_product_data 提取我方数据）
-            our_share = ""
-            our_trend = ""
-            if report.target_product_data and report.target_product_data.market_share:
-                our_share = report.target_product_data.market_share[:150]
-                our_trend = "上升"
+            # Use the same qualified analysis in every market presentation.
+            our_market = share_map.get(report.product_name)
+            our_share = our_market.share_estimate if our_market else "未知"
+            our_trend = our_market.trend if our_market else "未知"
 
             if ms:
                 share_display = esc(ms.share_estimate) if ms.share_estimate else no_data_label
@@ -1214,6 +1280,24 @@ class StrategyAgent(BaseAgent):
         # ══════════════════════════════════════════════
         feature_matrix_html = ""
         if product_analysis and product_analysis.feature_matrix:
+            # Read persisted scope notes, not transient recovery metadata. The
+            # model's condensed strategy summary can omit SKU/region/date limits.
+            product_scope_html = ""
+            source_summary = product_analysis.summary or ""
+            if source_summary:
+                scope_notes = product_scope_notes(source_summary, "、".join(competitor_names))
+                note_items = []
+                for scope, note in scope_notes:
+                    note_items.append(
+                        f'<li style="margin-top:8px;"><strong>适用竞品：{esc(scope)}</strong>'
+                        f'<p style="margin:4px 0;white-space:pre-line;">{esc(note)}</p></li>'
+                    )
+                product_scope_html = (
+                    '<div role="note" style="margin-bottom:16px;padding:12px 16px;background:#f8fafc;'
+                    'border-radius:8px;font-size:13px;color:#475569;line-height:1.7;">'
+                    '<h3 style="margin:0;font-size:14px;">比较范围与限定</h3>'
+                    '<ul style="margin:0;padding-left:20px;">' + "".join(note_items) + '</ul></div>'
+                )
             header_cells = "".join(f'<th style="padding:12px 16px;text-align:center;white-space:nowrap;font-size:13px;">{esc(n)}</th>' for n in all_names)
             rows = ""
             for fm in product_analysis.feature_matrix:
@@ -1226,6 +1310,7 @@ class StrategyAgent(BaseAgent):
             feature_matrix_html = f'''
             <div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
                 <h2 style="margin:0 0 20px 0;font-size:20px;color:#1e293b;">🔧 功能对比矩阵（总览）</h2>
+                {product_scope_html}
                 <div style="overflow-x:auto;">
                     <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;">
                         <thead>
@@ -1255,23 +1340,11 @@ class StrategyAgent(BaseAgent):
                 our_free = ""
                 our_paid = ""
                 our_model = ""
-                free_keywords = ["免费", "免费版", "基础", "0元", "零元", "无年费"]
-                for t in tpd.pricing_tiers:
-                    combined = (t.tier_name or "") + (t.price or "")
-                    if any(k in combined for k in free_keywords) and not our_free:
-                        our_free = t.price or t.tier_name
-                    elif t.price and not our_paid:
-                        our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
-                if not our_paid:
-                    for t in tpd.pricing_tiers:
-                        if t.price:
-                            our_paid = f"{t.tier_name}: {t.price}" if t.tier_name else t.price
-                            break
+                our_paid = "；".join(f"{t.tier_name}: {t.price}" for t in tpd.pricing_tiers if t.price)
                 our_model = "；".join(t.tier_name for t in tpd.pricing_tiers[:4] if t.tier_name)
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;background:#f0fdf4;">
                     <td style="padding:10px 16px;font-weight:600;font-size:13px;color:#166534;">⭐ {esc(report.product_name)}（我方）</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(our_free) if our_free else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(our_paid.rstrip("；")) if our_paid else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(our_model) if our_model else no_data_cell}</td>
                 </tr>'''
@@ -1279,13 +1352,12 @@ class StrategyAgent(BaseAgent):
                 price_rows += f'''
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:10px 16px;font-weight:500;font-size:13px;">{esc(pc.competitor)}{cite_sup(pc.citations)}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.free_tier) if pc.free_tier else no_data_cell}</td>
-                    <td style="padding:10px 16px;font-size:13px;">{esc(pc.paid_tier) if pc.paid_tier else no_data_cell}</td>
+                    <td style="padding:10px 16px;font-size:13px;">{esc(pricing_offer(pc)) if pricing_offer(pc) else no_data_cell}</td>
                     <td style="padding:10px 16px;font-size:13px;">{esc(pc.pricing_model) if pc.pricing_model else no_data_cell}</td>
                 </tr>'''
 
             ranking_html = ""
-            if pricing_analysis.value_ranking:
+            if pricing_analysis.value_ranking and pricing_analysis.comparable_basis:
                 rank_items = ""
                 for i, name in enumerate(pricing_analysis.value_ranking, 1):
                     medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
@@ -1302,8 +1374,7 @@ class StrategyAgent(BaseAgent):
                     <thead>
                         <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
                             <th style="padding:12px 16px;text-align:left;font-size:13px;">竞品</th>
-                            <th style="padding:12px 16px;text-align:left;font-size:13px;">免费版</th>
-                            <th style="padding:12px 16px;text-align:left;font-size:13px;">付费版</th>
+                            <th style="padding:12px 16px;text-align:left;font-size:13px;">价格与方案</th>
                             <th style="padding:12px 16px;text-align:left;font-size:13px;">定价模式</th>
                         </tr>
                     </thead>
@@ -1313,34 +1384,63 @@ class StrategyAgent(BaseAgent):
                 {'<div style="margin-top:16px;padding:12px 16px;background:#fffbeb;border-radius:8px;font-size:14px;line-height:1.8;"><strong>策略分析：</strong>' + esc(pricing_analysis.pricing_strategy_analysis) + '</div>' if pricing_analysis.pricing_strategy_analysis else ''}
             </div>'''
 
+        if pricing_analysis and pricing_analysis.dimension_comparison:
+            price_entities = list(dict.fromkeys(
+                [report.product_name] + [item.competitor for item in pricing_analysis.pricing_comparison]
+                + [entity for row in pricing_analysis.dimension_comparison for entity in row.values]))
+            dimension_rows = ""
+            for row in pricing_analysis.dimension_comparison:
+                cells = "".join(
+                    '<td style="padding:10px 14px;border:1px solid #e2e8f0;font-size:13px;vertical-align:top;">'
+                    + esc(row.values.get(entity, "资料不足")) + '</td>' for entity in price_entities)
+                dimension_rows += (
+                    '<tr><th style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;font-size:13px;">'
+                    + esc(row.feature) + cite_sup(row.citations) + '</th>' + cells + '</tr>')
+            dimension_headers = "".join(
+                '<th style="padding:10px 14px;text-align:left;font-size:13px;">' + esc(entity) + '</th>'
+                for entity in price_entities)
+            scope_html = pricing_scope_notes_html(pricing_analysis)
+            ranking_html = ""
+            if pricing_analysis.value_ranking and pricing_analysis.comparable_basis:
+                ranking_html = '<p style="margin-top:14px;font-size:13px;">同口径比较顺序：' + esc(
+                    ' > '.join(pricing_analysis.value_ranking)) + '</p>'
+            pricing_html = (
+                '<div style="background:#fff;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">'
+                '<h2 style="margin:0 0 20px;font-size:20px;color:#1e293b;">💰 定价维度对比</h2>'
+                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">'
+                '<thead><tr style="background:#f8fafc;"><th style="padding:10px 14px;text-align:left;">定价维度</th>'
+                + dimension_headers + '</tr></thead><tbody>' + dimension_rows + '</tbody></table></div>'
+                + scope_html + ranking_html
+                + ('<p style="margin-top:14px;font-size:13px;color:#475569;white-space:pre-line;">'
+                   + esc(pricing_analysis.pricing_strategy_analysis) + '</p>' if pricing_analysis.pricing_strategy_analysis else '')
+                + ('<div role="note" style="margin-top:12px;font-size:13px;color:#64748b;white-space:pre-line;">'
+                   + esc(pricing_analysis.summary) + '</div>' if pricing_analysis.summary else '')
+                + '</div>')
+        elif pricing_analysis and pricing_analysis.source_scope_notes:
+            pricing_html += pricing_scope_notes_html(pricing_analysis)
+
         # ══════════════════════════════════════════════
         # 区块5：市场格局分析
         # ══════════════════════════════════════════════
         market_html = ""
         if market_analysis and market_analysis.market_share_data:
-            max_share = 0
-            share_data = []
-            for ms in market_analysis.market_share_data:
-                num_match = re.search(r'([\d.]+)', ms.share_estimate)
-                share_num = float(num_match.group(1)) if num_match else 0
-                max_share = max(max_share, share_num)
-                share_data.append((ms, share_num))
-
-            share_data_sorted = sorted(share_data, key=lambda x: x[1], reverse=True)
-
             share_bars = ""
-            for ms, share_num in share_data_sorted:
-                bar_width = (share_num / max_share * 100) if max_share > 0 else 50
-                bar_width = max(bar_width, 5)
+            for ms in market_analysis.market_share_data:
+                # Years, user counts, denials and several scoped percentages
+                # are text, not a single share value. Do not rank unlike scopes.
+                match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*%\s*", ms.share_estimate or "")
+                share_num = float(match.group(1)) if match else None
+                if share_num is not None and 0 <= share_num <= 100:
+                    share_visual = f'''<div data-market-share-value="{share_num}" style="background:#f1f5f9;border-radius:6px;height:10px;overflow:hidden;margin-top:6px;">
+                        <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{share_num:.1f}%;border-radius:6px;"></div></div>'''
+                else:
+                    share_visual = ""
                 share_bars += f'''
                 <div style="display:flex;align-items:center;margin-bottom:12px;">
                     <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
                     <div style="flex:1;margin:0 12px;">
-                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
-                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
-                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">{esc(ms.share_estimate)}</span>
-                            </div>
-                        </div>
+                        <div style="font-size:13px;line-height:1.6;overflow-wrap:anywhere;">{esc(ms.share_estimate) if ms.share_estimate else '未知'}</div>
+                        {share_visual}
                     </div>
                     <div style="width:80px;text-align:right;flex-shrink:0;">{trend_icon(ms.trend)}</div>
                 </div>'''
@@ -1358,6 +1458,7 @@ class StrategyAgent(BaseAgent):
                         <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}</div>
                         <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
                         <div>{kw_tags}</div>
+                        {('<div style="font-size:12px;line-height:1.65;color:#64748b;margin-top:8px;overflow-wrap:anywhere;">' + esc(getattr(rep, 'source_text', '')) + '</div>') if getattr(rep, 'source_text', '') else ''}
                     </div>'''
                 reputation_html = f'''
                 <div style="margin-top:20px;">
@@ -1622,11 +1723,14 @@ class StrategyAgent(BaseAgent):
         # 三维摘要
         summary_cards = ""
         if report.product_analysis_summary:
+            product_summary_display = "\n".join(
+                (f"适用竞品：{scope}；" if scope else "") + note
+                for scope, note in product_scope_notes(report.product_analysis_summary))
             summary_cards += f'''
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
                 <div style="font-size:24px;margin-bottom:8px;">🔧</div>
                 <div style="font-weight:600;font-size:14px;margin-bottom:6px;">产品分析</div>
-                <div style="font-size:13px;color:#64748b;line-height:1.6;">{esc(report.product_analysis_summary)}</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;white-space:pre-line;">{esc(product_summary_display)}</div>
             </div>'''
         if report.pricing_analysis_summary:
             summary_cards += f'''
@@ -1785,6 +1889,12 @@ class StrategyAgent(BaseAgent):
             </div>
             {metrics_html}'''
 
+        # Register target introduction references before building the appendix.
+        target_product_intro_html = (
+            render_target_product_intro_from_llm(report.target_product_intro, report.target_product_data)
+            or render_target_product_intro(report.target_product_data)
+        )
+
         # 对正文实际引用的来源重新从 1 开始编号，消除序号空洞
         # 构建旧编号→新编号的映射，用于字符串替换
         old_to_new: dict[int, int] = {}
@@ -1821,7 +1931,7 @@ class StrategyAgent(BaseAgent):
                 query_label = f' <span style="color:#94a3b8;font-size:11px;">搜索词: {esc(cite.query)}</span>' if cite.query else ""
                 url_link = f'<a href="{esc(cite.url)}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;">{esc(cite.title or cite.url)}</a>' if cite.url else esc(cite.title)
                 ref_items += f'''
-                <div id="cite-{cid}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                <div id="cite-{esc(cid)}" style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
                     {num_label}{url_link}{site_label}{query_label}
                 </div>'''
             references_html = f'''
@@ -1865,7 +1975,7 @@ class StrategyAgent(BaseAgent):
 	    </div>
 
 	    <!-- 目标产品介绍 -->
-	    {render_target_product_intro_from_llm(report.target_product_intro, report.target_product_data) or render_target_product_intro(report.target_product_data)}
+	    {target_product_intro_html}
 
 	    <!-- 竞品发现 -->
 	    {"<div style='margin-bottom:24px;'><h2 style='font-size:20px;color:#1e293b;margin-bottom:16px;'>🔎 发现竞品</h2><div style='display:flex;gap:16px;flex-wrap:wrap;'>" + competitor_cards + '</div></div>' if competitor_cards else ''}
@@ -1926,4 +2036,9 @@ class StrategyAgent(BaseAgent):
                 return m.group(0)
             html = re.sub(r'\[(\d+)\](?=(</a></sup>))', _replace_cite_num, html)
 
-        return html
+        from dataclasses import asdict
+        from core.report_citations import normalize_report_citations
+
+        sources = ({cid: asdict(cite) for cid, cite in report.citation_index.citations.items()}
+                   if report.citation_index else {})
+        return normalize_report_citations(html, sources)

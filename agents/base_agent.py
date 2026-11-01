@@ -6,7 +6,7 @@ agents/base_agent.py — Agent基类
 """
 
 from abc import ABC, abstractmethod
-from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error, is_last_call_truncated
+from core.llm_client import llm_call, async_llm_call, parse_llm_json, get_last_call_error
 import config
 import json
 import re
@@ -40,14 +40,15 @@ class BaseAgent(ABC):
     def ask_llm(self, user_message: str,
                 temperature: float = None,
                 max_tokens: int = None,
-                json_mode: bool = False) -> str:
+                json_mode: bool = False, *, thinking: str | None = None) -> str:
         """调用LLM做决策"""
         temp = temperature if temperature is not None else config.LLM_TEMPERATURE
         tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
 
         result = llm_call(self.system_prompt, user_message,
                           temperature=temp, max_tokens=tokens,
-                          agent_id=self.agent_id, json_mode=json_mode)
+                          agent_id=self.agent_id, json_mode=json_mode,
+                          **({"thinking": thinking} if thinking is not None else {}))
 
         content = result.get("content", "") if isinstance(result, dict) else (result or "")
         usage = result.get("usage", {}) if isinstance(result, dict) else {}
@@ -60,13 +61,24 @@ class BaseAgent(ABC):
             "result": content[:_LOG_TEXT_MAX] if content else "",
             "prompt_tokens": result.get("prompt_tokens", 0) if isinstance(result, dict) else 0,
             "completion_tokens": result.get("completion_tokens", 0) if isinstance(result, dict) else 0,
+            "reasoning_tokens": result.get("reasoning_tokens", 0) if isinstance(result, dict) else 0,
+            "cached_tokens": result.get("cached_tokens") if isinstance(result, dict) else None,
+            "uncached_tokens": result.get("uncached_tokens") if isinstance(result, dict) else None,
+            "usage_known": result.get("usage_known") if isinstance(result, dict) else False,
+            "usage_reported": result.get("usage_reported") if isinstance(result, dict) else False,
+            "request_bytes": result.get("request_bytes", 0) if isinstance(result, dict) else 0,
+            "usage_reservation_tokens": result.get("usage_reservation_tokens", 0) if isinstance(result, dict) else 0,
+            "content_chars": len(content) if isinstance(content, str) else 0,
             "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
             "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
             "model": result.get("model", "") if isinstance(result, dict) else "",
             "finish_reason": result.get("finish_reason", "") if isinstance(result, dict) else "",
-            "temperature": temp,
+            "temperature": None if thinking == "enabled" else temp,
+            "requested_temperature": temp,
+            "thinking": thinking,
+            "max_completion_tokens": tokens,
             "max_tokens": tokens,
-            "success": bool(content),
+            "success": bool(content) and result.get("finish_reason") != "content_filter" if isinstance(result, dict) else bool(content),
             "parse_error": "",
             # Prompt 归档（可选，通过 config 控制）
             "system_prompt_archive": self.system_prompt if config.ARCHIVE_PROMPTS else "",
@@ -80,7 +92,7 @@ class BaseAgent(ABC):
             except Exception:
                 pass
 
-        return content
+        return "" if self.llm_logs[-1].get("finish_reason") == "content_filter" else content
 
     def ask_llm_json(self, user_message: str,
                      temperature: float = None,
@@ -104,14 +116,23 @@ class BaseAgent(ABC):
 
     def ask_llm_json_with_reason(self, user_message: str,
                                  temperature: float = None,
-                                 max_tokens: int = None) -> tuple[dict, str]:
+                                 max_tokens: int = None, *, thinking: str | None = None) -> tuple[dict, str]:
         """调用LLM并解析JSON返回，附带失败原因"""
         text = self.ask_llm(
             user_message,
             temperature,
             max_tokens,
             json_mode=True,
+            **({"thinking": thinking} if thinking is not None else {}),
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "content_filter":
+            self.llm_logs[-1]["parse_error"] = "provider_content_filter"
+            return {}, "provider_content_filter"
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
+            reason = "truncated_output(finish_reason=length)"
+            self.llm_logs[-1]["parse_error"] = reason
+            self._log(f"   ⚠️ JSON响应未完整结束: {reason}")
+            return {}, reason
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -128,14 +149,15 @@ class BaseAgent(ABC):
     async def async_ask_llm(self, user_message: str,
                             temperature: float = None,
                             max_tokens: int = None,
-                            json_mode: bool = False) -> str:
+                            json_mode: bool = False, *, thinking: str | None = None) -> str:
         """异步调用LLM做决策"""
         temp = temperature if temperature is not None else config.LLM_TEMPERATURE
         tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
 
         result = await async_llm_call(self.system_prompt, user_message,
                                       temperature=temp, max_tokens=tokens,
-                                      agent_id=self.agent_id, json_mode=json_mode)
+                                      agent_id=self.agent_id, json_mode=json_mode,
+                                      **({"thinking": thinking} if thinking is not None else {}))
 
         content = result.get("content", "") if isinstance(result, dict) else (result or "")
 
@@ -147,13 +169,24 @@ class BaseAgent(ABC):
             "result": content[:_LOG_TEXT_MAX] if content else "",
             "prompt_tokens": result.get("prompt_tokens", 0) if isinstance(result, dict) else 0,
             "completion_tokens": result.get("completion_tokens", 0) if isinstance(result, dict) else 0,
+            "reasoning_tokens": result.get("reasoning_tokens", 0) if isinstance(result, dict) else 0,
+            "cached_tokens": result.get("cached_tokens") if isinstance(result, dict) else None,
+            "uncached_tokens": result.get("uncached_tokens") if isinstance(result, dict) else None,
+            "usage_known": result.get("usage_known") if isinstance(result, dict) else False,
+            "usage_reported": result.get("usage_reported") if isinstance(result, dict) else False,
+            "request_bytes": result.get("request_bytes", 0) if isinstance(result, dict) else 0,
+            "usage_reservation_tokens": result.get("usage_reservation_tokens", 0) if isinstance(result, dict) else 0,
+            "content_chars": len(content) if isinstance(content, str) else 0,
             "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
             "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
             "model": result.get("model", "") if isinstance(result, dict) else "",
             "finish_reason": result.get("finish_reason", "") if isinstance(result, dict) else "",
-            "temperature": temp,
+            "temperature": None if thinking == "enabled" else temp,
+            "requested_temperature": temp,
+            "thinking": thinking,
+            "max_completion_tokens": tokens,
             "max_tokens": tokens,
-            "success": bool(content),
+            "success": bool(content) and result.get("finish_reason") != "content_filter" if isinstance(result, dict) else bool(content),
             "parse_error": "",
         })
 
@@ -163,7 +196,7 @@ class BaseAgent(ABC):
             except Exception:
                 pass
 
-        return content
+        return "" if self.llm_logs[-1].get("finish_reason") == "content_filter" else content
 
     async def async_ask_llm_json(self, user_message: str,
                                  temperature: float = None,
@@ -186,14 +219,23 @@ class BaseAgent(ABC):
 
     async def async_ask_llm_json_with_reason(self, user_message: str,
                                              temperature: float = None,
-                                             max_tokens: int = None) -> tuple[dict, str]:
+                                             max_tokens: int = None, *, thinking: str | None = None) -> tuple[dict, str]:
         """异步调用LLM并解析JSON返回，附带失败原因"""
         text = await self.async_ask_llm(
             user_message,
             temperature,
             max_tokens,
             json_mode=True,
+            **({"thinking": thinking} if thinking is not None else {}),
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "content_filter":
+            self.llm_logs[-1]["parse_error"] = "provider_content_filter"
+            return {}, "provider_content_filter"
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
+            reason = "truncated_output(finish_reason=length)"
+            self.llm_logs[-1]["parse_error"] = reason
+            self._log(f"   ⚠️ JSON响应未完整结束: {reason}")
+            return {}, reason
         if text:
             parsed = parse_llm_json(text)
             if parsed:
@@ -216,7 +258,7 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
-        truncated = is_last_call_truncated()
+        truncated = bool(self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length")
 
         if text:
             parsed = parse_llm_json(text)
@@ -251,7 +293,7 @@ class BaseAgent(ABC):
             max_tokens,
             json_mode=True,
         )
-        truncated = is_last_call_truncated()
+        truncated = bool(self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length")
 
         if text:
             parsed = parse_llm_json(text)
@@ -291,13 +333,33 @@ class BaseAgent(ABC):
     @staticmethod
     def extract_citation_ids(data: dict) -> list[str]:
         """从 LLM 输出的 dict 中提取所有引用 ID"""
-        ids = list(data.get("citations", []))
-        if isinstance(ids, str):
-            ids = [ids]
-        # 也从文本中用正则提取 [xxx:qN:rN] 格式
-        text = json.dumps(data, ensure_ascii=False)
-        ids.extend(re.findall(r'\[(\w+:q\d+:r\d+)\]', text))
-        return list(set(ids))
+        from core.report_citations import extract_inline_citation_ids
+
+        explicit = data.get("citations", [])
+        explicit = [explicit] if isinstance(explicit, str) else explicit
+        ids = []
+        for value in explicit if isinstance(explicit, (list, tuple)) else []:
+            if not isinstance(value, str):
+                continue
+            value = value.strip()
+            wrapped = extract_inline_citation_ids(value)
+            if wrapped:
+                ids.extend(wrapped)
+            elif value:
+                ids.append(value[1:-1].strip() if value.startswith("[") and value.endswith("]") else value)
+
+        def collect(value):
+            if isinstance(value, str):
+                ids.extend(extract_inline_citation_ids(value))
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    collect(nested)
+            elif isinstance(value, (list, tuple)):
+                for nested in value:
+                    collect(nested)
+
+        collect(data)
+        return list(dict.fromkeys(ids))
 
     @abstractmethod
     async def run(self, *args, **kwargs):

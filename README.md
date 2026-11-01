@@ -6,6 +6,8 @@
 - 每个 Agent 都有规则引擎兜底，无 API Key 时可零成本运行
 - 双执行路径：LangGraph StateGraph（默认）和 Legacy 顺序流
 
+本次竞品版本的修改范围、验证方式与跨品类实测方案见 [修改记录](CHANGELOG.md)。
+
 ## 快速开始
 
 ### 1. 拉取项目

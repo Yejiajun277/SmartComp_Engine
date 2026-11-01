@@ -86,8 +86,8 @@ class WorkflowGraphTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["status"], "completed")
         self.assertEqual(state["collection_retry_count"], 1)
         self.assertEqual(
-            orch.collection_agent.run_feedbacks,
-            ["", "feedback:collection:CollectionAgent:1"],
+            orch.collection_agent.reextract_feedbacks,
+            ["feedback:collection:CollectionAgent:1"],
         )
         self.assertEqual(
             [check.phase for check in state["report"].qa_timeline.checks[:2]],
@@ -148,7 +148,8 @@ class WorkflowGraphTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(state["qa_collection"].degraded)
         self.assertTrue(state["quality_exhausted"]["collection"])
         self.assertEqual(state["collection_retry_count"], 2)
-        self.assertEqual(len(orch.collection_agent.run_feedbacks), 3)
+        self.assertEqual(orch.collection_agent.run_feedbacks, [""])
+        self.assertEqual(len(orch.collection_agent.reextract_feedbacks), 2)
         self.assertEqual(len(state["competitor_list"].competitors), 2)
         self.assertEqual(len(state["competitors_data"]), 2)
         self.assertGreater(

@@ -3,7 +3,7 @@
 agents/quality_agent.py — 质检Agent
 
 职责：完整性检查 + 幻觉检测，发现问题后打回对应 Agent 重做
-LLM调用：1次/检查（幻觉检测）
+LLM调用：每次检查最多2次（完整JSON恢复，不改动被检查数据）
 提示词来源：prompts/quality_agent.md
 """
 
@@ -15,6 +15,9 @@ from models.domain import (
 )
 from core.prompt_loader import load as load_prompts
 from datetime import datetime
+from dataclasses import asdict
+from copy import deepcopy
+import hashlib
 import config
 import json
 
@@ -24,6 +27,8 @@ class QualityAgent(BaseAgent):
 
     MAX_RETRIES = 2
     PASS_SCORE = 75
+    _QUALITY_THINKING = "enabled"
+    _QUALITY_BUDGETS = (16384, 16384)
 
     # 阶段权重：(critical扣分, warning扣分)
     PHASE_WEIGHTS = {
@@ -78,11 +83,114 @@ class QualityAgent(BaseAgent):
         self._prompt_check_strategy = prompts["prompt_check_strategy"]
         self._prompt_build_feedback = prompts["prompt_build_feedback"]
         self.timeline = QATimeline(max_retries=self.MAX_RETRIES)
-        self._passed_fields: set[str] = set()  # 已通过质检的字段，避免重复标记
+        self._passed_fields: set[str] = set()  # 兼容已查字段记录，不豁免后续快照的问题
+        self._collection_review_cache: dict[str, dict] = {}
+        # Refusals block the exact rejected request; they are never successful
+        # semantic-review cache entries and never cross a new collection run.
+        self._provider_rejections: set[str] = set()
+        self._collection_review_trace: list[dict] = []
+        self._collection_attempt = 1
+        self._last_quality_request_trace: dict = {}
 
     async def run(self, *args, **kwargs):
         """不直接调用，请使用 check_collection / check_analysis / check_strategy"""
         raise NotImplementedError("QualityAgent 不直接运行，请使用 check_collection/check_analysis/check_strategy")
+
+    @staticmethod
+    def _valid_quality_response(result: object) -> bool:
+        """Do not turn an incomplete/foreign response into an empty issue list."""
+        if not isinstance(result, dict) or not isinstance(result.get("issues"), list):
+            return False
+        for issue in result["issues"]:
+            if not isinstance(issue, dict):
+                return False
+            if issue.get("severity") not in {"critical", "warning"}:
+                return False
+            if issue.get("category") not in {"completeness", "schema", "hallucination", "citation"}:
+                return False
+            if any(not isinstance(issue.get(key), str) or not issue[key].strip()
+                   for key in ("field", "description")):
+                return False
+            if any(key in issue and not isinstance(issue[key], str)
+                   for key in ("expected", "actual", "suggestion")):
+                return False
+        return True
+
+    async def _request_quality_json(self, prompt: str) -> tuple[dict, str]:
+        """Recheck the same snapshot once if transport/JSON/schema is incomplete."""
+        reason = "invalid_quality_response"
+        # This helper is also called concurrently by analysis gates on the
+        # same agent. Accumulate locally across awaits; publish only when this
+        # call returns, so a caller can copy its own trace immediately.
+        request_trace = {"requests": [], "cacheable": False}
+        fingerprint = self._collection_review_fingerprint(prompt)
+        if fingerprint in self._provider_rejections:
+            request_trace["blocked_provider_rejection"] = True
+            self._last_quality_request_trace = request_trace
+            return {}, "provider_content_filter"
+        for attempt, budget in enumerate(self._QUALITY_BUDGETS):
+            request = prompt
+            if attempt:
+                request += (
+                    "\n\n上一次质检响应未形成完整可用JSON（" + reason + "）。"
+                    "请重新检查上述同一份资料，仅输出一个完整JSON对象，issues必须为数组。"
+                    "每项使用severity、category、field、description、suggestion字段；"
+                    "severity仅critical/warning，category仅completeness/schema/hallucination/citation。"
+                    "合并重复问题，描述和建议简短；不复述整段原文、不输出思考过程。"
+                    "保留所有严重问题；没有问题才返回issues空数组。"
+                )
+            log_count = len(self.llm_logs)
+            result, failure = await self.async_ask_llm_json_with_reason(
+                request, max_tokens=budget, thinking=self._QUALITY_THINKING)
+            # Use this agent's newly appended response, never module-global or
+            # stale last-call state. Test/custom adapters without response
+            # metadata remain compatible but cannot populate a reuse cache.
+            response = self.llm_logs[-1] if len(self.llm_logs) > log_count else None
+            finish = response.get("finish_reason", "") if response else ""
+            completed = (failure in ("", "success") if response is None
+                         else finish == "stop" and failure == "success")
+            valid = self._valid_quality_response(result)
+            rejected = finish == "content_filter" or failure in {"provider_content_filter", "content_filter"}
+            if rejected:
+                completed = False
+                failure = "provider_content_filter"
+            elif response is not None and finish != "stop":
+                ending = f"incomplete_finish_reason({finish or 'missing'})"
+                failure = (failure + "; " + ending) if failure and failure != "success" else ending
+            elif not valid:
+                failure = "invalid_quality_response_schema" if result or failure == "success" else failure
+            if response is not None:
+                request_trace["requests"].append({
+                    "max_tokens": budget, "finish_reason": finish,
+                    "thinking": self._QUALITY_THINKING,
+                    "checked_at": datetime.now().isoformat(timespec="microseconds"),
+                    "fingerprint": self._collection_review_fingerprint(request),
+                    "failure_reason": "" if completed and valid else failure or "invalid_quality_response",
+                })
+            if rejected:
+                self._provider_rejections.add(fingerprint)
+                self._last_quality_request_trace = request_trace
+                self._log("   ❌ 提供方拒绝质检请求；停止本任务，不重试或降级通过")
+                return {}, "provider_content_filter"
+            if completed and valid:
+                request_trace["cacheable"] = response is not None
+                self._last_quality_request_trace = request_trace
+                return result, ""
+            reason = failure
+            reason = reason or "invalid_quality_response"
+            self._log(f"   ⚠️ 质检响应未完成（第{attempt + 1}次）: {reason}")
+        self._last_quality_request_trace = request_trace
+        return {}, reason
+
+    def _collection_review_fingerprint(self, prompt: str) -> str:
+        """Hash the complete request and non-key runtime contract, never facts prefixes."""
+        contract = {"system_prompt": self.system_prompt, "entity_prompt": prompt,
+                    "provider": config.LLM_PROVIDER, "model": config.MIMO_MODEL,
+                    "base_url": config.MIMO_BASE_URL,
+                    "thinking": self._QUALITY_THINKING,
+                    "temperature": None if self._QUALITY_THINKING == "enabled" else config.LLM_TEMPERATURE,
+                    "budgets": list(self._QUALITY_BUDGETS), "review_contract": 2}
+        return hashlib.sha256(json.dumps(contract, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
     # ── Phase 2: 采集数据质检 ──
 
@@ -95,6 +203,13 @@ class QualityAgent(BaseAgent):
     ) -> QualityCheckResult:
         """Phase 2 质检：检查采集数据"""
         self._log(f"🔍 质检采集数据（第{attempt}次）...")
+        # A new collection attempt 1 starts a new run even if an orchestrator
+        # instance is reused. No process-wide or cross-run review cache.
+        if attempt <= 1:
+            self._collection_review_cache.clear()
+            self._provider_rejections.clear()
+        self._collection_attempt = attempt
+        self._collection_review_trace = []
         issues = []
 
         # 完整性检查
@@ -102,44 +217,39 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
-        if config.ENABLE_LLM and original_search_texts:
+        fail_reason = ""
+        if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_collection_hallucination(
                 competitors_data, original_search_texts
             )
-            # 过滤掉已通过的字段（避免重复标记同一字段为幻觉）
-            new_hallucination = []
-            for hi in hallucination_issues:
-                if hi.field and hi.field not in self._passed_fields:
-                    new_hallucination.append(hi)
-                elif not hi.field:
-                    new_hallucination.append(hi)
-            issues.extend(new_hallucination)
+            # A prior pass cannot erase this snapshot's source caveats/findings.
+            issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
                 ))
 
         # 引用有效性检查（规则引擎）
-        all_citations = []
-        all_output_ids = []
-        for d in competitors_data.values():
-            all_citations.extend(d.citations)
+        for name, d in competitors_data.items():
+            output_ids = []
             for fi in d.product_features:
-                all_output_ids.extend(fi.citations)
+                output_ids.extend(fi.citations)
             for pt in d.pricing_tiers:
-                all_output_ids.extend(pt.citations)
-        if all_citations:
-            issues.extend(self._check_citation_validity(all_citations, list(set(all_output_ids))))
+                output_ids.extend(pt.citations)
+            # A target cannot borrow a rival's otherwise valid catalog ID.
+            local_issues = self._check_citation_validity(d.citations, list(set(output_ids)))
+            for issue in local_issues:
+                issue.field = f"{name}.{issue.field}"
+            issues.extend(local_issues)
 
-        score = self._calculate_score(issues, phase="collection", competitor_count=len(competitors_data))
-        has_critical_schema = any(
-            issue.category == "schema" and issue.severity == "critical"
-            for issue in issues
-        )
-        passed = score >= self.PASS_SCORE and not has_critical_schema
+        rival_count = len(competitor_list.competitors) if competitor_list is not None else len(competitors_data)
+        score = self._calculate_score(issues, phase="collection", competitor_count=rival_count)
+        passed = (score >= self.PASS_SCORE
+                  and hallucination_status != HallucinationCheckStatus.FAILED.value
+                  and not any(issue.severity == "critical" for issue in issues))
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -172,6 +282,8 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,  # 首次检查无修正，由 graph node 在重试后设置
             total_fields=total_fields,
+            entity_review_trace=deepcopy(self._collection_review_trace),
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         # 记录已通过的字段（避免下一轮重复标记为幻觉）
@@ -181,7 +293,7 @@ class QualityAgent(BaseAgent):
                     val = getattr(data, field_name, "")
                     if isinstance(val, str) and len(val.strip()) > 10:
                         self._passed_fields.add(f"{name}.{field_name}")
-        else:
+        elif hallucination_status != HallucinationCheckStatus.FAILED.value:
             # 未通过时，记录本轮没有幻觉问题的字段为"已通过"
             halluc_fields = {i.field for i in issues if i.category == "hallucination" and i.field}
             for name, data in competitors_data.items():
@@ -291,23 +403,23 @@ class QualityAgent(BaseAgent):
                 pass
             elif not market_share:
                 issues.append(QualityIssue(
-                    severity="critical", category="completeness",
+                    severity="warning", category="completeness",
                     field=f"{name}.market_share",
-                    description="市场份额信息为空",
-                    suggestion="补充该竞品的市场份额数据",
+                    description="资料缺口：未提供已确认的同口径市场份额",
+                    suggestion="保留未披露/未知，不填零或借用集团份额；语义检查仍须核对原文是否已给同口径数据",
                 ))
             elif self._is_meaningless(market_share):
                 issues.append(QualityIssue(
-                    severity="critical", category="completeness",
+                    severity="warning", category="completeness",
                     field=f"{name}.market_share",
-                    description=f"市场份额为无意义文本: '{market_share}'",
-                    suggestion="补充该竞品的实际市场份额数据",
+                    description=f"资料缺口：市场份额未确认（{market_share}）",
+                    suggestion="保留明确缺口与适用范围，不强求未披露数字；来源实际给出份额却遗漏或错配仍须报告",
                 ))
 
             # 文本字段检查（空或过短）
             for field_name, display_name, search_hint, severity_if_empty in [
                 ("strengths", "优势", "竞争优势 核心优势 行业地位", "critical"),
-                ("weaknesses", "劣势", "劣势 不足 用户吐槽", "critical"),
+                ("weaknesses", "劣势", "劣势 不足 用户吐槽", "warning"),
                 ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态", "warning"),
                 ("user_reviews", "用户评价", "用户评价 口碑 评分", "warning"),
             ]:
@@ -315,6 +427,14 @@ class QualityAgent(BaseAgent):
                 if field_name in invalid_text_fields:
                     continue
                 if not text or not text.strip():
+                    if field_name == "weaknesses":
+                        issues.append(QualityIssue(
+                            severity="warning", category="completeness",
+                            field=f"{name}.weaknesses",
+                            description="资料缺口：尚未提供可归属于当前产品的劣势依据",
+                            suggestion="保留未知，不借用旧型号或其他主体负面；语义检查仍须核对完整来源，已明确披露却遗漏须报告critical",
+                        ))
+                        continue
                     issues.append(QualityIssue(
                         severity=severity_if_empty, category="completeness",
                         field=f"{name}.{field_name}",
@@ -351,37 +471,84 @@ class QualityAgent(BaseAgent):
         self,
         competitors_data: dict[str, CompetitorData],
         original_search_texts: dict[str, str],
-    ) -> tuple[list[QualityIssue], str]:
+    ) -> tuple[list[QualityIssue], str, str]:
         """采集数据幻觉检测（LLM）"""
-        # 构建竞品数据摘要
-        data_summary = {}
+        # Inspect the saved snapshot, including scope qualifiers and all source
+        # references. Shortening these fields caused false truncation/missing-
+        # source findings about information that existed in the actual report.
+        # Four complete entities exceeded one check's output budget. Keep each
+        # entity's entire source/fact snapshot; split by ownership, not length.
+        # Serial requests also keep the agent's last-call/log state unambiguous.
+        issues, failures = [], {}
         for name, data in competitors_data.items():
-            data_summary[name] = {
-                "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features],
-                "pricing_tiers": [{"tier_name": pt.tier_name, "price": pt.price} for pt in data.pricing_tiers],
-                "market_share": normalize_text_value(data.market_share),
-                "user_reviews": normalize_text_value(data.user_reviews)[:200],
-                "strengths": normalize_text_value(data.strengths)[:200],
-                "weaknesses": normalize_text_value(data.weaknesses)[:200],
-                "citations": [{"id": c.id, "title": c.title[:80], "query": c.query} for c in data.citations[:30]],
-            }
+            sources = {key: text for key, text in original_search_texts.items()
+                       if key in {name, data.name}}
+            has_evidence = any(isinstance(text, str) and text.strip() for text in sources.values()) or any(
+                isinstance(c.snippet, str) and c.snippet.strip() for c in data.citations)
+            prompt = self._prompt_check_collection.format(
+                original_search_texts=json.dumps(sources, ensure_ascii=False, indent=2),
+                competitors_data_json=json.dumps({name: asdict(data)}, ensure_ascii=False, indent=2),
+            )
+            prompt += "\n本次仅检查一个实体；问题field必须以该实体名和英文句点开头：" + name + "."
+            prompt += (
+                "\n已有数组条目的问题必须使用当前快照从0开始的数字索引和明确属性，例如"
+                f"{name}.pricing_tiers[0].price、{name}.product_features[0].description。"
+                "不要用条目别名或仅写整数组代替精确路径；所有现有条目的同一属性都有问题时，才可使用"
+                f"{name}.pricing_tiers[*].citations等通配属性路径。"
+                "确实缺少新条目时可用completeness加整数组路径表示新增，不授权删除或改写已有条目。"
+            )
+            fingerprint = self._collection_review_fingerprint(prompt)
+            checked_at = datetime.now().isoformat(timespec="microseconds")
+            trace = {"entity": name, "mode": "live", "completed": False,
+                     "fingerprint": fingerprint, "attempt": self._collection_attempt,
+                     "checked_at": checked_at, "source_attempt": self._collection_attempt,
+                     "source_checked_at": checked_at, "request_count": 0,
+                     "requests": [], "failure_reason": ""}
+            self._collection_review_trace.append(trace)
+            if not has_evidence:
+                failures[name] = "missing_original_sources"
+                trace.update(mode="not_checked", failure_reason=failures[name])
+                continue
+            cached = self._collection_review_cache.get(fingerprint)
+            if cached is not None:
+                issues.extend(deepcopy(cached["issues"]))
+                trace.update(mode="reuse", completed=True,
+                             source_attempt=cached["attempt"], source_checked_at=cached["checked_at"])
+                continue
+            self._last_quality_request_trace = {}
+            result, reason = await self._request_quality_json(prompt)
+            request_trace = deepcopy(self._last_quality_request_trace)
+            trace["requests"] = request_trace.get("requests", [])
+            trace["request_count"] = len(trace["requests"])
+            if not result:
+                failures[name] = reason or "invalid_quality_response"
+                trace["failure_reason"] = failures[name]
+                if request_trace.get("blocked_provider_rejection"):
+                    trace["mode"] = "not_checked"
+                    trace["blocked_provider_rejection"] = True
+                if reason == "provider_content_filter":
+                    return issues, HallucinationCheckStatus.FAILED.value, reason
+                continue
+            entity_issues = self._parse_issues(result)
+            for issue in entity_issues:
+                if issue.field != name and not issue.field.startswith(name + "."):
+                    issue.field = name + "." + issue.field
+            issues.extend(entity_issues)
+            trace["completed"] = True
+            trace["checked_at"] = datetime.now().isoformat(timespec="microseconds")
+            trace["source_checked_at"] = trace["checked_at"]
+            if request_trace.get("cacheable") and fingerprint == self._collection_review_fingerprint(prompt):
+                self._collection_review_cache[fingerprint] = {
+                    "issues": deepcopy(entity_issues), "attempt": self._collection_attempt,
+                    "checked_at": trace["checked_at"],
+                }
+        if not competitors_data:
+            failures["collection"] = "empty_collection_snapshot"
+        if failures:
+            reason = json.dumps(failures, ensure_ascii=False)
+            self._log(f"   ⚠️ 实体采集检查未完成: {reason}")
+            return issues, HallucinationCheckStatus.FAILED.value, reason
 
-        # 截断原始搜索文本
-        search_texts_limited = {}
-        for name, text in original_search_texts.items():
-            search_texts_limited[name] = text[:8000]
-
-        prompt = self._prompt_check_collection.format(
-            original_search_texts=json.dumps(search_texts_limited, ensure_ascii=False, indent=2),
-            competitors_data_json=json.dumps(data_summary, ensure_ascii=False, indent=2),
-        )
-
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
-        if not result:
-            self._log(f"   ⚠️ 幻觉检测失败: {reason}")
-            return [], HallucinationCheckStatus.FAILED.value, reason
-
-        issues = self._parse_issues(result)
         hallucination_issues = [i for i in issues if i.category == "hallucination"]
         status = HallucinationCheckStatus.FOUND.value if hallucination_issues else HallucinationCheckStatus.PASSED.value
         return issues, status, ""
@@ -394,6 +561,10 @@ class QualityAgent(BaseAgent):
         analysis: ProductAnalysis | PricingAnalysis | MarketAnalysis,
         competitors_data: dict[str, CompetitorData],
         attempt: int = 1,
+        *,
+        target_product_data: CompetitorData | None = None,
+        product_name: str = "",
+        sub_dimensions: str = "",
     ) -> QualityCheckResult:
         """Phase 3 质检：检查分析结果"""
         self._log(f"🔍 质检{analysis_type}分析（第{attempt}次）...")
@@ -404,21 +575,26 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
+        fail_reason = ""
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_analysis_hallucination(
-                analysis_type, analysis, competitors_data
+                analysis_type, analysis, competitors_data,
+                target_product_data=target_product_data, product_name=product_name,
+                sub_dimensions=sub_dimensions,
             )
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
                 ))
 
         score = self._calculate_score(issues, phase=analysis_type)
-        passed = score >= self.PASS_SCORE
+        passed = score >= self.PASS_SCORE and hallucination_status != HallucinationCheckStatus.FAILED.value and not any(
+            issue.severity == "critical" for issue in issues
+        )
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -462,6 +638,7 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,
             total_fields=total_fields,
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -535,7 +712,7 @@ class QualityAgent(BaseAgent):
                         description=f"定价对比未覆盖竞品 '{name}'",
                         suggestion="补充该竞品的定价对比数据",
                     ))
-            if not pra.value_ranking:
+            if not pra.value_ranking and pra.comparable_basis:
                 issues.append(QualityIssue(
                     severity="warning", category="completeness",
                     field="value_ranking",
@@ -590,51 +767,87 @@ class QualityAgent(BaseAgent):
 
         return issues
 
+    @staticmethod
+    def _analysis_reference_snapshot(data: CompetitorData) -> dict:
+        # The structured facts and all citation metadata are shared references.
+        # Raw search page copies duplicate those sources and are not assertions.
+        return {key: value for key, value in asdict(data).items() if key != "search_sources"}
+
     async def _check_analysis_hallucination(
         self,
         analysis_type: str,
         analysis: ProductAnalysis | PricingAnalysis | MarketAnalysis,
         competitors_data: dict[str, CompetitorData],
-    ) -> tuple[list[QualityIssue], str]:
+        *,
+        target_product_data: CompetitorData | None = None,
+        product_name: str = "",
+        sub_dimensions: str = "",
+    ) -> tuple[list[QualityIssue], str, str]:
         """分析结果幻觉检测（LLM）"""
-        # 构建采集数据摘要
-        data_summary = {}
-        for name, data in competitors_data.items():
-            data_summary[name] = {
-                "product_features": [{"name": fi.name, "description": fi.description} for fi in data.product_features[:5]],
-                "market_share": normalize_text_value(data.market_share)[:200],
-                "strengths": normalize_text_value(data.strengths)[:200],
-                "weaknesses": normalize_text_value(data.weaknesses)[:200],
+        data_summary = {
+            name: self._analysis_reference_snapshot(data)
+            for name, data in competitors_data.items()
+        }
+
+        # Target facts are reference context, never an extra expected rival.
+        if target_product_data is not None or product_name:
+            target_reference = {"product_name": product_name, "collected_data": None}
+            if target_product_data is not None:
+                target_reference["product_name"] = product_name or target_product_data.name
+                target_reference["collected_data"] = self._analysis_reference_snapshot(target_product_data)
+            data_summary = {
+                "competitors": data_summary,
+                "target_reference": target_reference,
+                "reference_scope": "target_reference 是目标产品的采集参考，不属于待覆盖竞品；采集参考不等于独立事实核验。",
             }
 
-        # 序列化分析结果
+        # QA sees the actual saved schema, including row/advantage citations and
+        # any recovery warning, rather than a projection that invents omissions.
+        analysis_json = asdict(analysis)
+        analysis_contract = {
+            "analysis_type": analysis_type,
+            "schema_fields": list(analysis_json),
+            "sub_dimensions": sub_dimensions,
+            "expected_competitors": list(competitors_data),
+            "scope_policy": {
+                "retain_source_qualifiers": True,
+                "missing_scope": "unknown",
+                "cross_scope_comparison_requires_evidence": True,
+                "unqualified_claim_from_limited_source": "critical_citation",
+            },
+        }
         if analysis_type == "product":
-            analysis_json = {
-                "feature_matrix": [{"feature": fm.feature, "values": fm.values} for fm in analysis.feature_matrix],
-                "differentiation_points": analysis.differentiation_points,
-                "summary": analysis.summary,
-            }
+            target_name = product_name or (target_product_data.name if target_product_data else "")
+            analysis_contract.update({
+                "feature_dimensions": [row.feature for row in analysis.feature_matrix],
+                "compared_entities": list(dict.fromkeys(
+                    ([target_name] if target_name else []) + list(competitors_data)
+                )),
+                "status_legend": {
+                    "✅": "supported_by_evidence", "🔶": "partially_supported",
+                    "⚪": "unknown_evidence", "❌": "explicitly_unsupported",
+                },
+            })
         elif analysis_type == "pricing":
-            analysis_json = {
-                "pricing_comparison": [{"competitor": pc.competitor, "free_tier": pc.free_tier, "paid_tier": pc.paid_tier} for pc in analysis.pricing_comparison],
-                "value_ranking": analysis.value_ranking,
-                "summary": analysis.summary,
-            }
-        else:
-            analysis_json = {
-                "market_share_data": [{"competitor": ms.competitor, "share_estimate": ms.share_estimate} for ms in analysis.market_share_data],
-                "growth_trends": analysis.growth_trends,
-                "summary": analysis.summary,
-            }
+            target_name = product_name or (target_product_data.name if target_product_data else "")
+            analysis_contract.update({
+                "pricing_dimensions": [row.feature for row in getattr(analysis, "dimension_comparison", [])],
+                "compared_entities": list(dict.fromkeys(
+                    ([target_name] if target_name else []) + list(competitors_data)
+                )),
+                "value_kind": "native_price_or_terms_text",
+                "unknown_value": "资料不足",
+            })
 
         prompt = self._prompt_check_analysis.format(
             analysis_type=analysis_type,
             competitors_data_summary=json.dumps(data_summary, ensure_ascii=False, indent=2),
             analysis_json=json.dumps(analysis_json, ensure_ascii=False, indent=2),
+            analysis_contract=json.dumps(analysis_contract, ensure_ascii=False, indent=2),
             feedback="",
         )
 
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self._request_quality_json(prompt)
         if not result:
             self._log(f"   ⚠️ {analysis_type} 幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -663,6 +876,7 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
+        fail_reason = ""
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_strategy_hallucination(
                 report, product_analysis, pricing_analysis, market_analysis
@@ -670,14 +884,16 @@ class QualityAgent(BaseAgent):
             issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
-                    severity="warning", category="hallucination",
+                    severity="critical", category="schema",
                     field="__hallucination_check__",
                     description=f"幻觉检测未能完成（{fail_reason}），结果可信度未知",
                     suggestion="建议重新运行质检",
                 ))
 
         score = self._calculate_score(issues, phase="strategy")
-        passed = score >= self.PASS_SCORE
+        passed = (score >= self.PASS_SCORE
+                  and hallucination_status != HallucinationCheckStatus.FAILED.value
+                  and not any(issue.severity == "critical" for issue in issues))
 
         # 计算 hallucination_score
         h_issues = [i for i in issues if i.category in ("hallucination", "citation")]
@@ -710,6 +926,7 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,
             total_fields=total_fields,
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -795,28 +1012,22 @@ class QualityAgent(BaseAgent):
     ) -> tuple[list[QualityIssue], str]:
         """策略报告幻觉检测（LLM）"""
         three_dim = {
-            "product_summary": product_analysis.summary,
-            "differentiation_points": product_analysis.differentiation_points,
-            "pricing_summary": pricing_analysis.summary,
-            "value_ranking": pricing_analysis.value_ranking,
-            "market_summary": market_analysis.summary,
-            "growth_trends": market_analysis.growth_trends,
+            "product_analysis": asdict(product_analysis),
+            "pricing_analysis": asdict(pricing_analysis),
+            "market_analysis": asdict(market_analysis),
         }
-
-        strategy_json = {
-            "overall_positioning": report.overall_positioning,
-            "differentiation_strategy": report.differentiation_strategy,
-            "action_plan": [{"priority": ai.priority, "action": ai.action, "timeline": ai.timeline} for ai in report.action_plan],
-            "risk_assessment": report.risk_assessment,
-            "summary": report.summary,
-        }
+        # Give the checker the actual saved facts/SWOT/citations. Transport logs
+        # and prior gate outcomes are process history, not evidence for this gate.
+        strategy_json = asdict(report)
+        for process_field in ("raw_llm_logs", "qa_timeline"):
+            strategy_json.pop(process_field, None)
 
         prompt = self._prompt_check_strategy.format(
             three_dimensional_analysis=json.dumps(three_dim, ensure_ascii=False, indent=2),
             strategy_report_json=json.dumps(strategy_json, ensure_ascii=False, indent=2),
         )
 
-        result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096)
+        result, reason = await self._request_quality_json(prompt)
         if not result:
             self._log(f"   ⚠️ 策略报告幻觉检测失败: {reason}")
             return [], HallucinationCheckStatus.FAILED.value, reason
@@ -829,53 +1040,19 @@ class QualityAgent(BaseAgent):
     # ── 通用工具方法 ──
 
     def build_feedback(self, result: QualityCheckResult) -> str:
-        """根据质检结果构造给被打回 Agent 的反馈消息"""
-        if config.ENABLE_LLM:
-            prompt = self._prompt_build_feedback.format(
-                qa_result_json=json.dumps({
-                    "phase": result.phase,
-                    "target_agent": result.target_agent,
-                    "score": result.score,
-                    "issues": [
-                        {"severity": i.severity, "field": i.field, "description": i.description, "suggestion": i.suggestion}
-                        for i in result.issues
-                    ],
-                }, ensure_ascii=False, indent=2)
-            )
-            feedback = self.ask_llm(prompt, max_tokens=512)
-            if feedback:
-                return feedback
-
-        # 规则引擎 fallback
-        critical_issues = [i for i in result.issues if i.severity == "critical"]
-        if critical_issues:
-            descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
-            return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
-        return "质检未通过，请检查输出完整性。"
+        """Pass the complete immutable findings through, without a model summary."""
+        if result.phase == "collection":
+            from core.collection_retry import collection_feedback
+            return collection_feedback(result)
+        return json.dumps({"phase": result.phase, "target_agent": result.target_agent,
+                           "attempt": result.attempt, "passed": result.passed,
+                           "score": result.score, "hallucination_status": result.hallucination_status,
+                           "issues": [asdict(issue) for issue in result.issues]},
+                          ensure_ascii=False, indent=2)
 
     async def async_build_feedback(self, result: QualityCheckResult) -> str:
-        """根据质检结果异步构造给被打回 Agent 的反馈消息"""
-        if config.ENABLE_LLM:
-            prompt = self._prompt_build_feedback.format(
-                qa_result_json=json.dumps({
-                    "phase": result.phase,
-                    "target_agent": result.target_agent,
-                    "score": result.score,
-                    "issues": [
-                        {"severity": i.severity, "field": i.field, "description": i.description, "suggestion": i.suggestion}
-                        for i in result.issues
-                    ],
-                }, ensure_ascii=False, indent=2)
-            )
-            feedback = await self.async_ask_llm(prompt, max_tokens=512)
-            if feedback:
-                return feedback
-
-        critical_issues = [i for i in result.issues if i.severity == "critical"]
-        if critical_issues:
-            descriptions = [f"- {i.field}: {i.description}（建议: {i.suggestion}）" for i in critical_issues[:3]]
-            return f"质检发现以下关键问题，请修正：\n" + "\n".join(descriptions)
-        return "质检未通过，请检查输出完整性。"
+        """Async-compatible entry point for the same complete deterministic record."""
+        return self.build_feedback(result)
 
     def extract_missing_fields(self, result: QualityCheckResult,
                                competitors_data: dict[str, 'CompetitorData'] | None = None) -> dict[str, list[str]]:
@@ -920,6 +1097,10 @@ class QualityAgent(BaseAgent):
                     val = getattr(data, field_name, "")
                     if not isinstance(val, str):
                         _add_missing(name, field_name)
+                    elif field_name == "market_share" or (field_name == "weaknesses" and not val.strip()):
+                        # An honest evidence gap is not a mandatory business
+                        # value. Actual critical QA findings are handled below.
+                        continue
                     elif not val or not val.strip():
                         _add_missing(name, field_name)
                     elif _is_truncated(val):
@@ -1008,7 +1189,8 @@ class QualityAgent(BaseAgent):
         issues = []
         citation_id_set = {c.id for c in citations}
 
-        # 只在有输出引用 ID 时才检查孤立引用（避免空列表导致全部标记为孤立）
+        # The collection catalog includes unused search candidates. It is not a
+        # promise to cite every result; forcing that would invent support.
         if citation_ids_in_output:
             # 输出中引用的 ID 在 citations 列表中不存在
             for cid in citation_ids_in_output:
@@ -1018,17 +1200,6 @@ class QualityAgent(BaseAgent):
                         field=f"citations.{cid}",
                         description=f"引用了不存在的来源 ID: '{cid}'",
                         suggestion="移除无效引用或补充来源数据",
-                    ))
-
-            # citations 中的引用在输出中从未被使用
-            used_set = set(citation_ids_in_output)
-            for c in citations:
-                if c.id not in used_set:
-                    issues.append(QualityIssue(
-                        severity="warning", category="citation",
-                        field=f"citations.{c.id}",
-                        description=f"引用来源 '{c.id}' 未被使用（孤立引用）",
-                        suggestion="在分析中引用该来源或移除冗余数据",
                     ))
 
         # 始终检查引用信息完整性

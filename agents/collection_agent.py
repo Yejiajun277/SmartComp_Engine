@@ -19,9 +19,14 @@ from models.domain import (
 )
 from core.prompt_loader import load as load_prompts
 from core.search_client import SearchClient
+from core.competitor_search_scope import scope_queries
+from core.collection_repair_plan import apply_collection_repair_patch, repair_changes
 import config
 import json
 import re
+from itertools import zip_longest
+from copy import deepcopy
+from dataclasses import asdict
 
 
 class CollectionAgent(BaseAgent):
@@ -36,6 +41,7 @@ class CollectionAgent(BaseAgent):
         self._prompt_collect = prompts["prompt_collect"]
         self.search_client = SearchClient()
         self._last_search_texts: dict[str, str] = {}
+        self._repair_outcomes: list[dict] = []
 
     @staticmethod
     def _normalize_competitor_text_fields(result: dict) -> dict:
@@ -52,8 +58,355 @@ class CollectionAgent(BaseAgent):
         """返回每个竞品的原始搜索文本（供幻觉检测使用）"""
         return self._last_search_texts
 
+    def restore_source_snapshot(self, source_texts: dict[str, str]):
+        self._last_search_texts = deepcopy(source_texts)
+
+    def get_repair_outcomes(self) -> list[dict]:
+        return deepcopy(self._repair_outcomes)
+
     @staticmethod
-    def _validate_against_source(data: 'CompetitorData', search_text: str) -> list[str]:
+    def _valid_extraction(result: dict, fields: list[str]) -> bool:
+        """Missing fields are a failed response; explicit unknowns are valid facts."""
+        return not CollectionAgent._extraction_schema_errors(result, fields)
+
+    @staticmethod
+    def _extraction_schema_errors(result: object, fields: list[str]) -> list[dict]:
+        """Return paths/types only: rejection diagnostics never contain model facts."""
+        errors = []
+
+        def expect(path, value, kind, present=True):
+            if not present or not isinstance(value, kind):
+                errors.append({"field": path, "expected": kind.__name__,
+                               "actual_type": type(value).__name__ if present else "missing",
+                               "reason": "invalid_type"})
+                return False
+            return True
+
+        if not expect("$", result, dict):
+            return errors
+        for field in fields:
+            if field not in result:
+                expect(field, None, list if field in ("product_features", "pricing_tiers") else str, False)
+                continue
+            value = result[field]
+            if field in ("product_features", "pricing_tiers"):
+                if not expect(field, value, list):
+                    continue
+                required = ("name", "description") if field == "product_features" else ("tier_name", "price")
+                for index, item in enumerate(value):
+                    item_path = f"{field}[{index}]"
+                    if not expect(item_path, item, dict):
+                        continue
+                    for key in required:
+                        expect(f"{item_path}.{key}", item.get(key), str, key in item)
+                    for key in ("citations", "features") if field == "pricing_tiers" else ("citations",):
+                        if key not in item:
+                            continue
+                        if expect(f"{item_path}.{key}", item[key], list):
+                            for offset, text in enumerate(item[key]):
+                                expect(f"{item_path}.{key}[{offset}]", text, str)
+            elif field in CompetitorData.TEXT_FIELDS:
+                expect(field, value, str)
+            else:
+                errors.append({"field": field, "reason": "unknown_field"})
+        return errors
+
+    def _apply_extraction(self, original: CompetitorData, result: dict,
+                          fields: list[str], visible_ids: set[str]) -> CompetitorData:
+        candidate = deepcopy(original)
+        for field in fields:
+            if field == "product_features":
+                value = self._parse_features(result[field], visible_ids)
+            elif field == "pricing_tiers":
+                value = self._parse_prices(result[field], visible_ids)
+            else:
+                value = result[field]
+            setattr(candidate, field, value)
+        return candidate
+
+    @staticmethod
+    def _repair_prompt(entity: str, fields: list[str], context: str, feedback: str = "", *,
+                       allow_partial: bool = False) -> str:
+        schema = {}
+        for field in fields:
+            if field == "product_features":
+                schema[field] = [{"name": "", "description": "", "citations": []}]
+            elif field == "pricing_tiers":
+                schema[field] = [{"tier_name": "", "price": "", "features": [], "citations": []}]
+            else:
+                schema[field] = ""
+        field_contract = (
+            "仅输出质检要求纠正的字段补丁；下列结构是允许字段及类型，不要求全部返回。"
+            "未返回字段保持原值，不要为省略字段填空；确需撤回的文本显式用空字符串、数组用空数组。"
+            if allow_partial else "每个字段都必须输出，未知文本用空字符串，未知数组用空数组。")
+        return (f"请仅从以下真实来源重新提取 {entity} 的指定字段。只输出完整JSON，不要输出其他字段。\n"
+                "保留原文的统计主体、市场、时间、地区、型号、计价单位和促销条件，"
+                "不能将集团/子品牌/地区的范围扩大为当前实体。缺失范围保持未知；"
+                "不支持的断言删除或留空，不能猜测数字或补全截断原文。"
+                + field_contract +
+                "条目仅绑定本次目录展示的精确来源ID，不能盲填全部ID。\n"
+                f"### 真实来源（仅使用以下ID和原文）\n{context}\n"
+                f"### 输出结构\n{json.dumps(schema, ensure_ascii=False)}\n"
+                f"### 完整质检反馈（不是事实来源）\n{feedback}")
+
+    async def async_reextract_saved_sources(self, product_name: str, product_description: str,
+                                             competitors_data: dict[str, CompetitorData],
+                                             original_search_texts: dict[str, str],
+                                             feedback: str = "", *, repair_plan: dict | None = None) -> dict[str, CompetitorData]:
+        """Repair against the same immutable evidence; never search or auto-supplement."""
+        previous_failures = {row.get("entity"): row for row in self._repair_outcomes
+                             if row.get("status") == "failed"}
+        self._repair_outcomes = []
+        self._last_search_texts = deepcopy(original_search_texts)
+        updated = deepcopy(competitors_data)
+        fields = ["product_features", "pricing_tiers", *CompetitorData.TEXT_FIELDS]
+        for name, original in competitors_data.items():
+            source_text = original_search_texts.get(name, "")
+            has_evidence = source_text.strip() or any(c.snippet.strip() for c in original.citations)
+            outcome = {"entity": name, "status": "failed", "reason": "missing_saved_sources"}
+            self._repair_outcomes.append(outcome)
+            authority = repair_plan.get(name) if isinstance(repair_plan, dict) else None
+            if not isinstance(authority, dict) or not (authority.get("text_fields") or authority.get("arrays")):
+                outcome.update(status="not_attempted", reason="no_structured_repair_authority")
+                continue
+            outcome["repair_plan"] = deepcopy(authority)
+            if not has_evidence or not config.ENABLE_LLM:
+                if not config.ENABLE_LLM:
+                    outcome["reason"] = "llm_disabled"
+                continue
+            # QA sees these complete saved snippets. A repair must not lose the
+            # same evidence behind the initial collection's 16k/700 view limits.
+            context, visible_ids = self._source_context(
+                original.citations, source_text, max_chars=None, excerpt_chars=None)
+            if original.citations:
+                context += "\n### 当前实体完整保存的原始搜索文本（非新搜索）\n" + source_text
+            prompt = (f"仅修复 {name} 的结构化授权范围。完整质检反馈仅解释问题，不能授予额外写权限。"
+                      "只输出JSON字段补丁。未返回字段保持原值。"
+                      "获准文本字段必须返回证据选择列表，每项仅含source_id和exact_quote；"
+                      "exact_quote必须是该ID对应完整原文摘录中的连续原话，不能改写、拼接或添加推断的统计口径。"
+                      "原话必须保留其主体、时间、地区、分母、否定和适用条件，不得只摘数值或剪掉限制；来源未披露的属性不能补写。"
+                      "程序将带来源标题和ID逐条展示原话，不采纳模型另写的概括或连接关系。"
+                      "不能返回空证据列表或空字符串来清除已有事实；找不到依据时省略该字段并保留质检缺口。"
+                      "product_features、pricing_tiers数组是更新操作列表，不是完整替换；未返回条目和空列表都保留全部旧条目。"
+                      "更新格式为 {\"item_id\":\"授权表中的原始ID\",\"changes\":{\"获准子字段\":\"修正值\"}}；"
+                      "仅allow_add=true的数组可用 {\"add\":{完整新条目}}，新增条目包含全部字段和真实引用。"
+                      "不得返回未授权字段/子字段、未知或重复item_id、删除操作、伪造来源ID。"
+                      "数值、SKU、地区、日期、单位和条件必须来自当前实体真实来源，不补全截断资料。\n"
+                      f"### 结构化写入授权（控制资料，不是输出格式）\n{json.dumps(authority, ensure_ascii=False)}\n"
+                      "上面的text_fields、arrays、items、version等是权限控制键，不能作为响应根层键；"
+                      "内部item_id只用于定位，不是来源证据。\n"
+                      f"### 真实来源（仅使用以下ID和完整原文）\n{context}\n"
+                      f"### 完整质检反馈（不是事实来源或写权限）\n{feedback}")
+            previous = asdict(original)
+            prompt += ("\n### 待修复提取快照（背景，不是来源证据）\n"
+                       + json.dumps({field: previous[field] for field in fields}, ensure_ascii=False, indent=2)
+                       + "\n只修复质检指出的问题或校正上述已有事实的范围和引用。"
+                         "未指出问题的字段和条目保持原样；不新增无关功能、报价或评价，"
+                         "不得因为看到更多原文就扩写整份采集。旧快照中的断言不是证据，"
+                         "不能把背景内容当作来源补证；无法依据来源修正的文本字段本次省略并保留质检缺口，不通过清空字段消除问题。")
+            prompt += "\n来源来自已保存快照，本轮没有重新联网搜索。"
+            prompt += f"\n### 当前产品背景（非来源证据）\n{product_name}\n{product_description}"
+            previous = previous_failures.get(name, {})
+            same_previous_plan = previous.get("repair_plan") == authority
+            request_budget = 16384 if same_previous_plan and previous.get("finish_reason") == "length" else 8192
+            if same_previous_plan and previous.get("schema_errors"):
+                prompt += ("\n### 前次补丁校验错误（同一快照及授权；上次未写入任何事实）\n"
+                           + json.dumps(previous["schema_errors"], ensure_ascii=False)
+                           + "\n根据这些真实校验错误修正响应格式，不改写或放宽授权。")
+            prompt += ("\n### 响应格式：根层直接使用获准的事实字段\n"
+                       "根层只写本轮获准的实际字段名（见下方示例）：文本字段直接写source_id/exact_quote证据列表，"
+                       "product_features、pricing_tiers直接写item_id/changes更新操作列表；"
+                       "禁止用text_fields或arrays包装。以下是根据当前授权生成的完整JSON结构示例，"
+                       "只展示schema：尖括号内是类型占位，不是事实；必须用真实来源内容替换，不得原样返回。"
+                       "示例未授权新增任何事实，未返回字段/条目仍保持原值。\n```json\n"
+                       + json.dumps(self._repair_output_example(authority), ensure_ascii=False, indent=2)
+                       + "\n```")
+            log_count = len(self.llm_logs)
+            result, reason = await self.async_ask_llm_json_with_reason(
+                prompt, max_tokens=request_budget, temperature=0, thinking="disabled")
+            response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
+            outcome.update(request_max_tokens=request_budget, finish_reason=response.get("finish_reason", ""))
+            if (reason != "success" or response.get("finish_reason") != "stop"
+                    or response.get("success") is not True or response.get("parse_error")):
+                outcome["reason"] = (reason if reason != "success" else
+                                     f"incomplete_finish_reason({response.get('finish_reason') or 'missing'})")
+                continue
+            projected, errors, text_evidence = self._project_repair_text_evidence(
+                original, result, authority, visible_ids)
+            if not errors:
+                candidate, errors = apply_collection_repair_patch(original, projected, authority, visible_ids)
+            if errors:
+                outcome.update(reason="incomplete_or_invalid_schema", schema_errors=errors)
+                continue
+            # Exact saved-source quotations already prove literal support. The
+            # legacy numeric heuristic must not mistake digits in citation IDs
+            # or source titles for unsupported quotation content.
+            patch_fields = set(projected) - set(text_evidence)
+            self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet or "" for c in original.citations),
+                                          field_names=set(patch_fields))
+            updated[name] = candidate
+            changes = repair_changes(original, candidate)
+            outcome.update(changes)
+            if text_evidence:
+                outcome["text_evidence"] = text_evidence
+            outcome.update(status="accepted" if changes["applied_fields"] else "not_changed",
+                           reason="complete_authorized_patch" if changes["applied_fields"] else "no_fact_changes")
+        return updated
+
+    @staticmethod
+    def _project_repair_text_evidence(original, result, authority, visible_ids):
+        """Only source quotations may become replacement free-form text.
+
+        QA prose and old facts grant no evidential support. Keep this wire-only
+        proof format outside the domain model and existing transaction parser.
+        """
+        if not isinstance(result, dict):
+            return result, [], {}
+        projected, errors, evidence = deepcopy(result), [], {}
+        catalog = {}
+        for citation in original.citations:
+            catalog.setdefault(citation.id, []).append(citation)
+        for field in authority.get("text_fields", []):
+            if field not in result or field not in CompetitorData.TEXT_FIELDS:
+                continue
+            value = result[field]
+            if not isinstance(value, list) or not value:
+                errors.append({"field": field, "reason": "nonempty_source_evidence_required",
+                               "actual_type": type(value).__name__})
+                continue
+            lines, proofs = [], []
+            for index, proof in enumerate(value):
+                path = f"{field}[{index}]"
+                if not isinstance(proof, dict) or set(proof) != {"source_id", "exact_quote"}:
+                    errors.append({"field": path, "reason": "invalid_source_evidence_shape",
+                                   "actual_type": type(proof).__name__})
+                    continue
+                identity, quote = proof["source_id"], proof["exact_quote"]
+                if not isinstance(identity, str) or identity not in visible_ids or len(catalog.get(identity, [])) != 1:
+                    errors.append({"field": path + ".source_id", "reason": "unknown_or_ambiguous_entity_source",
+                                   "actual_type": type(identity).__name__})
+                    continue
+                source = catalog[identity][0]
+                if source.competitor and source.competitor != original.name:
+                    errors.append({"field": path + ".source_id", "reason": "source_entity_mismatch",
+                                   "actual_type": type(identity).__name__})
+                    continue
+                if (not isinstance(quote, str) or not quote.strip()
+                        or not isinstance(source.snippet, str) or quote not in source.snippet):
+                    errors.append({"field": path + ".exact_quote", "reason": "quote_not_in_saved_source",
+                                   "actual_type": type(quote).__name__})
+                    continue
+                title = f"《{source.title}》" if source.title else ""
+                lines.append(f"据{title}[{identity}]原文：{quote}")
+                proofs.append(deepcopy(proof))
+            projected[field] = "\n".join(lines)
+            evidence[field] = proofs
+        return projected, errors, evidence
+
+    @staticmethod
+    def _repair_output_example(authority):
+        """A valid output object shape, distinct from the control-plan shape."""
+        def placeholder(attribute):
+            if attribute == "citations":
+                return ["<从当前实体真实目录选择的来源ID>"]
+            if attribute == "features":
+                return ["<真实原文支持的条件>"]
+            return "<仅依据本实体真实来源修正的文本>"
+
+        example = {field: [{"source_id": "<从当前实体真实目录选择的来源ID>",
+                            "exact_quote": "<该ID原文摘录中连续出现的非空原话，不改写或补写口径>"}]
+                   for field in authority.get("text_fields", [])}
+        for field, array in authority.get("arrays", {}).items():
+            example[field] = [{"item_id": identity, "changes": {
+                attribute: placeholder(attribute) for attribute in entry["fields"]}}
+                for identity, entry in array.get("items", {}).items()]
+            if array.get("allow_add"):
+                attributes = ("name", "description", "citations") if field == "product_features" else (
+                    "tier_name", "price", "features", "citations")
+                example[field].append({"add": {attribute: placeholder(attribute) for attribute in attributes}})
+        return example
+
+    @staticmethod
+    def _field_search_terms(field_name: str) -> list[str]:
+        """Field intent is shared across product categories, without SaaS tiers."""
+        return {
+            "product_features": ["产品功能 服务内容 规格 使用条件", "官方参数 配套功能 适用范围"],
+            "pricing_tiers": ["定价 价格 收费标准 规格 套餐", "官方报价 计价单位 适用条件"],
+            "strengths": ["竞争优势 核心优势 行业地位", "优势 领先 竞争力"],
+            "weaknesses": ["劣势 不足 用户吐槽 差评", "问题 缺点 改进"],
+            "channels": ["渠道策略 推广方式 合作伙伴 生态", "分发 合作 生态布局"],
+            "market_share": ["市场份额 规模 统计口径", "行业排名 市场占有率"],
+            "user_reviews": ["用户评价 口碑 评分 好评 差评", "用户反馈 评测"],
+        }.get(field_name, [field_name])
+
+    @staticmethod
+    def _source_context(citations: list[Citation], fallback_text: str,
+                        max_chars: int | None = 16000, *,
+                        excerpt_chars: int | None = 700) -> tuple[str, set[str]]:
+        """Bound whole source records, round-robin across searches, with real IDs."""
+        heading = ("以下是本轮真实来源ID与原文摘录。只引用已显示的ID，不根据平台名猜ID。"
+                   "excerpt_truncated=true只表示本次可见摘录被截短，不能据此断言原始全文未披露。"
+                   "未显示的单位、条件或事实保持未知，描述为本次摘录未显示，不要写成原文没有。\n")
+        if not citations:
+            notice = "没有可绑定的来源ID；搜索文字仅供提取，不能伪造引用。\n"
+            return notice + (fallback_text if max_chars is None
+                             else fallback_text[:max(0, max_chars - len(notice))]), set()
+        groups = {}
+        for citation in citations:
+            groups.setdefault(citation.query, []).append(citation)
+        rows, visible_ids = [], set()
+        used = len(heading)
+        for group in zip_longest(*groups.values()):
+            for citation in group:
+                if citation is None or citation.id in visible_ids:
+                    continue
+                snippet = citation.snippet or ""
+                excerpt = snippet if excerpt_chars is None else snippet[:excerpt_chars]
+                record = json.dumps({
+                    "id": citation.id, "title": citation.title, "url": citation.url,
+                    "excerpt": excerpt, "excerpt_truncated": len(excerpt) < len(snippet),
+                }, ensure_ascii=False)
+                if max_chars is not None and used + len(record) + 1 > max_chars:
+                    return heading + "\n".join(rows), visible_ids
+                rows.append(record)
+                visible_ids.add(citation.id)
+                used += len(record) + 1
+        return heading + "\n".join(rows), visible_ids
+
+    def _item_citations(self, item: dict, allowed_ids: set[str]) -> list[str]:
+        # Exact IDs only. Missing IDs stay missing; platform names and the
+        # presence of entity-level sources do not prove an item binding.
+        return [cid for cid in self.extract_citation_ids(item) if cid in allowed_ids]
+
+    def _parse_features(self, items: object, allowed_ids: set[str]) -> list[FeatureItem]:
+        result = []
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict):
+                result.append(FeatureItem(
+                    name=normalize_text_value(item.get("name", "")),
+                    description=normalize_text_value(item.get("description", "")),
+                    citations=self._item_citations(item, allowed_ids),
+                ))
+            elif isinstance(item, str):
+                result.append(FeatureItem(item, item))
+        return result
+
+    def _parse_prices(self, items: object, allowed_ids: set[str]) -> list[PricingTier]:
+        return [PricingTier(
+            tier_name=normalize_text_value(item.get("tier_name", "")),
+            price=normalize_text_value(item.get("price", "")),
+            features=item.get("features", []) if isinstance(item.get("features", []), list) else [],
+            citations=self._item_citations(item, allowed_ids),
+        ) for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+    def _record_supplement_sources(self, entity_name: str, context: str, *, create: bool = False):
+        if create or entity_name in self._last_search_texts:
+            self._last_search_texts[entity_name] = (self._last_search_texts.get(entity_name, "")
+                                                   + "\n\n补充来源资料：\n" + context)
+
+    @staticmethod
+    def _validate_against_source(data: 'CompetitorData', search_text: str,
+                                 field_names: set[str] | None = None) -> list[str]:
         """程序化校验高幻觉字段：提取内容中的数字和关键实体，检查是否在搜索文本中出现。
 
         Returns:
@@ -77,6 +430,8 @@ class CollectionAgent(BaseAgent):
         }
 
         for field_name, field_value in high_risk_fields.items():
+            if field_names is not None and field_name not in field_names:
+                continue
             if not field_value or len(field_value.strip()) < 10:
                 continue
 
@@ -101,7 +456,7 @@ class CollectionAgent(BaseAgent):
 
     def collect_target_product(self, product_description: str,
                                product_name: str,
-                               feedback: str = "") -> CompetitorData:
+                               feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """采集目标产品自身信息"""
         self._log(f"   采集目标产品: {product_name}")
         queries = [
@@ -119,12 +474,13 @@ class CollectionAgent(BaseAgent):
             entity_name=product_name,
             queries=queries,
             feedback=feedback,
-            cache_search_text=False,
+            cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def async_collect_target_product(self, product_description: str,
                                            product_name: str,
-                                           feedback: str = "") -> CompetitorData:
+                                           feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集目标产品自身信息"""
         self._log(f"   采集目标产品: {product_name}")
         queries = [
@@ -142,12 +498,13 @@ class CollectionAgent(BaseAgent):
             entity_name=product_name,
             queries=queries,
             feedback=feedback,
-            cache_search_text=False,
+            cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def run(self, product_description: str,
                   competitor_list: CompetitorList,
-                  feedback: str = "") -> dict[str, CompetitorData]:
+                  feedback: str = "", search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
         """
         主运行逻辑：逐竞品搜索+汇总
 
@@ -168,7 +525,8 @@ class CollectionAgent(BaseAgent):
 
         for i, comp in enumerate(competitor_list.competitors):
             self._log(f"   采集 {i+1}/{len(competitor_list.competitors)}: {comp.name}")
-            data = await self._async_collect_competitor(product_name, product_description, comp.name, feedback)
+            data = await self._async_collect_competitor(product_name, product_description, comp.name, feedback,
+                search_scope=getattr(competitor_list, "search_scope", []) if search_scope is None else search_scope)
             result_data[comp.name] = data
 
         self._log(f"✅ 数据采集完成: {len(result_data)}个竞品")
@@ -177,7 +535,7 @@ class CollectionAgent(BaseAgent):
     def _collect_competitor(self, product_name: str,
                             product_description: str,
                             competitor_name: str,
-                            feedback: str = "") -> CompetitorData:
+                            feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """采集单个竞品数据，同时构建结构化引用"""
         queries = [
             f"{competitor_name} 产品功能介绍",
@@ -195,12 +553,13 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     async def _async_collect_competitor(self, product_name: str,
                                         product_description: str,
                                         competitor_name: str,
-                                        feedback: str = "") -> CompetitorData:
+                                        feedback: str = "", search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集单个竞品数据，同时构建结构化引用"""
         queries = [
             f"{competitor_name} 产品功能介绍",
@@ -218,6 +577,7 @@ class CollectionAgent(BaseAgent):
             queries=queries,
             feedback=feedback,
             cache_search_text=True,
+            search_scope=search_scope,
         )
 
     def _collect_entity(self, product_name: str,
@@ -225,10 +585,10 @@ class CollectionAgent(BaseAgent):
                         entity_name: str,
                         queries: list[str],
                         feedback: str = "",
-                        cache_search_text: bool = True) -> CompetitorData:
+                        cache_search_text: bool = True, search_scope: list[str] | None = None) -> CompetitorData:
         """采集单个实体数据，同时构建结构化引用"""
         # 执行搜索
-        search_results = self.search_client.batch_search(queries)
+        search_results = self.search_client.batch_search(scope_queries(queries, search_scope))
 
         # 提取搜索文本 + 构建结构化引用
         all_text = ""
@@ -262,12 +622,9 @@ class CollectionAgent(BaseAgent):
                 citation_counter += 1
 
         # 缓存原始搜索文本（供幻觉检测使用）
-        if cache_search_text:
-            self._last_search_texts[entity_name] = all_text
-
-        # 注入质检反馈
-        if feedback:
-            all_text += f"\n--- 质检反馈（请据此修正）---\n{feedback}\n"
+        source_context, visible_ids = self._source_context(citations, all_text)
+        if cache_search_text and (all_text.strip() or citations):
+            self._last_search_texts[entity_name] = all_text + "\n" + source_context
 
         # LLM汇总提取
         if config.ENABLE_LLM and all_text:
@@ -275,45 +632,30 @@ class CollectionAgent(BaseAgent):
                 product_name=product_name,
                 product_description=product_description,
                 competitor_name=entity_name,
-                search_results=all_text[:12000],
+                search_results=source_context,
             )
+            if feedback:
+                prompt += "\n\n### 本轮质检反馈（不是来源事实，请逐项修复）\n" + feedback
             result, truncated = self.ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
             result = self._normalize_competitor_text_fields(result)
             if truncated and result:
                 # 检测到截断：对文本字段进行补充提取
                 self._log(f"   ⚠️ 采集输出被截断，补充提取文本字段...")
                 result = self._supplement_text_fields(
-                    result, product_name, product_description, entity_name, all_text
+                    result, product_name, product_description, entity_name, source_context, feedback=feedback
                 )
             if result:
                 # 解析结构化产品功能
-                product_features = []
-                for fi in result.get("product_features", []):
-                    if isinstance(fi, dict):
-                        product_features.append(FeatureItem(
-                            name=fi.get("name", ""),
-                            description=fi.get("description", ""),
-                        ))
-                    elif isinstance(fi, str):
-                        product_features.append(FeatureItem(name=fi, description=fi))
-
-                # 解析结构化定价层级
-                pricing_tiers = []
-                for pt in result.get("pricing_tiers", []):
-                    if isinstance(pt, dict):
-                        pricing_tiers.append(PricingTier(
-                            tier_name=pt.get("tier_name", ""),
-                            price=pt.get("price", ""),
-                            features=pt.get("features", []),
-                        ))
+                product_features = self._parse_features(result.get("product_features"), visible_ids)
+                pricing_tiers = self._parse_prices(result.get("pricing_tiers"), visible_ids)
 
                 # 补充搜索：如果定价或市场份额数据缺失，执行专项搜索
                 pricing_tiers, extra_cites1 = self._supplement_pricing(
-                    entity_name, product_name, pricing_tiers, citations
+                    entity_name, product_name, pricing_tiers, citations, search_scope=search_scope
                 )
                 market_share = result.get("market_share", "")
                 market_share, extra_cites2 = self._supplement_market_share(
-                    entity_name, market_share, citations
+                    entity_name, market_share, citations, search_scope=search_scope
                 )
                 citations.extend(extra_cites1)
                 citations.extend(extra_cites2)
@@ -331,7 +673,7 @@ class CollectionAgent(BaseAgent):
                     citations=citations,
                 )
                 # 程序化幻觉校验：清空搜索文本中完全不存在的数字内容
-                self._validate_against_source(data, all_text)
+                self._validate_against_source(data, all_text + "\n" + source_context + "\n" + "\n".join(c.snippet for c in extra_cites1 + extra_cites2))
                 return data
             else:
                 self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
@@ -349,9 +691,9 @@ class CollectionAgent(BaseAgent):
                                     entity_name: str,
                                     queries: list[str],
                                     feedback: str = "",
-                                    cache_search_text: bool = True) -> CompetitorData:
+                                    cache_search_text: bool = True, search_scope: list[str] | None = None) -> CompetitorData:
         """异步采集单个实体数据，同时构建结构化引用"""
-        search_results = await self.search_client.async_batch_search(queries)
+        search_results = await self.search_client.async_batch_search(scope_queries(queries, search_scope))
 
         all_text = ""
         sources = []
@@ -382,19 +724,19 @@ class CollectionAgent(BaseAgent):
                 ))
                 citation_counter += 1
 
-        if cache_search_text:
-            self._last_search_texts[entity_name] = all_text
-
-        if feedback:
-            all_text += f"\n--- 质检反馈（请据此修正）---\n{feedback}\n"
+        source_context, visible_ids = self._source_context(citations, all_text)
+        if cache_search_text and (all_text.strip() or citations):
+            self._last_search_texts[entity_name] = all_text + "\n" + source_context
 
         if config.ENABLE_LLM and all_text:
             prompt = self._prompt_collect.format(
                 product_name=product_name,
                 product_description=product_description,
                 competitor_name=entity_name,
-                search_results=all_text[:12000],
+                search_results=source_context,
             )
+            if feedback:
+                prompt += "\n\n### 本轮质检反馈（不是来源事实，请逐项修复）\n" + feedback
             # 使用截断检测，与同步版本保持一致的max_tokens
             result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192, temperature=0)
             result = self._normalize_competitor_text_fields(result)
@@ -402,34 +744,18 @@ class CollectionAgent(BaseAgent):
                 # 检测到截断：对文本字段进行补充提取（与同步版本逻辑一致）
                 self._log(f"   ⚠️ 异步采集输出被截断，补充提取文本字段...")
                 result = self._supplement_text_fields(
-                    result, product_name, product_description, entity_name, all_text
+                    result, product_name, product_description, entity_name, source_context, feedback=feedback
                 )
             if result:
-                product_features = []
-                for fi in result.get("product_features", []):
-                    if isinstance(fi, dict):
-                        product_features.append(FeatureItem(
-                            name=fi.get("name", ""),
-                            description=fi.get("description", ""),
-                        ))
-                    elif isinstance(fi, str):
-                        product_features.append(FeatureItem(name=fi, description=fi))
-
-                pricing_tiers = []
-                for pt in result.get("pricing_tiers", []):
-                    if isinstance(pt, dict):
-                        pricing_tiers.append(PricingTier(
-                            tier_name=pt.get("tier_name", ""),
-                            price=pt.get("price", ""),
-                            features=pt.get("features", []),
-                        ))
+                product_features = self._parse_features(result.get("product_features"), visible_ids)
+                pricing_tiers = self._parse_prices(result.get("pricing_tiers"), visible_ids)
 
                 pricing_tiers, extra_cites1 = await self._async_supplement_pricing(
-                    entity_name, product_name, pricing_tiers, citations
+                    entity_name, product_name, pricing_tiers, citations, search_scope=search_scope
                 )
                 market_share = result.get("market_share", "")
                 market_share, extra_cites2 = await self._async_supplement_market_share(
-                    entity_name, market_share, citations
+                    entity_name, market_share, citations, search_scope=search_scope
                 )
                 citations.extend(extra_cites1)
                 citations.extend(extra_cites2)
@@ -446,7 +772,7 @@ class CollectionAgent(BaseAgent):
                     search_sources=sources,
                     citations=citations,
                 )
-                self._validate_against_source(data, all_text)
+                self._validate_against_source(data, all_text + "\n" + source_context + "\n" + "\n".join(c.snippet for c in extra_cites1 + extra_cites2))
                 return data
             self._log(f"   ⚠️ {entity_name} LLM汇总失败，降级到规则引擎")
 
@@ -459,7 +785,7 @@ class CollectionAgent(BaseAgent):
 
     def _supplement_text_fields(self, result: dict,
                                 product_name: str, product_description: str,
-                                entity_name: str, all_text: str) -> dict:
+                                entity_name: str, all_text: str, feedback: str = "") -> dict:
         """
         当首次采集被截断时，对文本字段进行补充提取。
         检查 market_share, user_reviews, strengths, weaknesses, channels 是否被截断，
@@ -486,7 +812,7 @@ class CollectionAgent(BaseAgent):
         supplement_prompt = f"""请从以下搜索结果中补充提取竞品 {entity_name} 的以下字段信息。
 
 ### 搜索结果
-{all_text[:12000]}
+{all_text}
 
 ### 需要补充的字段
 {chr(10).join(f'- {field}' for field in truncated_fields)}
@@ -501,6 +827,8 @@ class CollectionAgent(BaseAgent):
 {{{chr(10)}    {','.join(f'"{field}": "完整内容"' for field in truncated_fields)}{chr(10)}}}
 ```"""
 
+        if feedback:
+            supplement_prompt += "\n\n### 本轮质检反馈（不是来源事实）\n" + feedback
         supplement_result = self.ask_llm_json(supplement_prompt, max_tokens=4096, temperature=0)
         supplement_result = self._normalize_competitor_text_fields(supplement_result)
         if supplement_result:
@@ -513,17 +841,14 @@ class CollectionAgent(BaseAgent):
         return result
 
     def _supplement_pricing(self, entity_name: str, product_name: str,
-                            pricing_tiers: list, existing_cites: list) -> tuple:
+                            pricing_tiers: list, existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果定价数据缺失，执行补充搜索"""
         if pricing_tiers and any(pt.price for pt in pricing_tiers):
             return pricing_tiers, []
 
         self._log(f"   📝 {entity_name} 定价数据缺失，执行补充搜索")
-        extra_queries = [
-            f"{entity_name} 会员价格 套餐 收费",
-            f"{entity_name} 免费版 付费版 premium",
-        ]
-        extra_results = self.search_client.batch_search(extra_queries)
+        extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("pricing_tiers")]
+        extra_results = self.search_client.batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -549,40 +874,28 @@ class CollectionAgent(BaseAgent):
                 ))
                 cite_counter += 1
 
+        source_context, visible_ids = self._source_context(extra_cites, extra_text)
+        self._record_supplement_sources(entity_name, source_context)
+
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=product_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=extra_text[:6000],
-            )
-            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("pricing_tiers"):
-                for pt in result["pricing_tiers"]:
-                    if isinstance(pt, dict) and pt.get("price"):
-                        pricing_tiers.append(PricingTier(
-                            tier_name=pt.get("tier_name", ""),
-                            price=pt.get("price", ""),
-                            features=pt.get("features", []),
-                        ))
+            prompt = self._repair_prompt(entity_name, ["pricing_tiers"], source_context)
+            result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["pricing_tiers"]):
+                pricing_tiers.extend(tier for tier in self._parse_prices(result.get("pricing_tiers"), visible_ids) if tier.price)
 
         return pricing_tiers, extra_cites
 
     def _supplement_market_share(self, entity_name: str,
                                   market_share: str,
-                                  existing_cites: list) -> tuple:
+                                  existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果市场份额数据缺失，执行补充搜索"""
         market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
             return market_share, []
 
         self._log(f"   📝 {entity_name} 市场份额数据缺失，执行补充搜索")
-        extra_queries = [
-            f"{entity_name} 市场份额 用户规模 DAU MAU",
-            f"{entity_name} 行业排名 市占率",
-        ]
-        extra_results = self.search_client.batch_search(extra_queries)
+        extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("market_share")]
+        extra_results = self.search_client.batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -608,32 +921,26 @@ class CollectionAgent(BaseAgent):
                 ))
                 cite_counter += 1
 
+        source_context, visible_ids = self._source_context(extra_cites, extra_text)
+        self._record_supplement_sources(entity_name, source_context)
+
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=entity_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=extra_text[:6000],
-            )
-            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("market_share"):
-                market_share = normalize_text_value(result["market_share"])
+            prompt = self._repair_prompt(entity_name, ["market_share"], source_context)
+            result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["market_share"]):
+                market_share = result["market_share"]
 
         return market_share, extra_cites
 
     async def _async_supplement_pricing(self, entity_name: str, product_name: str,
-                                        pricing_tiers: list, existing_cites: list) -> tuple:
+                                        pricing_tiers: list, existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果定价数据缺失，异步执行补充搜索"""
         if pricing_tiers and any(pt.price for pt in pricing_tiers):
             return pricing_tiers, []
 
         self._log(f"   📝 {entity_name} 定价数据缺失，执行补充搜索")
-        extra_queries = [
-            f"{entity_name} 会员价格 套餐 收费",
-            f"{entity_name} 免费版 付费版 premium",
-        ]
-        extra_results = await self.search_client.async_batch_search(extra_queries)
+        extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("pricing_tiers")]
+        extra_results = await self.search_client.async_batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -659,40 +966,28 @@ class CollectionAgent(BaseAgent):
                 ))
                 cite_counter += 1
 
+        source_context, visible_ids = self._source_context(extra_cites, extra_text)
+        self._record_supplement_sources(entity_name, source_context)
+
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=product_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=extra_text[:6000],
-            )
-            result = await self.async_ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("pricing_tiers"):
-                for pt in result["pricing_tiers"]:
-                    if isinstance(pt, dict) and pt.get("price"):
-                        pricing_tiers.append(PricingTier(
-                            tier_name=pt.get("tier_name", ""),
-                            price=pt.get("price", ""),
-                            features=pt.get("features", []),
-                        ))
+            prompt = self._repair_prompt(entity_name, ["pricing_tiers"], source_context)
+            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["pricing_tiers"]):
+                pricing_tiers.extend(tier for tier in self._parse_prices(result.get("pricing_tiers"), visible_ids) if tier.price)
 
         return pricing_tiers, extra_cites
 
     async def _async_supplement_market_share(self, entity_name: str,
                                              market_share: str,
-                                             existing_cites: list) -> tuple:
+                                             existing_cites: list, search_scope: list[str] | None = None) -> tuple:
         """如果市场份额数据缺失，异步执行补充搜索"""
         market_share = normalize_text_value(market_share)
         if market_share and len(market_share.strip()) > 5:
             return market_share, []
 
         self._log(f"   📝 {entity_name} 市场份额数据缺失，执行补充搜索")
-        extra_queries = [
-            f"{entity_name} 市场份额 用户规模 DAU MAU",
-            f"{entity_name} 行业排名 市占率",
-        ]
-        extra_results = await self.search_client.async_batch_search(extra_queries)
+        extra_queries = [f"{entity_name} {term}" for term in self._field_search_terms("market_share")]
+        extra_results = await self.search_client.async_batch_search(scope_queries(extra_queries, search_scope))
         extra_text = ""
         extra_cites = []
         cite_counter = len(existing_cites)
@@ -718,304 +1013,93 @@ class CollectionAgent(BaseAgent):
                 ))
                 cite_counter += 1
 
+        source_context, visible_ids = self._source_context(extra_cites, extra_text)
+        self._record_supplement_sources(entity_name, source_context)
+
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=entity_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=extra_text[:6000],
-            )
-            result = await self.async_ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("market_share"):
-                market_share = normalize_text_value(result["market_share"])
+            prompt = self._repair_prompt(entity_name, ["market_share"], source_context)
+            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["market_share"]):
+                market_share = result["market_share"]
 
         return market_share, extra_cites
 
+    def _prepare_field_repair(self, name: str, original: CompetitorData,
+                              fields: list[str], batches: list[tuple[str, list[dict]]]):
+        """Stage acquisitions separately; failed extraction never mutates saved facts."""
+        text, citations, errors = "", [], []
+        counter = len(original.citations)
+        for field, rows in batches:
+            for i, row in enumerate(rows):
+                if row.get("error"):
+                    errors.append({"query": row.get("query", ""), "error": str(row["error"])[:200]})
+                extracted = SearchClient.extract_text(row.get("result"))
+                if extracted:
+                    text += f"\n--- 补充搜索({field}): {row.get('query', '')} ---\n{extracted[:1500]}\n"
+                for ref in row.get("references", []):
+                    if not ref.get("url") and not ref.get("title"):
+                        continue
+                    citations.append(Citation(
+                        id=f"{name}:sup_{field}_{i}:r{counter}", title=ref.get("title", ""),
+                        url=ref.get("url", ""), snippet=ref.get("content", "") or ref.get("summary", ""),
+                        site_name=ref.get("site_name", ""), query=row.get("query", ""), competitor=name))
+                    counter += 1
+        context, visible_ids = self._source_context(citations, text)
+        outcome = {"entity": name, "status": "failed", "reason": "no_usable_search_results",
+                   "acquired_citations": [asdict(c) for c in citations],
+                   "acquired_source_text": text, "search_errors": errors}
+        self._repair_outcomes.append(outcome)
+        prompt = self._repair_prompt(name, fields, context)
+        return prompt, outcome, citations, text, context, visible_ids
+
+    def _commit_field_repair(self, name: str, original: CompetitorData, fields: list[str],
+                             prepared, result: dict, reason: str) -> CompetitorData:
+        _, outcome, citations, text, context, visible_ids = prepared
+        if reason != "success" or not self._valid_extraction(result, fields):
+            outcome["reason"] = reason if reason != "success" else "incomplete_or_invalid_schema"
+            return deepcopy(original)
+        candidate = self._apply_extraction(original, result, fields, visible_ids)
+        candidate.citations.extend(citations)
+        self._validate_against_source(candidate, self._last_search_texts.get(name, "") + "\n" + text
+                                      + "\n" + "\n".join(c.snippet for c in original.citations + citations), field_names=set(fields))
+        self._record_supplement_sources(name, context, create=True)
+        outcome.update(status="accepted", reason="complete_json_from_supplement_sources")
+        return candidate
+
     def supplement_missing_fields(self, product_name: str,
-                                   competitors_data: dict[str, 'CompetitorData'],
-                                   missing_fields: dict[str, list[str]]) -> dict[str, 'CompetitorData']:
-        """根据质检反馈的缺失/截断字段，对特定竞品做针对性补充搜索。
-
-        Args:
-            product_name: 我方产品名
-            competitors_data: 当前采集数据
-            missing_fields: {竞品名: [缺失字段名列表]}
-
-        Returns:
-            更新后的 competitors_data
-        """
-        field_queries = {
-            "strengths": ["竞争优势 核心优势 行业地位", "优势 领先 竞争力"],
-            "weaknesses": ["劣势 不足 用户吐槽 差评", "问题 缺点 改进"],
-            "channels": ["渠道策略 推广方式 合作伙伴 生态", "分发 合作 生态布局"],
-            "market_share": ["市场份额 用户量 DAU MAU 市占率", "行业排名 市场占有率"],
-            "pricing_tiers": ["定价 价格 收费标准 会员 套餐", "免费版 付费版 premium"],
-            "user_reviews": ["用户评价 口碑 评分 好评 差评", "用户反馈 评测"],
-        }
-
-        def _is_truncated(text: str) -> bool:
-            """判断文本是否被截断"""
-            if not text or len(text.strip()) < 10:
-                return False
-            text = text.strip()
-            normal_endings = {"。", "！", "？", ".", "!", "?", "；", "」", "）", "》", "\"", "'", "…"}
-            if text[-1] in normal_endings:
-                return False
-            if len(text) > 50:
-                return True
-            return False
-
-        for comp_name, fields in missing_fields.items():
-            if comp_name not in competitors_data:
+                                  competitors_data: dict[str, CompetitorData],
+                                  missing_fields: dict[str, list[str]], search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
+        """Stage a targeted search and commit only a complete typed response."""
+        self._repair_outcomes = []
+        updated = deepcopy(competitors_data)
+        for name, fields in missing_fields.items():
+            if name not in competitors_data:
                 continue
-
-            data = competitors_data[comp_name]
-            all_extra_text = ""
-            extra_cites = []
-            cite_counter = len(data.citations)
-
-            # 为每个缺失/截断/幻觉字段执行针对性搜索
-            for field_name in fields:
-                current_val = getattr(data, field_name, "")
-                is_empty = not current_val or not str(current_val).strip()
-                is_truncated = _is_truncated(str(current_val))
-
-                # 幻觉字段：有内容但被QA标记为编造，需要清空后重新提取
-                if not is_empty and not is_truncated:
-                    self._log(f"   🔍 补充搜索(幻觉): {comp_name} 的 {field_name}，清空编造内容后重新提取")
-                    if field_name == "pricing_tiers":
-                        setattr(data, field_name, [])
-                    else:
-                        setattr(data, field_name, "")
-                elif is_truncated:
-                    self._log(f"   🔍 补充搜索(截断): {comp_name} 的 {field_name}")
-                else:
-                    self._log(f"   🔍 补充搜索(缺失): {comp_name} 的 {field_name}")
-
-                queries = field_queries.get(field_name, [field_name])
-                actual_queries = [f"{comp_name} {q}" for q in queries]
-
-                extra_results = self.search_client.batch_search(actual_queries)
-
-                for i, sr in enumerate(extra_results):
-                    result = sr.get("result")
-                    text = SearchClient.extract_text(result) if result else ""
-                    if text:
-                        all_extra_text += f"\n--- 补充搜索({field_name}): {sr.get('query', '')} ---\n{text[:1500]}\n"
-                    for ref in sr.get("references", []):
-                        ref_url = ref.get("url", "")
-                        ref_title = ref.get("title", "")
-                        if not ref_url and not ref_title:
-                            continue
-                        extra_cites.append(Citation(
-                            id=f"{comp_name}:sup_{field_name}_{i}:r{cite_counter}",
-                            title=ref_title,
-                            url=ref_url,
-                            snippet=ref.get("content", "") or ref.get("summary", ""),
-                            site_name=ref.get("site_name", ""),
-                            query=sr.get("query", ""),
-                            competitor=comp_name,
-                        ))
-                        cite_counter += 1
-
-            # 用 LLM 从补充搜索结果中提取缺失字段
-            if all_extra_text and config.ENABLE_LLM:
-                prompts = load_prompts("collection_agent")
-                # 在 prompt 末尾追加完整性要求，避免 LLM 再次截断
-                extract_prompt = prompts["prompt_collect"].format(
-                    product_name=product_name,
-                    product_description="",
-                    competitor_name=comp_name,
-                    search_results=all_extra_text[:8000],
-                )
-                extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
-
-                result = self.ask_llm_json(extract_prompt, max_tokens=8192, temperature=0)
-                result = self._normalize_competitor_text_fields(result)
-                if result:
-                    still_truncated = []
-                    for field_name in fields:
-                        current_val = getattr(data, field_name, "")
-                        is_empty = not current_val or not str(current_val).strip()
-                        is_truncated = _is_truncated(str(current_val))
-
-                        if not is_empty and not is_truncated:
-                            continue
-
-                        new_val = result.get(field_name, "")
-                        if new_val:
-                            if isinstance(new_val, list):
-                                if field_name == "pricing_tiers":
-                                    new_val = [
-                                        PricingTier(
-                                            tier_name=pt.get("tier_name", ""),
-                                            price=pt.get("price", ""),
-                                            features=pt.get("features", []),
-                                        )
-                                        for pt in new_val
-                                        if isinstance(pt, dict)
-                                    ]
-                                setattr(data, field_name, new_val)
-                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
-                            elif isinstance(new_val, str) and len(new_val.strip()) > 5:
-                                # 验证新值是否仍然截断
-                                if _is_truncated(new_val):
-                                    still_truncated.append(field_name)
-                                    self._log(f"   ⚠️ {comp_name}.{field_name} 补充后仍截断，保留新值")
-                                setattr(data, field_name, new_val)
-                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
-
-                    # 如果仍有截断，再尝试一次（只处理截断字段）
-                    if still_truncated:
-                        self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
-                        retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
-                        retry_result = self.ask_llm_json(retry_prompt, max_tokens=8192, temperature=0)
-                        retry_result = self._normalize_competitor_text_fields(retry_result)
-                        if retry_result:
-                            for field_name in still_truncated:
-                                retry_val = retry_result.get(field_name, "")
-                                if retry_val and isinstance(retry_val, str) and len(retry_val.strip()) > 5:
-                                    setattr(data, field_name, retry_val)
-                                    status = "仍截断" if _is_truncated(retry_val) else "已修复"
-                                    self._log(f"   ✅ {comp_name}.{field_name} 二次补充{status}")
-
-                    # 补充引用
-                    data.citations.extend(extra_cites)
-
-        return competitors_data
+            batches = [(field, self.search_client.batch_search(
+                scope_queries([f"{name} {term}" for term in self._field_search_terms(field)], search_scope))) for field in fields]
+            prepared = self._prepare_field_repair(name, competitors_data[name], fields, batches)
+            if not config.ENABLE_LLM or not (prepared[3].strip() or prepared[2]):
+                continue
+            result, reason = self.ask_llm_json_with_reason(prepared[0], max_tokens=8192, temperature=0)
+            updated[name] = self._commit_field_repair(name, competitors_data[name], fields, prepared, result, reason)
+        return updated
 
     async def async_supplement_missing_fields(self, product_name: str,
-                                              competitors_data: dict[str, 'CompetitorData'],
-                                              missing_fields: dict[str, list[str]]) -> dict[str, 'CompetitorData']:
-        """异步根据质检反馈的缺失/截断字段，对特定竞品做针对性补充搜索。"""
-        field_queries = {
-            "strengths": ["竞争优势 核心优势 行业地位", "优势 领先 竞争力"],
-            "weaknesses": ["劣势 不足 用户吐槽 差评", "问题 缺点 改进"],
-            "channels": ["渠道策略 推广方式 合作伙伴 生态", "分发 合作 生态布局"],
-            "market_share": ["市场份额 用户量 DAU MAU 市占率", "行业排名 市场占有率"],
-            "pricing_tiers": ["定价 价格 收费标准 会员 套餐", "免费版 付费版 premium"],
-            "user_reviews": ["用户评价 口碑 评分 好评 差评", "用户反馈 评测"],
-        }
-
-        def _is_truncated(text: str) -> bool:
-            if not text or len(text.strip()) < 10:
-                return False
-            text = text.strip()
-            normal_endings = {"。", "！", "？", ".", "!", "?", "；", "」", "）", "》", "\"", "'", "…"}
-            if text[-1] in normal_endings:
-                return False
-            if len(text) > 50:
-                return True
-            return False
-
-        for comp_name, fields in missing_fields.items():
-            if comp_name not in competitors_data:
+                                              competitors_data: dict[str, CompetitorData],
+                                              missing_fields: dict[str, list[str]], search_scope: list[str] | None = None) -> dict[str, CompetitorData]:
+        """Async equivalent of the same transactional supplement contract."""
+        self._repair_outcomes = []
+        updated = deepcopy(competitors_data)
+        for name, fields in missing_fields.items():
+            if name not in competitors_data:
                 continue
-
-            data = competitors_data[comp_name]
-            all_extra_text = ""
-            extra_cites = []
-            cite_counter = len(data.citations)
-
-            for field_name in fields:
-                current_val = getattr(data, field_name, "")
-                is_empty = not current_val or not str(current_val).strip()
-                is_truncated = _is_truncated(str(current_val))
-
-                if not is_empty and not is_truncated:
-                    self._log(f"   🔍 补充搜索(幻觉): {comp_name} 的 {field_name}，清空编造内容后重新提取")
-                    if field_name == "pricing_tiers":
-                        setattr(data, field_name, [])
-                    else:
-                        setattr(data, field_name, "")
-                elif is_truncated:
-                    self._log(f"   🔍 补充搜索(截断): {comp_name} 的 {field_name}")
-                else:
-                    self._log(f"   🔍 补充搜索(缺失): {comp_name} 的 {field_name}")
-
-                queries = field_queries.get(field_name, [field_name])
-                actual_queries = [f"{comp_name} {q}" for q in queries]
-                extra_results = await self.search_client.async_batch_search(actual_queries)
-
-                for i, sr in enumerate(extra_results):
-                    result = sr.get("result")
-                    text = SearchClient.extract_text(result) if result else ""
-                    if text:
-                        all_extra_text += f"\n--- 补充搜索({field_name}): {sr.get('query', '')} ---\n{text[:1500]}\n"
-                    for ref in sr.get("references", []):
-                        ref_url = ref.get("url", "")
-                        ref_title = ref.get("title", "")
-                        if not ref_url and not ref_title:
-                            continue
-                        extra_cites.append(Citation(
-                            id=f"{comp_name}:sup_{field_name}_{i}:r{cite_counter}",
-                            title=ref_title,
-                            url=ref_url,
-                            snippet=ref.get("content", "") or ref.get("summary", ""),
-                            site_name=ref.get("site_name", ""),
-                            query=sr.get("query", ""),
-                            competitor=comp_name,
-                        ))
-                        cite_counter += 1
-
-            if all_extra_text and config.ENABLE_LLM:
-                prompts = load_prompts("collection_agent")
-                extract_prompt = prompts["prompt_collect"].format(
-                    product_name=product_name,
-                    product_description="",
-                    competitor_name=comp_name,
-                    search_results=all_extra_text[:8000],
-                )
-                extract_prompt += "\n\n### 特别重要：本次是补充搜索修复\n上次提取的内容被质检标记为幻觉（编造），本次必须严格遵守以下规则：\n1. 只提取搜索结果中**原文明确写到**的信息\n2. 搜索结果中没有的数字、事实、评价 → 留空\"\"\n3. 不要综合、推断、脑补任何内容\n4. 宁可留空也不要写不确定的内容\n5. 每条文本字段必须以完整句子结尾，禁止截断"
-
-                result = await self.async_ask_llm_json(extract_prompt, max_tokens=8192, temperature=0)
-                result = self._normalize_competitor_text_fields(result)
-                if result:
-                    still_truncated = []
-                    for field_name in fields:
-                        current_val = getattr(data, field_name, "")
-                        is_empty = not current_val or not str(current_val).strip()
-                        is_truncated = _is_truncated(str(current_val))
-
-                        if not is_empty and not is_truncated:
-                            continue
-
-                        new_val = result.get(field_name, "")
-                        if new_val:
-                            if isinstance(new_val, list):
-                                if field_name == "pricing_tiers":
-                                    new_val = [
-                                        PricingTier(
-                                            tier_name=pt.get("tier_name", ""),
-                                            price=pt.get("price", ""),
-                                            features=pt.get("features", []),
-                                        )
-                                        for pt in new_val
-                                        if isinstance(pt, dict)
-                                    ]
-                                setattr(data, field_name, new_val)
-                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
-                            elif isinstance(new_val, str) and len(new_val.strip()) > 5:
-                                if _is_truncated(new_val):
-                                    still_truncated.append(field_name)
-                                    self._log(f"   ⚠️ {comp_name}.{field_name} 补充后仍截断，保留新值")
-                                setattr(data, field_name, new_val)
-                                self._log(f"   ✅ {comp_name}.{field_name} 补充成功")
-
-                    if still_truncated:
-                        self._log(f"   🔄 {comp_name} 仍有{len(still_truncated)}个截断字段，二次补充")
-                        retry_prompt = extract_prompt + f"\n\n### 特别注意\n以下字段上次提取时被截断，请确保本次输出完整：{', '.join(still_truncated)}"
-                        retry_result = await self.async_ask_llm_json(retry_prompt, max_tokens=8192, temperature=0)
-                        retry_result = self._normalize_competitor_text_fields(retry_result)
-                        if retry_result:
-                            for field_name in still_truncated:
-                                retry_val = retry_result.get(field_name, "")
-                                if retry_val and isinstance(retry_val, str) and len(retry_val.strip()) > 5:
-                                    setattr(data, field_name, retry_val)
-                                    status = "仍截断" if _is_truncated(retry_val) else "已修复"
-                                    self._log(f"   ✅ {comp_name}.{field_name} 二次补充{status}")
-
-                    data.citations.extend(extra_cites)
-
-        return competitors_data
+            batches = []
+            for field in fields:
+                queries = scope_queries([f"{name} {term}" for term in self._field_search_terms(field)], search_scope)
+                batches.append((field, await self.search_client.async_batch_search(queries)))
+            prepared = self._prepare_field_repair(name, competitors_data[name], fields, batches)
+            if not config.ENABLE_LLM or not (prepared[3].strip() or prepared[2]):
+                continue
+            result, reason = await self.async_ask_llm_json_with_reason(prepared[0], max_tokens=8192, temperature=0)
+            updated[name] = self._commit_field_repair(name, competitors_data[name], fields, prepared, result, reason)
+        return updated

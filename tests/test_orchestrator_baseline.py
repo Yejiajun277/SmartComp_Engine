@@ -230,29 +230,45 @@ class FakeCollectionAgent:
     def __init__(self):
         self.target_calls = []
         self.run_feedbacks = []
+        self.reextract_feedbacks = []
+        self._repair_entities = []
         self.supplement_calls = []
         self.llm_logs = []
         self._search_texts = {"CompA": "source text A", "CompB": "source text B"}
 
-    def collect_target_product(self, product_description, product_name, feedback=""):
+    def collect_target_product(self, product_description, product_name, feedback="", search_scope=None):
         self.target_calls.append((product_description, product_name, feedback))
         return target_data()
 
-    async def async_collect_target_product(self, product_description, product_name, feedback=""):
+    async def async_collect_target_product(self, product_description, product_name, feedback="", search_scope=None):
         return self.collect_target_product(product_description, product_name, feedback)
 
     async def run(self, product_description, competitors, feedback=""):
         self.run_feedbacks.append(feedback)
         return {c.name: competitor_data(c.name) for c in competitors.competitors}
 
+    async def async_reextract_saved_sources(self, product_name, product_description, data, sources, feedback="", *, repair_plan=None):
+        from copy import deepcopy
+        self.reextract_feedbacks.append(feedback)
+        self._repair_entities = list(data)
+        return deepcopy(data)
+
+    def restore_source_snapshot(self, sources):
+        from copy import deepcopy
+        self._search_texts = deepcopy(sources)
+
+    def get_repair_outcomes(self):
+        return [{"entity": name, "status": "accepted"} for name in self._repair_entities]
+
     def get_search_texts(self):
         return dict(self._search_texts)
 
-    def supplement_missing_fields(self, product_name, competitors_data, missing_fields):
+    def supplement_missing_fields(self, product_name, competitors_data, missing_fields, search_scope=None):
         self.supplement_calls.append((product_name, dict(missing_fields)))
+        self._repair_entities = list(missing_fields)
         return competitors_data
 
-    async def async_supplement_missing_fields(self, product_name, competitors_data, missing_fields):
+    async def async_supplement_missing_fields(self, product_name, competitors_data, missing_fields, search_scope=None):
         return self.supplement_missing_fields(product_name, competitors_data, missing_fields)
 
 
@@ -261,7 +277,7 @@ class FakeDimensionAgent:
         self.calls = []
         self.llm_logs = []
 
-    async def run(self, product_description, competitors):
+    async def run(self, product_description, competitors, competitors_data=None, target_product_data=None):
         self.calls.append((product_description, competitors.product_name))
         return dimension_config()
 
@@ -345,7 +361,8 @@ class FakeQualityAgent:
         passed = self.collection_passes.pop(0)
         return qa_result("collection", "CollectionAgent", passed, attempt)
 
-    async def check_analysis(self, analysis_type, analysis, competitors_data, attempt=1):
+    async def check_analysis(self, analysis_type, analysis, competitors_data, attempt=1,
+                             *, target_product_data=None, product_name="", sub_dimensions=""):
         passed = self.analysis_passes[analysis_type].pop(0)
         target = {
             "product": "ProductAgent",
@@ -520,8 +537,8 @@ class LegacyOrchestratorBaselineTests(unittest.IsolatedAsyncioTestCase):
         report = await run_quietly(orch, "Target product", 2)
 
         self.assertEqual(
-            orch.collection_agent.run_feedbacks,
-            ["", "feedback:collection:CollectionAgent:1"],
+            orch.collection_agent.reextract_feedbacks,
+            ["feedback:collection:CollectionAgent:1"],
         )
         self.assertEqual(
             [check.phase for check in report.qa_timeline.checks[:2]],

@@ -20,6 +20,10 @@ from models.domain import (
     StrategyReport, QualityCheckResult
 )
 from core.artifact_store import ArtifactStore
+from core.collection_retry import (
+    repair_collection, collection_entities, split_collection_entities,
+    target_source_snapshot, collection_source_snapshot, validate_collection_names,
+)
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
 from agents.dimension_agent import DimensionAgent
@@ -29,6 +33,14 @@ from agents.market_agent import MarketAgent
 from agents.strategy_agent import StrategyAgent
 from agents.quality_agent import QualityAgent
 import config
+
+
+class NonRetryableQualityError(RuntimeError):
+    """Terminal provider decision, with task-level failure metadata."""
+
+    def __init__(self, reason: str, failure: dict):
+        super().__init__(reason)
+        self.failure = failure
 
 
 class Orchestrator:
@@ -112,8 +124,29 @@ class Orchestrator:
         self._last_market_analysis = state.get("market_analysis")
         self._last_competitor_list = state.get("competitor_list")
         self._last_competitors_data = state.get("competitors_data", {})
+        self._last_target_product_data = state.get("target_product_data")
+        failure = state.get("failure", {})
+        if failure.get("non_retryable_reason"):
+            raise NonRetryableQualityError(failure["non_retryable_reason"], failure)
         self._print_completion_summary(report)
         return report
+
+    def _fail_non_retryable_quality(self, result, product_name, competitor_count):
+        reason = getattr(result, "non_retryable_reason", "")
+        if not reason:
+            return
+        from workflow.nodes import AnalysisGraphNodes
+        state = {"qa_checks": self.quality_agent.timeline.checks}
+        failure = AnalysisGraphNodes._failure_payload(state, result.phase, result, "")
+        self._last_status = "failed"
+        self._save_artifact_json("failed_state.json", failure)
+        self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)
+        logs = self._collect_llm_logs()
+        self._save_artifact_json("llm_logs.json", logs)
+        self._save_artifact_json("token_summary.json", self._build_token_summary(logs))
+        self._finalize_artifacts(status="failed", product_name=product_name,
+                                 competitor_count=competitor_count)
+        raise NonRetryableQualityError(reason, failure)
 
     async def _analyze_legacy(self, product_description: str,
                              max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
@@ -170,14 +203,20 @@ class Orchestrator:
         print(f"{'█' * 65}")
 
         target_collection_start = time.time()
+        validate_collection_names(competitor_list)
+        search_scope = getattr(competitor_list, "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
         target_product_data = self.collection_agent.collect_target_product(
-            product_description, competitor_list.product_name
+            product_description, competitor_list.product_name, **scope_options
         )
         self.timings["target_collection"] = time.time() - target_collection_start
+        target_search_texts = target_source_snapshot(self.collection_agent.get_search_texts(),
+                                                     target_product_data, competitor_list.product_name)
 
         print(f"\n  ⏱️ 目标产品采集耗时: {self.timings['target_collection']:.2f}s")
         print(f"  🎯 目标产品: {target_product_data.name}")
         self._save_artifact_json("00_target_product_data.json", target_product_data)
+        self._save_artifact_json("00_target_search_texts.json", target_search_texts)
 
         # ── Phase 2: 数据采集（串行，逐竞品）──
         print(f"\n{'█' * 65}")
@@ -195,7 +234,9 @@ class Orchestrator:
 
         # ── Phase 2 QA: 采集数据质检 ──
         qa_start = time.time()
-        original_search_texts = self.collection_agent.get_search_texts()
+        original_search_texts = collection_source_snapshot(target_search_texts, self.collection_agent.get_search_texts())
+        self.collection_agent.restore_source_snapshot(original_search_texts)
+        collection_entities(competitors_data, target_product_data, competitor_list.product_name)
 
         if config.SKIP_QA:
             qa_collection = QualityCheckResult(
@@ -208,47 +249,37 @@ class Orchestrator:
             product_name = competitor_list.product_name
             qa_attempt = 1
             while qa_attempt <= QualityAgent.MAX_RETRIES + 1:
+                entities = collection_entities(competitors_data, target_product_data, product_name)
+                self._save_artifact_json("00_target_product_data.json", target_product_data)
+                self._save_artifact_json("00_target_search_texts.json", target_search_texts)
                 qa_collection = await self.quality_agent.check_collection(
-                    competitors_data, original_search_texts,
+                    entities, original_search_texts,
                     competitor_list=competitor_list, attempt=qa_attempt
                 )
                 self.quality_agent.timeline.add_check(qa_collection)
+                if getattr(qa_collection, "non_retryable_reason", ""):
+                    self._save_artifact_json("02_competitors_data.json", competitors_data)
+                    self._save_artifact_json("02_search_texts.json", original_search_texts)
+                    self._fail_non_retryable_quality(qa_collection, product_name, len(competitor_list.competitors))
 
                 if qa_collection.passed:
                     break
 
-                # 如果已经做过至少1轮补充搜索，且只剩幻觉问题（无空/截断字段），直接通过
-                if qa_attempt > 1:
-                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
-                    completeness_critical = [i for i in qa_collection.issues
-                                             if i.category == "completeness" and i.severity == "critical"
-                                             and i.field and "." in i.field and not i.field.startswith("所有")]
-                    hallucination_only = not missing_fields and not completeness_critical
-                    if hallucination_only:
-                        print(f"  ℹ️ 采集质检（第{qa_attempt}次）：无缺失字段，仅剩幻觉检测警告，通过")
-                        qa_collection.passed = True
-                        break
-
+                # A full data shape cannot replace an unfinished or failed review.
+                # Preserve the checker result through retries and exhaustion.
                 if qa_attempt <= QualityAgent.MAX_RETRIES:
                     # 提取缺失字段，做针对性补充搜索
-                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
+                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, entities)
 
-                    if missing_fields:
-                        total_missing = sum(len(fs) for fs in missing_fields.values())
-                        affected = len(missing_fields)
-                        print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），{affected}个竞品共{total_missing}个字段缺失，执行针对性补充搜索")
-                        competitors_data = self.collection_agent.supplement_missing_fields(
-                            product_name, competitors_data, missing_fields
-                        )
-                        original_search_texts = self.collection_agent.get_search_texts()
-                    else:
-                        # 没有可补充的字段（可能是幻觉问题），用 LLM 反馈整体重做
-                        print(f"  ⚠️ 采集质检未通过（第{qa_attempt}次），存在非字段缺失问题，整体重做")
-                        feedback = self.quality_agent.build_feedback(qa_collection)
-                        competitors_data = await self.collection_agent.run(
-                            product_description, competitor_list, feedback=feedback
-                        )
-                        original_search_texts = self.collection_agent.get_search_texts()
+                    repaired, original_search_texts, _ = await repair_collection(
+                        self, product_name, product_description, entities,
+                        original_search_texts, qa_collection, qa_attempt, missing_fields,
+                        target_name=(product_name or target_product_data.name) if target_product_data is not None else None,
+                        **scope_options)
+                    competitors_data, target_product_data = split_collection_entities(
+                        repaired, target_product_data, product_name)
+                    target_search_texts = target_source_snapshot(original_search_texts, target_product_data, product_name)
+
                 else:
                     print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
                     qa_collection.degraded = True
@@ -256,6 +287,8 @@ class Orchestrator:
                 qa_attempt += 1
 
         self.timings["qa_collection"] = time.time() - qa_start
+        self._save_artifact_json("00_target_product_data.json", target_product_data)
+        self._save_artifact_json("00_target_search_texts.json", target_search_texts)
         self._save_artifact_json("02_competitors_data.json", competitors_data)
         self._save_artifact_json("02_search_texts.json", original_search_texts)
         self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)
@@ -263,7 +296,9 @@ class Orchestrator:
         # ── Phase 2.5: 维度生成 ──
         phase2_5_start = time.time()
         dim_config = await self.dimension_agent.run(
-            product_description, competitor_list
+            product_description, competitor_list,
+            competitors_data=competitors_data,
+            target_product_data=target_product_data,
         )
         self.timings["dimension"] = time.time() - phase2_5_start
 
@@ -335,11 +370,29 @@ class Orchestrator:
                 self.quality_agent.timeline.add_check(qa_skip)
             print("  🐛 调试模式：三维分析质检跳过")
         else:
+            async def check_current_analysis(analysis_type, analysis, attempt=1):
+                return await self.quality_agent.check_analysis(
+                    analysis_type, analysis, competitors_data, attempt=attempt,
+                    target_product_data=target_product_data, product_name=product_name,
+                    sub_dimensions={"product": product_sub_dims_text,
+                                    "pricing": pricing_sub_dims_text}.get(analysis_type, ""),
+                )
+
             qa_product, qa_pricing, qa_market = await asyncio.gather(
-                self.quality_agent.check_analysis("product", product_analysis, competitors_data),
-                self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data),
-                self.quality_agent.check_analysis("market", market_analysis, competitors_data),
+                check_current_analysis("product", product_analysis),
+                check_current_analysis("pricing", pricing_analysis),
+                check_current_analysis("market", market_analysis),
             )
+            initial_checks = (qa_product, qa_pricing, qa_market)
+            terminal = next((check for check in initial_checks
+                             if getattr(check, "non_retryable_reason", "")), None)
+            if terminal:
+                for check in initial_checks:
+                    self.quality_agent.timeline.add_check(check)
+                self._save_artifact_json("04_product_analysis.json", product_analysis)
+                self._save_artifact_json("05_pricing_analysis.json", pricing_analysis)
+                self._save_artifact_json("06_market_analysis.json", market_analysis)
+                self._fail_non_retryable_quality(terminal, product_name, len(competitor_list.competitors))
 
             # 打回未通过的分析 Agent
             for qa_result, agent_name, atype in [
@@ -349,7 +402,6 @@ class Orchestrator:
             ]:
                 self.quality_agent.timeline.add_check(qa_result)
                 qa_attempt = 1
-                prev_score = qa_result.score
                 while not qa_result.passed and qa_attempt <= QualityAgent.MAX_RETRIES:
                     print(f"  ⚠️ {agent_name} 质检未通过（第{qa_attempt}次），打回重做")
                     feedback = self.quality_agent.build_feedback(qa_result)
@@ -374,21 +426,18 @@ class Orchestrator:
 
                     # 重新质检
                     if atype == "product":
-                        qa_result = await self.quality_agent.check_analysis("product", product_analysis, competitors_data)
+                        qa_result = await check_current_analysis("product", product_analysis, qa_attempt + 1)
                     elif atype == "pricing":
-                        qa_result = await self.quality_agent.check_analysis("pricing", pricing_analysis, competitors_data)
+                        qa_result = await check_current_analysis("pricing", pricing_analysis, qa_attempt + 1)
                     else:
-                        qa_result = await self.quality_agent.check_analysis("market", market_analysis, competitors_data)
-
-                    # 分数未提升即通过：避免在幻觉误报上无限循环
-                    if qa_result.score <= prev_score:
-                        print(f"  ℹ️ {agent_name} 质检（第{qa_attempt}次）：分数未提升（{prev_score:.1f}→{qa_result.score:.1f}），判定为误报通过")
-                        qa_result.passed = True
-                        self.quality_agent.timeline.add_check(qa_result)
-                        break
-                    prev_score = qa_result.score
+                        qa_result = await check_current_analysis("market", market_analysis, qa_attempt + 1)
 
                     self.quality_agent.timeline.add_check(qa_result)
+                    if getattr(qa_result, "non_retryable_reason", ""):
+                        self._save_artifact_json("04_product_analysis.json", product_analysis)
+                        self._save_artifact_json("05_pricing_analysis.json", pricing_analysis)
+                        self._save_artifact_json("06_market_analysis.json", market_analysis)
+                        self._fail_non_retryable_quality(qa_result, product_name, len(competitor_list.competitors))
                     qa_attempt += 1
 
                 if not qa_result.passed:
@@ -436,6 +485,7 @@ class Orchestrator:
                     attempt=qa_attempt
                 )
                 self.quality_agent.timeline.add_check(qa_strategy)
+                self._fail_non_retryable_quality(qa_strategy, product_name, len(competitor_list.competitors))
 
                 if qa_strategy.passed:
                     break
@@ -616,39 +666,61 @@ class Orchestrator:
 
     @staticmethod
     def _build_token_summary(llm_logs: list[dict]) -> dict:
-        """从 LLM 日志中构建 Token 用量汇总。"""
+        """Keep known usage and unknown-call reservations visibly separate."""
         per_agent = {}
-        total_prompt = 0
-        total_completion = 0
-        total_calls = 0
-
+        def empty():
+            return {"call_count": 0, "prompt_tokens": 0, "completion_tokens": 0,
+                    "total_tokens": 0, "known_subtotal": 0, "unknown_call_count": 0,
+                    "usage_complete": True, "usage_reservation_tokens": 0,
+                    "usage_reservation_known_subtotal": 0, "usage_reservation_complete": True}
+        overall = empty()
         for entry in llm_logs:
-            agent_id = entry.get("agent_id", "unknown")
-            prompt_tok = entry.get("prompt_tokens", 0)
-            completion_tok = entry.get("completion_tokens", 0)
-
-            if agent_id not in per_agent:
-                per_agent[agent_id] = {
-                    "call_count": 0,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                }
-
-            per_agent[agent_id]["call_count"] += 1
-            per_agent[agent_id]["prompt_tokens"] += prompt_tok
-            per_agent[agent_id]["completion_tokens"] += completion_tok
-            per_agent[agent_id]["total_tokens"] += prompt_tok + completion_tok
-
-            total_prompt += prompt_tok
-            total_completion += completion_tok
-            total_calls += 1
-
+            if entry.get("type") == "search":
+                continue
+            agent_id = entry.get("agent_id") or entry.get("agent") or "unknown"
+            prompt_tok, completion_tok = entry.get("prompt_tokens"), entry.get("completion_tokens")
+            valid = all(type(value) is int and value >= 0 for value in (prompt_tok, completion_tok))
+            known = (valid and entry.get("usage_known") is not False
+                     and entry.get("usage_reported") is not False
+                     and (entry.get("usage_known") is True or prompt_tok + completion_tok > 0))
+            reservation = None
+            if not known:
+                provided = entry.get("usage_reservation_tokens")
+                if type(provided) is int and provided > 0:
+                    reservation = provided
+                request_bytes = entry.get("request_bytes")
+                caps = [entry.get(key) for key in ("max_completion_tokens", "max_tokens")]
+                caps = [value for value in caps if type(value) is int and value > 0]
+                if type(request_bytes) is int and request_bytes > 0 and caps:
+                    reservation = max(reservation or 0, request_bytes + max(caps) + 4096)
+            agent = per_agent.setdefault(agent_id, empty())
+            for bucket in (overall, agent):
+                bucket["call_count"] += 1
+                if known:
+                    bucket["prompt_tokens"] += prompt_tok
+                    bucket["completion_tokens"] += completion_tok
+                    bucket["total_tokens"] += prompt_tok + completion_tok
+                    bucket["known_subtotal"] += prompt_tok + completion_tok
+                else:
+                    bucket["unknown_call_count"] += 1
+                    bucket["usage_complete"] = False
+                    bucket["usage_reservation_known_subtotal"] += reservation or 0
+                    if reservation is None:
+                        bucket["usage_reservation_tokens"] = None
+                        bucket["usage_reservation_complete"] = False
+                    elif bucket["usage_reservation_tokens"] is not None:
+                        bucket["usage_reservation_tokens"] += reservation
         return {
-            "total_calls": total_calls,
-            "total_prompt_tokens": total_prompt,
-            "total_completion_tokens": total_completion,
-            "total_tokens": total_prompt + total_completion,
+            "total_calls": overall["call_count"],
+            "total_prompt_tokens": overall["prompt_tokens"],
+            "total_completion_tokens": overall["completion_tokens"],
+            "total_tokens": overall["total_tokens"],
+            "known_subtotal": overall["known_subtotal"],
+            "unknown_call_count": overall["unknown_call_count"],
+            "usage_complete": overall["usage_complete"],
+            "usage_reservation_tokens": overall["usage_reservation_tokens"],
+            "usage_reservation_known_subtotal": overall["usage_reservation_known_subtotal"],
+            "usage_reservation_complete": overall["usage_reservation_complete"],
             "per_agent": per_agent,
         }
 

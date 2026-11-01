@@ -118,7 +118,12 @@ async def get_html_report(task_id: str, request: Request):
     html_path = Path(task.html_report_path)
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="HTML report file not found")
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    from core.report_citations import normalize_report_citations
+    citation_index = (task.report_json or {}).get("citation_index") or {}
+    markup = normalize_report_citations(
+        html_path.read_text(encoding="utf-8"), citation_index.get("citations", {})
+    )
+    return HTMLResponse(markup)
 
 
 @router.get("/{task_id}/artifacts/{phase}")

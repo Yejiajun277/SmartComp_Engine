@@ -2,6 +2,28 @@ import { getQaResultState } from './taskEvents.js';
 
 const GATE_PRIORITY = ['running', 'failed', 'degraded', 'passed', 'waiting'];
 
+export function getTimelineQaResults(timeline = {}) {
+  const checks = Array.isArray(timeline?.checks) ? timeline.checks : [];
+  const latestByPhase = new Map();
+  checks.forEach((check, index) => {
+    if (check?.phase) latestByPhase.set(check.phase, index);
+  });
+
+  return checks.map((check, index) => {
+    const disposition = timeline?.terminal_dispositions?.[check?.phase];
+    if (
+      latestByPhase.get(check?.phase) === index
+      && disposition?.status === 'degraded'
+      && Number(disposition.attempt) > 0
+      && Number(disposition.attempt) === Number(check?.attempt)
+      && check?.passed === false
+    ) {
+      return { ...check, degraded: true };
+    }
+    return check;
+  });
+}
+
 function roundRate(value) {
   return Math.round(value * 10) / 10;
 }

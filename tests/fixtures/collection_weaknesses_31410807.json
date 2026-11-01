@@ -1,0 +1,94 @@
+{
+  "task_id": "31410807",
+  "audit_fixture_sha256": "5557d4f4977e87d87f1d804b698ca9327f9ce454eb5bababe12db5675d962494",
+  "cases": [
+    {
+      "entity": "小狗 T12 系列",
+      "original_weaknesses": "",
+      "complete_original_source_record": {
+        "id": "小狗 T12 系列:q5:r25",
+        "title": "小狗T12 Max Rinse轻松搞定全屋清洁",
+        "url": "https://zhongce.sina.com.cn/interface/article/view/135211",
+        "snippet": "Jun 12, 2022 — ”吸尘主机太重了，拖来拖去很麻烦。”“电线插头总是要拔来插去。”每次媳妇用吸尘器的时候，都能听到她的抱怨。我决定用小狗T12 Max Rinse减轻她的家务负担 ...Read more",
+        "site_name": "",
+        "query": "中国 家用 小狗 T12 系列 劣势 不足 用户吐槽",
+        "competitor": "小狗 T12 系列",
+        "collected_at": "2026-11-01T10:19:37"
+      },
+      "qa1_weakness_issues": [
+        {
+          "severity": "critical",
+          "category": "completeness",
+          "field": "小狗 T12 系列.weaknesses",
+          "description": "劣势信息为空，需要补充搜索",
+          "expected": "",
+          "actual": "",
+          "suggestion": "搜索 '小狗 T12 系列 劣势 不足 用户吐槽' 补充劣势数据"
+        },
+        {
+          "severity": "warning",
+          "category": "completeness",
+          "field": "小狗 T12 系列.weaknesses",
+          "description": "该字段为空字符串。本次检索未见针对T12系列的明确差评要点（q5:r25中的抱怨针对的是用户此前使用的旧机型，非T12），资料缺口未被显式记录。",
+          "expected": "写明“本次检索未见针对T12系列的明确差评要点/资料缺口”，或列出可支撑的不足项",
+          "actual": "空字符串",
+          "suggestion": "填入“本次摘录未见明确差评要点”的缺口说明，并保留q5:r25抱怨对象为旧机型的限定，不要据此写成T12的劣势。"
+        }
+      ],
+      "after_patch_exact_evidence": [
+        {
+          "source_id": "小狗 T12 系列:q5:r25",
+          "exact_quote": "Jun 12, 2022 — ”吸尘主机太重了，拖来拖去很麻烦。”“电线插头总是要拔来插去。”每次媳妇用吸尘器的时候，都能听到她的抱怨。我决定用小狗T12 Max Rinse减轻她的家务负担"
+        }
+      ]
+    },
+    {
+      "entity": "追觅 Dreame（Z20 Station / V16S）",
+      "original_weaknesses": "",
+      "complete_original_source_record": {
+        "id": "追觅 Dreame（Z20 Station / V16S）:q5:r25",
+        "title": "追觅Z20Station旋锋版吸尘器怎么样？深度测评，优缺点客观分析",
+        "url": "https://zhuanlan.zhihu.com/p/2044784474139973018",
+        "snippet": "Image 6\n\nImage 7\n\n2、230AW 飓风吸力 + 绿光显尘：看得见的干净才是真干净\n\n吸力是吸尘器的基本功，追觅 Z20 搭载的20 万转 / 分钟高速数字马达（获沙利文认证全球首个突破 20 万转），能爆发出 230AW 的强劲吸力。\n\n我做了个小测试：在地毯上撒上面粉、猫粮、果皮和糙米的混合物，追觅 Z20 一推即净，连地毯深层的猫毛都能吸出来。更惊喜的是140° 绿光显尘技术，开启后能清晰看到平时肉眼看不见的灰尘和螨虫，清洁时更有针对性，强迫症表示极度舒适。\n\nImage 8\n\n3、10秒极速集尘：100天不碰灰不是噱头\n\n以前用普通吸尘器，每次打扫完最头疼的就是倒灰 —— 弯腰拆尘杯、小心翼翼倒垃圾、还要清洗滤网，全程都在 “吃灰”。\n\n追觅Z20的基站自带1050W 强劲集尘电机，只要把主机放回基站，按一下按钮，10秒就能完成集尘。灰尘会被强力抽进3L大容量尘袋，采用银离子抗菌材质，细菌和异味都不会逃逸。\n\n我家有猫 + 每天扫地，尘袋用了30天才提示更换，按这个频率100天免倒灰完全能实现。关键是全程手不碰灰，对我这种过敏体质太友好了！\n\nImage 9\n\nImage 10\n\n4、这款吸尘器，除了主地刷外，还配有电动除螨刷、除尘软毛刷和二合一长扁吸，一机多用，实现全屋各处的清洁。\n\nImage 11\n\nImage 12\n\n## 三、真实使用场景体验\n\n1、大户型清洁：90分钟续航，一次搞定不中断\n\n我家130㎡，从客厅到卧室再到书房，全程无压力，还能顺便清洁沙发底和床底。\n\n2、 养宠家庭：毛发、皮屑一网打尽\n\n两只长毛猫掉毛严重，沙发、地毯、床上都是猫毛。追觅Z20的宠物刷 + 主动割毛技术，吸猫毛效率极高，连猫砂盆旁边散落的猫砂都能轻松吸除，再也不用弯腰捡猫砂了。\n\n3、 床铺清洁：除螨效果看得见 [...] 3、 床铺清洁：除螨效果看得见\n\n用除螨刷清洁床垫，能吸出很多白色粉末状的尘螨尸体和皮屑。配合绿光显尘，能看到清洁前后的明显对比，睡起来更安心。\n\n4、高处清洁：轻便机身，举高不累\n\n整机约1.83kg，日常举高清洁窗帘、柜顶完全没问题，我老婆（力气较小）也能轻松操作。\n\n## 四、优缺点客观分析\n\n✅ 优点：\n\n1.   主动割毛 + 自动集尘：真正解放双手，养宠 / 长发家庭必备\n2.   230AW 大吸力：清洁能力强，大小颗粒都能搞定\n3.   90 分钟长续航：大户型友好，无需频繁充电\n4.   绿光显尘：可视化清洁，避免遗漏死角\n5.   一机多用：配有多个刷头，实现全屋清洁\n6.   基站三合一：集尘、充电、收纳一体，不占地方\n7.   九重过滤 + 除菌：减少细菌滋生，适合过敏人群\n\n❌ 缺点：\n\n1.   集尘噪音：约 80-84 分贝，虽然只有10 秒，但夜间使用可能影响浅眠者\n\n## 五、总结\n\n追觅Z20 Station旋锋版解决了传统吸尘器最让人头疼的几个痛点：滚刷缠毛、倒灰扬灰、续航不足。230AW大吸力 + 主动割毛 + 10秒自动集尘 + 绿光显尘 + 90分钟续航，是真正的“六边形战士”，尤其适合养宠家庭和大户型用户。\n\n京东优惠价是2499元：\n\nImage 13 广告 追觅【C罗代言】自集尘吸尘器Z20 Station旋锋版 京东 ¥3266.67 去购买​\n\n  \n\n编辑于 2026-07-08 11:45・安徽\n\n追觅吸尘器\n\n吸尘器\n\n家用电器 [...] 编辑于 2026-07-08 11:45・安徽\n\n追觅吸尘器\n\n吸尘器\n\n家用电器\n\n靠硬实力：Talents AI 资深开发者/行业专家招募 Talents AI 面向资深软件工程师、开源贡献者及各垂直领域技术专家，开放远程合作岗位。具体回报以实际项目为准。查看详情 Talents AI 面向资深软件工程师、开源贡献者及各垂直领域技术专家，开放远程合作岗位。具体回报以实际项目为准。 查看详情 Image 14: 用户头像 Talents AI 的广告\n\n​赞同 3​​1 条评论​2 ​喜欢\n\n​分享\n\n​申请转载​\n\n​\n\nImage 15\n\n未登录用户\n\n  \n\n1 条评论\n\n默认\n\n最新\n\nImage 16: 孤狼一号\n\n孤狼一号\n\n功能很强大~\n\n06-02 · 湖南\n\n​回复​喜欢\n\n[](\n\n关于作者\n\nImage 17: 珊瑚\n\n珊瑚\n\n积极生活，关注家用电器，数码产品等。\n\n回答 362文章 317关注者 509\n\n​关注他​发私信\n\n大家都在搜\n\n换一换\n\n姆巴佩恐面临天文数字赔偿 506 万热\n\n反诈博主徽剑被曝遇害 456 万热\n\n摆拍大体老师头骨的学生被处分 411 万热\n\n好奇岛装扮游戏 404 万活动\n\n波兰总理趁总统外访发动政变 397 万热\n\n将有两名中国人登陆月球 384 万热\n\n10月30日A股集体收跌 298 万\n\n四川悬崖秋千致游客死亡调查公布 290 万新\n\nDeepSeek发布super-agent构想 286 万新\n\n苏超决赛无锡2-1常州 281 万新\n\n### 推荐阅读",
+        "site_name": "",
+        "query": "中国 家用 追觅 Dreame（Z20 Station / V16S） 劣势 不足 用户吐槽",
+        "competitor": "追觅 Dreame（Z20 Station / V16S）",
+        "collected_at": "2026-11-01T10:15:32"
+      },
+      "qa1_weakness_issues": [
+        {
+          "severity": "critical",
+          "category": "completeness",
+          "field": "追觅 Dreame（Z20 Station / V16S）.weaknesses",
+          "description": "劣势信息为空，需要补充搜索",
+          "expected": "",
+          "actual": "",
+          "suggestion": "搜索 '追觅 Dreame（Z20 Station / V16S） 劣势 不足 用户吐槽' 补充劣势数据"
+        },
+        {
+          "severity": "critical",
+          "category": "completeness",
+          "field": "追觅 Dreame（Z20 Station / V16S）.weaknesses",
+          "description": "weaknesses 为空字符串，但采集来源中已存在明确缺点内容：q5:r25 明列『缺点：集尘噪音约 80-84 分贝，夜间可能影响浅眠者』，q2:r13（Dreame Z20 实测）列有『重量偏重、塑料外壳易留痕』等负面点，q5:r29 追觅品牌劣势（尘气分离不及戴森、吸力衰减较快、寿命较短）也可参考。",
+          "expected": "按来源分条填写缺点，并保留评测者/单品口径与型号范围（如噪音仅指 Z20 Station 旋锋版集尘动作）",
+          "actual": "空字符串",
+          "suggestion": "补充 q5:r25 的集尘噪音缺点为主条目，必要时另列 q2:r13 的重量/外壳缺点并注明来源与适用型号，不跨型号合并。"
+        }
+      ],
+      "after_patch_exact_evidence": [
+        {
+          "source_id": "追觅 Dreame（Z20 Station / V16S）:q5:r25",
+          "exact_quote": "❌ 缺点：\n\n1.   集尘噪音：约 80-84 分贝，虽然只有10 秒，但夜间使用可能影响浅眠者"
+        },
+        {
+          "source_id": "追觅 Dreame（Z20 Station / V16S）:q2:r13",
+          "exact_quote": "As for the negative points, the weight which is a bit heavier than average, and the\n[6:44] plastic design, which quickly marks impacts."
+        },
+        {
+          "source_id": "追觅 Dreame（Z20 Station / V16S）:q5:r29",
+          "exact_quote": "和其它国产品牌一样，追觅吸尘器尘气分离效果没有戴森的多圆锥气旋技术好，吸力衰减的速度比戴森要快一些，使用寿命也没有戴森长（也能理解，毕竟戴森是行业大佬~~）"
+        }
+      ]
+    }
+  ]
+}

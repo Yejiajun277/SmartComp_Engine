@@ -54,3 +54,25 @@ test('report overview treats an explicit QA failure as terminal even with stale 
 
   assert.equal(result.qaStatus, 'failed');
 });
+
+test('report overview restores exhausted disposition without rewriting failed checks', () => {
+  const checks = [{ phase: 'product', attempt: 3, passed: false, degraded: false }];
+  const result = buildReportOverview({ qa_timeline: {
+    checks,
+    terminal_dispositions: { product: { status: 'degraded', attempt: 3, reason: 'retry_exhausted' } },
+  } });
+
+  assert.equal(result.qaStatus, 'degraded');
+  assert.equal(result.qaCheckCount, 1);
+  assert.equal(checks[0].passed, false);
+  assert.equal(checks[0].degraded, false);
+});
+
+test('stale terminal disposition cannot hide a later failed check', () => {
+  const result = buildReportOverview({ qa_timeline: {
+    checks: [{ phase: 'product', attempt: 4, passed: false, degraded: false }],
+    terminal_dispositions: { product: { status: 'degraded', attempt: 3, reason: 'retry_exhausted' } },
+  } });
+
+  assert.equal(result.qaStatus, 'failed');
+});

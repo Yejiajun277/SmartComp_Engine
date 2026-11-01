@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Table, Tag, Typography, Spin, Empty, Collapse } from 'antd';
 import { getLlmLogs } from '../api/client';
-import { INITIAL_LLM_LOG_PAGINATION, updateLlmLogPagination } from '../utils/llmLogs';
+import { INITIAL_LLM_LOG_PAGINATION, updateLlmLogPagination, formatLlmTokenUsage } from '../utils/llmLogs';
 
 const { Text } = Typography;
 
@@ -65,11 +65,7 @@ export default function LlmLogs({ taskId, refreshKey = 0 }) {
       title: 'Token',
       key: 'tokens',
       width: 110,
-      render: (_, record) => {
-        if (record.type === 'search') return '-';
-        const total = record.total_tokens || (record.prompt_tokens || 0) + (record.completion_tokens || 0);
-        return total ? `${total}` : '-';
-      },
+      render: (_, record) => formatLlmTokenUsage(record),
     },
     {
       title: '耗时',
@@ -159,9 +155,11 @@ function LogDetail({ record }) {
     <div style={{ fontSize: 13 }}>
       <div style={{ marginBottom: 8, color: '#888' }}>
         {record.timestamp && <Text type="secondary">{record.timestamp}</Text>}
-        {record.prompt_tokens ? (
+        {formatLlmTokenUsage(record) === '未知' ? (
+          <Text type="secondary" style={{ marginLeft: 16 }}>Token 用量未知（记录中缺少完整用量）</Text>
+        ) : record.prompt_tokens ? (
           <Text type="secondary" style={{ marginLeft: 16 }}>
-            Prompt: {record.prompt_tokens} | Completion: {record.completion_tokens} | Total: {record.total_tokens}
+            Prompt: {record.prompt_tokens} | Completion: {record.completion_tokens} | Total: {formatLlmTokenUsage(record)}
           </Text>
         ) : null}
         {record.temperature ? <Text type="secondary" style={{ marginLeft: 16 }}>temp={record.temperature}</Text> : null}

@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import asyncio
 import time
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from agents.quality_agent import QualityAgent
+from core.collection_retry import (
+    repair_collection, collection_entities, split_collection_entities,
+    target_source_snapshot, collection_source_snapshot, validate_collection_names,
+)
 import config
 from models.domain import (
     MarketAnalysis,
@@ -176,7 +181,7 @@ class AnalysisGraphNodes:
         if qa_result:
             for issue in qa_result.issues:
                 issues.append(asdict(issue) if is_dataclass(issue) else issue)
-        return {
+        payload = {
             "phase": phase,
             "target_agent": qa_result.target_agent if qa_result else "",
             "score": qa_result.score if qa_result else 0,
@@ -195,6 +200,12 @@ class AnalysisGraphNodes:
                 for check in state.get("qa_checks", [])
             ],
         }
+        reason = getattr(qa_result, "non_retryable_reason", "")
+        if reason:
+            payload.update(non_retryable_reason=reason,
+                           failed_node="qa_analysis" if phase in ("product", "pricing", "market") else f"qa_{phase}",
+                           failed_phase=phase, failed_agent="QualityAgent")
+        return payload
 
     async def initialize_run(self, state: AnalysisState) -> AnalysisState:
         started = time.perf_counter()
@@ -282,23 +293,29 @@ class AnalysisGraphNodes:
         }
 
     async def collect_target_product(self, state: AnalysisState) -> AnalysisState:
+        validate_collection_names(state["competitor_list"])
+        search_scope = getattr(state["competitor_list"], "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
         await self._emit(state, EventType.AGENT_STARTED, "CollectionAgent", "collection",
                          progress=0.15, message="正在采集目标产品数据...")
 
         async def call():
             return await self.orchestrator.collection_agent.async_collect_target_product(
-                state["product_description"], state["product_name"]
+                state["product_description"], state["product_name"], **scope_options
             )
 
         start = time.perf_counter()
         data = await self._retry_node(state, "collect_target_product", call)
         timings = self._merge_timing(state, "target_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        sources = target_source_snapshot(self.orchestrator.collection_agent.get_search_texts(),
+                                         data, state["product_name"])
         self.orchestrator._save_artifact_json("00_target_product_data.json", data)
+        self.orchestrator._save_artifact_json("00_target_search_texts.json", sources)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
                          progress=0.20, message="目标产品数据采集完成")
-        return {"target_product_data": data, "timings": timings}
+        return {"target_product_data": data, "target_search_texts": sources, "timings": timings}
 
     async def collect_competitors(self, state: AnalysisState) -> AnalysisState:
         n = len(state["competitor_list"].competitors)
@@ -321,6 +338,9 @@ class AnalysisGraphNodes:
             data = state["competitors_data"]
         if not search_texts and state.get("original_search_texts"):
             search_texts = state["original_search_texts"]
+        collection_entities(data, state.get("target_product_data"), state.get("product_name", ""))
+        search_texts = collection_source_snapshot(state.get("target_search_texts", {}), search_texts)
+        self.orchestrator.collection_agent.restore_source_snapshot(search_texts)
         self.orchestrator._save_artifact_json("02_competitors_data.json", data)
         self.orchestrator._save_artifact_json("02_search_texts.json", search_texts)
         await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
@@ -340,10 +360,15 @@ class AnalysisGraphNodes:
                              "attempt": state.get("collection_retry_count", 0) + 1,
                          })
         attempt = state.get("collection_retry_count", 0) + 1
+        entities = collection_entities(state["competitors_data"], state.get("target_product_data"),
+                                       state.get("product_name", ""))
 
         # Always save collection artifacts regardless of QA mode
         self.orchestrator._save_artifact_json("02_competitors_data.json", state["competitors_data"])
         self.orchestrator._save_artifact_json("02_search_texts.json", state["original_search_texts"])
+        if state.get("target_product_data") is not None:
+            self.orchestrator._save_artifact_json("00_target_product_data.json", state["target_product_data"])
+            self.orchestrator._save_artifact_json("00_target_search_texts.json", state.get("target_search_texts", {}))
 
         if config.SKIP_QA:
             result = QualityCheckResult(
@@ -369,7 +394,7 @@ class AnalysisGraphNodes:
 
         async def call():
             return await self.orchestrator.quality_agent.check_collection(
-                state["competitors_data"],
+                entities,
                 state["original_search_texts"],
                 competitor_list=state["competitor_list"],
                 attempt=attempt,
@@ -377,44 +402,7 @@ class AnalysisGraphNodes:
 
         start = time.perf_counter()
         result = await self._retry_node(state, "check_collection_quality", call)
-        # 「仅幻觉」短路通过：已至少重试 1 轮且未通过，但无缺失字段、无 critical completeness 问题
-        # 新增：检查幻觉问题数量，过多幻觉不应通过
-        if not result.passed and state.get("collection_retry_count", 0) >= 1:
-            missing_fields = self.orchestrator.quality_agent.extract_missing_fields(
-                result, state["competitors_data"]
-            )
-            has_critical_completeness = any(
-                issue.severity == "critical" and issue.category == "completeness"
-                for issue in result.issues
-            )
-            # 统计幻觉问题数量和严重程度
-            hallucination_issues = [
-                issue for issue in result.issues
-                if issue.category == "hallucination"
-            ]
-            critical_hallucinations = [
-                issue for issue in hallucination_issues
-                if issue.severity == "critical"
-            ]
-            # 如果有超过3个幻觉问题或任何critical幻觉，不应通过
-            has_excessive_hallucinations = (
-                len(hallucination_issues) > 3 or len(critical_hallucinations) > 0
-            )
-            if not missing_fields and not has_critical_completeness and not has_excessive_hallucinations:
-                result.passed = True
-            elif has_excessive_hallucinations:
-                # 记录为什么没有通过
-                await self._emit(
-                    state,
-                    EventType.QA_CHECK_FAILED,
-                    "QualityAgent",
-                    "collection",
-                    progress=0.38,
-                    message=(
-                        f"降级通过被阻止：发现{len(hallucination_issues)}个幻觉问题"
-                        + (f"，其中{len(critical_hallucinations)}个为critical级别" if critical_hallucinations else "")
-                    ),
-                )
+        # Never replace a failed semantic review with structural completeness.
         # 重试后设置修正率：上轮缺失字段数即为本轮修正数
         if state.get("collection_retry_count", 0) > 0:
             result.correction_count = state.get("collection_pending_fields", 0)
@@ -452,38 +440,31 @@ class AnalysisGraphNodes:
                              "retry_count": state.get("collection_retry_count", 0) + 1,
                          })
         quality_agent = self.orchestrator.quality_agent
-        collection_agent = self.orchestrator.collection_agent
+        entities = collection_entities(state["competitors_data"], state.get("target_product_data"),
+                                       state.get("product_name", ""))
         missing_fields = quality_agent.extract_missing_fields(
-            state["qa_collection"], state.get("competitors_data")
+            state["qa_collection"], entities
         )
         # 计算本轮缺失字段总数（用于修正率）
         pending_count = sum(len(fields) for fields in missing_fields.values())
-        if missing_fields:
-            # 定向补充搜索：仅针对缺失/截断字段补搜，不整体重跑采集
-            supplemented = await collection_agent.async_supplement_missing_fields(
-                state["product_name"],
-                state["competitors_data"],
-                missing_fields,
-            )
-            search_texts = collection_agent.get_search_texts() or state.get(
-                "original_search_texts", {}
-            )
-            feedback = quality_agent.build_supplement_feedback(missing_fields)
-            return {
-                "competitors_data": supplemented,
-                "original_search_texts": search_texts,
-                "collection_supplemented": True,
-                "collection_feedback": "",
-                "latest_feedback": feedback,
-                "collection_retry_count": state.get("collection_retry_count", 0) + 1,
-                "collection_pending_fields": pending_count,
-            }
-
-        # 无缺失字段：保持整体重跑路径
-        feedback = await quality_agent.async_build_feedback(state["qa_collection"])
+        search_scope = getattr(state.get("competitor_list"), "search_scope", [])
+        scope_options = {"search_scope": search_scope} if search_scope else {}
+        data, search_texts, feedback = await repair_collection(
+            self.orchestrator, state["product_name"], state["product_description"],
+            entities, state.get("original_search_texts", {}),
+            state["qa_collection"], state.get("collection_retry_count", 0) + 1, missing_fields,
+            target_name=(state.get("product_name") or state["target_product_data"].name)
+                        if state.get("target_product_data") is not None else None,
+            **scope_options)
+        rivals, target = split_collection_entities(data, state.get("target_product_data"), state.get("product_name", ""))
         return {
-            "collection_supplemented": False,
-            "collection_feedback": feedback,
+            "competitors_data": rivals,
+            **({"target_product_data": target,
+                "target_search_texts": target_source_snapshot(search_texts, target, state.get("product_name", ""))}
+               if target is not None else {}),
+            "original_search_texts": search_texts,
+            "collection_supplemented": True,
+            "collection_feedback": "",
             "latest_feedback": feedback,
             "collection_retry_count": state.get("collection_retry_count", 0) + 1,
             "collection_pending_fields": pending_count,
@@ -514,7 +495,9 @@ class AnalysisGraphNodes:
 
         async def call():
             return await self.orchestrator.dimension_agent.run(
-                state["product_description"], state["competitor_list"]
+                state["product_description"], state["competitor_list"],
+                competitors_data=state.get("competitors_data", {}),
+                target_product_data=state.get("target_product_data"),
             )
 
         start = time.perf_counter()
@@ -681,16 +664,12 @@ class AnalysisGraphNodes:
                 analysis,
                 state["competitors_data"],
                 attempt=attempt,
+                target_product_data=state.get("target_product_data"),
+                product_name=state.get("product_name", ""),
+                sub_dimensions=state.get(f"{analysis_type}_sub_dims_text", ""),
             )
 
         result = await self._retry_node(state, f"check_{analysis_type}_quality", call)
-        # 分数未提升即通过：处于重试态且新分数未高于上一轮，判定为误报通过
-        if (
-            not result.passed
-            and state.get(retry_key, 0) > 0
-            and result.score <= state.get(f"{analysis_type}_prev_score", 0)
-        ):
-            result.passed = True
         # 重试后设置修正率
         if state.get(retry_key, 0) > 0:
             result.correction_count = state.get("analysis_pending_fields", 0)
@@ -717,8 +696,9 @@ class AnalysisGraphNodes:
         for key in ("qa_product", "qa_pricing", "qa_market"):
             result = state.get(key)
             if result and result not in checks:
-                checks.append(result)
-                self.orchestrator.quality_agent.timeline.add_check(result)
+                # Audit attempts must not follow later mutations of live state.
+                checks.append(deepcopy(result))
+                self.orchestrator.quality_agent.timeline.add_check(deepcopy(result))
         timings = self._merge_timing(
             state,
             "qa_analysis",
@@ -767,12 +747,20 @@ class AnalysisGraphNodes:
             key = f"qa_{analysis_type}"
             result = state.get(key)
             if result and not result.passed:
+                # Degradation is a terminal workflow decision, not a new check
+                # or permission to rewrite the failed attempt in the audit.
+                result = deepcopy(result)
                 result.degraded = True
                 updates[key] = result
                 updates["quality_exhausted"][analysis_type] = True
-                await self._emit(state, EventType.QA_CHECK_PASSED, "QualityAgent", analysis_type,
+                self.orchestrator.quality_agent.timeline.terminal_dispositions[analysis_type] = {
+                    "status": "degraded",
+                    "attempt": result.attempt,
+                    "reason": "retry_exhausted",
+                }
+                await self._emit(state, EventType.QA_CHECK_FAILED, "QualityAgent", analysis_type,
                                  progress=0.75,
-                                 message=f"{analysis_type}分析质检降级通过 (分数: {result.score:.0f})",
+                                 message=f"{analysis_type}分析质检未通过，重试已耗尽，继续生成降级报告 (分数: {result.score:.0f})",
                                  data={
                                      "score": result.score,
                                      "passed": result.passed,
@@ -1018,7 +1006,7 @@ class AnalysisGraphNodes:
         )
         return {
             "status": "failed",
-            "error": f"quality_exhausted:{failure['phase']}",
+            "error": failure.get("non_retryable_reason") or f"quality_exhausted:{failure['phase']}",
             "failure": failure,
             "report": report,
             "raw_llm_logs": report.raw_llm_logs,
@@ -1026,6 +1014,9 @@ class AnalysisGraphNodes:
 
     @staticmethod
     def _first_failed_phase(state: AnalysisState) -> str:
+        for phase in ("collection", "product", "pricing", "market", "strategy"):
+            if getattr(state.get(f"qa_{phase}"), "non_retryable_reason", ""):
+                return phase
         for phase in ("collection", "product", "pricing", "market", "strategy"):
             result = state.get(f"qa_{phase}")
             if result and not result.passed:

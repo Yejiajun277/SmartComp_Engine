@@ -55,6 +55,7 @@ class AnalysisState(TypedDict, total=False):
     product_name: str
     competitor_list: CompetitorList
     target_product_data: CompetitorData
+    target_search_texts: dict[str, str]
     competitors_data: dict[str, CompetitorData]
     original_search_texts: dict[str, str]
     dimension_config: DimensionConfig

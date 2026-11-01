@@ -20,6 +20,8 @@ def route_after_discovery(state: AnalysisState) -> str:
 
 def route_collection_quality(state: AnalysisState) -> str:
     result = state.get("qa_collection")
+    if getattr(result, "non_retryable_reason", ""):
+        return "non_retryable"
     if result and result.passed:
         return "passed"
     if state.get("collection_retry_count", 0) < QualityAgent.MAX_RETRIES:
@@ -43,19 +45,26 @@ def route_after_collection_degraded(state: AnalysisState) -> str:
 
 
 def route_analysis_quality(state: AnalysisState) -> str:
+    if any(getattr(state.get(f"qa_{phase}"), "non_retryable_reason", "")
+           for phase in ("product", "pricing", "market")):
+        return "non_retryable"
     for analysis_type in ("product", "pricing", "market"):
         result = state.get(f"qa_{analysis_type}")
         if result and not result.passed:
             if state.get(f"{analysis_type}_retry_count", 0) < QualityAgent.MAX_RETRIES:
                 return f"retry_{analysis_type}"
-            return "exhausted"
-    if all(state.get(f"qa_{analysis_type}") for analysis_type in ("product", "pricing", "market")):
+    if all(
+        state.get(f"qa_{analysis_type}") and state[f"qa_{analysis_type}"].passed
+        for analysis_type in ("product", "pricing", "market")
+    ):
         return "passed"
     return "exhausted"
 
 
 def route_strategy_quality(state: AnalysisState) -> str:
     result = state.get("qa_strategy")
+    if getattr(result, "non_retryable_reason", ""):
+        return "non_retryable"
     if result and result.passed:
         return "passed"
     if state.get("strategy_retry_count", 0) < QualityAgent.MAX_RETRIES:
@@ -125,6 +134,7 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2, event_bus=None,
             "passed": "generate_dimensions",
             "retry": "prepare_collection_retry",
             "exhausted": "mark_collection_degraded",
+            "non_retryable": "fail_run",
         },
     )
     graph.add_conditional_edges(
@@ -167,6 +177,7 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2, event_bus=None,
             "retry_pricing": "prepare_pricing_retry",
             "retry_market": "prepare_market_retry",
             "exhausted": "mark_analysis_degraded",
+            "non_retryable": "fail_run",
         },
     )
     graph.add_edge("prepare_product_retry", "rerun_product_analysis")
@@ -185,6 +196,7 @@ def build_analysis_graph(orchestrator, *, node_retries: int = 2, event_bus=None,
             "passed": "finalize_report",
             "retry": "prepare_strategy_retry",
             "exhausted": "mark_strategy_degraded",
+            "non_retryable": "fail_run",
         },
     )
     graph.add_edge("prepare_strategy_retry", "generate_strategy")
@@ -230,6 +242,7 @@ def _manual_mermaid_fallback() -> str:
         "    check_collection_quality -->|通过| generate_dimensions",
         "    check_collection_quality -->|重试| prepare_collection_retry",
         "    check_collection_quality -->|耗尽| mark_collection_degraded",
+        "    check_collection_quality -->|不可重试拒绝| fail_run",
         "    prepare_collection_retry -->|补充数据| check_collection_quality",
         "    prepare_collection_retry -->|重新采集| collect_competitors",
         "    mark_collection_degraded -->|继续降级| generate_dimensions",
@@ -252,6 +265,7 @@ def _manual_mermaid_fallback() -> str:
         "    join_analysis_quality -->|定价重试| prepare_pricing_retry",
         "    join_analysis_quality -->|市场重试| prepare_market_retry",
         "    join_analysis_quality -->|耗尽| mark_analysis_degraded",
+        "    join_analysis_quality -->|不可重试拒绝| fail_run",
         "    prepare_product_retry --> rerun_product_analysis --> check_product_quality",
         "    prepare_pricing_retry --> rerun_pricing_analysis --> check_pricing_quality",
         "    prepare_market_retry --> rerun_market_analysis --> check_market_quality",
@@ -260,6 +274,7 @@ def _manual_mermaid_fallback() -> str:
         "    check_strategy_quality -->|通过| finalize_report --> END4([END])",
         "    check_strategy_quality -->|重试| prepare_strategy_retry",
         "    check_strategy_quality -->|耗尽| mark_strategy_degraded",
+        "    check_strategy_quality -->|不可重试拒绝| fail_run",
         "    prepare_strategy_retry --> generate_strategy",
         "    mark_strategy_degraded --> finalize_report",
     ]
