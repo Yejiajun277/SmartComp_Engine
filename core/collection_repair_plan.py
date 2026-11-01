@@ -44,6 +44,13 @@ def build_collection_repair_plan(data, issues):
         plan, original = plans[name], data[name]
         tail = path[len(name) + 1:]
         if tail in CompetitorData.TEXT_FIELDS:
+            # An empty evidence field is not permission to generate a negative
+            # claim. Warnings preserve the gap; an actual critical finding on
+            # this exact field can still grant authority later in this loop.
+            current = getattr(original, tail)
+            if (tail == "weaknesses" and isinstance(current, str) and not current.strip()
+                    and getattr(issue, "severity", "") != "critical"):
+                continue
             if tail not in plan["text_fields"]:
                 plan["text_fields"].append(tail)
             continue

@@ -419,7 +419,7 @@ class QualityAgent(BaseAgent):
             # 文本字段检查（空或过短）
             for field_name, display_name, search_hint, severity_if_empty in [
                 ("strengths", "优势", "竞争优势 核心优势 行业地位", "critical"),
-                ("weaknesses", "劣势", "劣势 不足 用户吐槽", "critical"),
+                ("weaknesses", "劣势", "劣势 不足 用户吐槽", "warning"),
                 ("channels", "渠道", "渠道策略 推广方式 合作伙伴 生态", "warning"),
                 ("user_reviews", "用户评价", "用户评价 口碑 评分", "warning"),
             ]:
@@ -427,6 +427,14 @@ class QualityAgent(BaseAgent):
                 if field_name in invalid_text_fields:
                     continue
                 if not text or not text.strip():
+                    if field_name == "weaknesses":
+                        issues.append(QualityIssue(
+                            severity="warning", category="completeness",
+                            field=f"{name}.weaknesses",
+                            description="资料缺口：尚未提供可归属于当前产品的劣势依据",
+                            suggestion="保留未知，不借用旧型号或其他主体负面；语义检查仍须核对完整来源，已明确披露却遗漏须报告critical",
+                        ))
+                        continue
                     issues.append(QualityIssue(
                         severity=severity_if_empty, category="completeness",
                         field=f"{name}.{field_name}",
@@ -1089,7 +1097,7 @@ class QualityAgent(BaseAgent):
                     val = getattr(data, field_name, "")
                     if not isinstance(val, str):
                         _add_missing(name, field_name)
-                    elif field_name == "market_share":
+                    elif field_name == "market_share" or (field_name == "weaknesses" and not val.strip()):
                         # An honest evidence gap is not a mandatory business
                         # value. Actual critical QA findings are handled below.
                         continue
