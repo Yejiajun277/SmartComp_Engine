@@ -19,6 +19,15 @@ def wire_patch(data, payload):
     if not isinstance(result, dict):
         return result
     original = next(iter(data.values()))
+    for field in CompetitorData.TEXT_FIELDS:
+        value = result.get(field)
+        if isinstance(value, str) and value:
+            source = next((c for c in original.citations if value in c.snippet), None)
+            if source:
+                result[field] = [{"source_id": source.id, "exact_quote": value}]
+            elif value == getattr(original, field):
+                # Unchanged background is omitted, not fabricated into evidence.
+                result.pop(field)
     for field in ARRAY_FIELDS:
         if not isinstance(result.get(field), list):
             continue

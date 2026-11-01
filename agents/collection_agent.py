@@ -181,8 +181,13 @@ class CollectionAgent(BaseAgent):
             if original.citations:
                 context += "\n### 当前实体完整保存的原始搜索文本（非新搜索）\n" + source_text
             prompt = (f"仅修复 {name} 的结构化授权范围。完整质检反馈仅解释问题，不能授予额外写权限。"
-                      "只输出JSON字段补丁。未返回字段保持原值；文本字段可显式空字符串撤回。"
-                      "数组是更新操作列表，不是完整替换；未返回条目和空列表都保留全部旧条目。"
+                      "只输出JSON字段补丁。未返回字段保持原值。"
+                      "获准文本字段必须返回证据选择列表，每项仅含source_id和exact_quote；"
+                      "exact_quote必须是该ID对应完整原文摘录中的连续原话，不能改写、拼接或添加推断的统计口径。"
+                      "原话必须保留其主体、时间、地区、分母、否定和适用条件，不得只摘数值或剪掉限制；来源未披露的属性不能补写。"
+                      "程序将带来源标题和ID逐条展示原话，不采纳模型另写的概括或连接关系。"
+                      "不能返回空证据列表或空字符串来清除已有事实；找不到依据时省略该字段并保留质检缺口。"
+                      "product_features、pricing_tiers数组是更新操作列表，不是完整替换；未返回条目和空列表都保留全部旧条目。"
                       "更新格式为 {\"item_id\":\"授权表中的原始ID\",\"changes\":{\"获准子字段\":\"修正值\"}}；"
                       "仅allow_add=true的数组可用 {\"add\":{完整新条目}}，新增条目包含全部字段和真实引用。"
                       "不得返回未授权字段/子字段、未知或重复item_id、删除操作、伪造来源ID。"
@@ -198,7 +203,7 @@ class CollectionAgent(BaseAgent):
                        + "\n只修复质检指出的问题或校正上述已有事实的范围和引用。"
                          "未指出问题的字段和条目保持原样；不新增无关功能、报价或评价，"
                          "不得因为看到更多原文就扩写整份采集。旧快照中的断言不是证据，"
-                         "原断言不受来源支持时可以撤回或保留未知，不能把背景内容当作来源补证。")
+                         "不能把背景内容当作来源补证；无法依据来源修正的文本字段本次省略并保留质检缺口，不通过清空字段消除问题。")
             prompt += "\n来源来自已保存快照，本轮没有重新联网搜索。"
             prompt += f"\n### 当前产品背景（非来源证据）\n{product_name}\n{product_description}"
             previous = previous_failures.get(name, {})
@@ -209,7 +214,8 @@ class CollectionAgent(BaseAgent):
                            + json.dumps(previous["schema_errors"], ensure_ascii=False)
                            + "\n根据这些真实校验错误修正响应格式，不改写或放宽授权。")
             prompt += ("\n### 响应格式：根层直接使用获准的事实字段\n"
-                       "根层只写本轮获准的实际字段名（见下方示例），数组字段直接写更新操作列表；"
+                       "根层只写本轮获准的实际字段名（见下方示例）：文本字段直接写source_id/exact_quote证据列表，"
+                       "product_features、pricing_tiers直接写item_id/changes更新操作列表；"
                        "禁止用text_fields或arrays包装。以下是根据当前授权生成的完整JSON结构示例，"
                        "只展示schema：尖括号内是类型占位，不是事实；必须用真实来源内容替换，不得原样返回。"
                        "示例未授权新增任何事实，未返回字段/条目仍保持原值。\n```json\n"
@@ -224,19 +230,77 @@ class CollectionAgent(BaseAgent):
                 outcome["reason"] = (reason if reason != "success" else
                                      f"incomplete_finish_reason({response.get('finish_reason') or 'missing'})")
                 continue
-            candidate, errors = apply_collection_repair_patch(original, result, authority, visible_ids)
+            projected, errors, text_evidence = self._project_repair_text_evidence(
+                original, result, authority, visible_ids)
+            if not errors:
+                candidate, errors = apply_collection_repair_patch(original, projected, authority, visible_ids)
             if errors:
                 outcome.update(reason="incomplete_or_invalid_schema", schema_errors=errors)
                 continue
-            patch_fields = set(result)
-            self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet for c in original.citations),
+            # Exact saved-source quotations already prove literal support. The
+            # legacy numeric heuristic must not mistake digits in citation IDs
+            # or source titles for unsupported quotation content.
+            patch_fields = set(projected) - set(text_evidence)
+            self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet or "" for c in original.citations),
                                           field_names=set(patch_fields))
             updated[name] = candidate
             changes = repair_changes(original, candidate)
             outcome.update(changes)
+            if text_evidence:
+                outcome["text_evidence"] = text_evidence
             outcome.update(status="accepted" if changes["applied_fields"] else "not_changed",
                            reason="complete_authorized_patch" if changes["applied_fields"] else "no_fact_changes")
         return updated
+
+    @staticmethod
+    def _project_repair_text_evidence(original, result, authority, visible_ids):
+        """Only source quotations may become replacement free-form text.
+
+        QA prose and old facts grant no evidential support. Keep this wire-only
+        proof format outside the domain model and existing transaction parser.
+        """
+        if not isinstance(result, dict):
+            return result, [], {}
+        projected, errors, evidence = deepcopy(result), [], {}
+        catalog = {}
+        for citation in original.citations:
+            catalog.setdefault(citation.id, []).append(citation)
+        for field in authority.get("text_fields", []):
+            if field not in result or field not in CompetitorData.TEXT_FIELDS:
+                continue
+            value = result[field]
+            if not isinstance(value, list) or not value:
+                errors.append({"field": field, "reason": "nonempty_source_evidence_required",
+                               "actual_type": type(value).__name__})
+                continue
+            lines, proofs = [], []
+            for index, proof in enumerate(value):
+                path = f"{field}[{index}]"
+                if not isinstance(proof, dict) or set(proof) != {"source_id", "exact_quote"}:
+                    errors.append({"field": path, "reason": "invalid_source_evidence_shape",
+                                   "actual_type": type(proof).__name__})
+                    continue
+                identity, quote = proof["source_id"], proof["exact_quote"]
+                if not isinstance(identity, str) or identity not in visible_ids or len(catalog.get(identity, [])) != 1:
+                    errors.append({"field": path + ".source_id", "reason": "unknown_or_ambiguous_entity_source",
+                                   "actual_type": type(identity).__name__})
+                    continue
+                source = catalog[identity][0]
+                if source.competitor and source.competitor != original.name:
+                    errors.append({"field": path + ".source_id", "reason": "source_entity_mismatch",
+                                   "actual_type": type(identity).__name__})
+                    continue
+                if (not isinstance(quote, str) or not quote.strip()
+                        or not isinstance(source.snippet, str) or quote not in source.snippet):
+                    errors.append({"field": path + ".exact_quote", "reason": "quote_not_in_saved_source",
+                                   "actual_type": type(quote).__name__})
+                    continue
+                title = f"《{source.title}》" if source.title else ""
+                lines.append(f"据{title}[{identity}]原文：{quote}")
+                proofs.append(deepcopy(proof))
+            projected[field] = "\n".join(lines)
+            evidence[field] = proofs
+        return projected, errors, evidence
 
     @staticmethod
     def _repair_output_example(authority):
@@ -248,7 +312,9 @@ class CollectionAgent(BaseAgent):
                 return ["<真实原文支持的条件>"]
             return "<仅依据本实体真实来源修正的文本>"
 
-        example = {field: placeholder(field) for field in authority.get("text_fields", [])}
+        example = {field: [{"source_id": "<从当前实体真实目录选择的来源ID>",
+                            "exact_quote": "<该ID原文摘录中连续出现的非空原话，不改写或补写口径>"}]
+                   for field in authority.get("text_fields", [])}
         for field, array in authority.get("arrays", {}).items():
             example[field] = [{"item_id": identity, "changes": {
                 attribute: placeholder(attribute) for attribute in entry["fields"]}}

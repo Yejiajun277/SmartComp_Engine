@@ -54,7 +54,10 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
         before = deepcopy(original)
         sources = {"Rival": "Original source snapshot " * 1200}
         response = payload()
-        response["market_share"] = ""  # Explicitly remove an unsupported scope claim.
+        # Select only the saved quotation; an empty value cannot erase a field.
+        response = {key: response[key] for key in ("product_features", "pricing_tiers")}
+        response["market_share"] = [{"source_id": "Rival:q0:r0",
+            "exact_quote": "399 yuan/night only for selected city/date; product has a feature."}]
         for field in ("product_features", "pricing_tiers"):
             response[field][0]["citations"] = ["Rival:q0:r0"]
         response["pricing_tiers"][0]["features"] = list(original["Rival"].pricing_tiers[0].features)
@@ -70,7 +73,8 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(updated["Rival"].product_features[0], FeatureItem)
         self.assertIsInstance(updated["Rival"].pricing_tiers[0], PricingTier)
         self.assertEqual(updated["Rival"].pricing_tiers[0].citations, ["Rival:q0:r0"])
-        self.assertEqual(updated["Rival"].market_share, "")
+        self.assertEqual(updated["Rival"].market_share,
+                         "据《Original》[Rival:q0:r0]原文：399 yuan/night only for selected city/date; product has a feature.")
         self.assertEqual(updated["Rival"].citations, before["Rival"].citations)
         self.assertEqual(updated["Rival"].search_sources, before["Rival"].search_sources)
         self.assertEqual(original, before)

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from agents.collection_agent import CollectionAgent
 from tests.collection_repair_support import reviewed_plan, wire_patch
 from agents.quality_agent import QualityAgent
-from tests.test_collection_repair_source_visibility import snapshot, response, NoSearch, RAW_TAIL
+from tests.test_collection_repair_source_visibility import snapshot, response, NoSearch, RAW_TAIL, LATE_TAIL
 
 
 class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
@@ -39,9 +39,9 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
         return updated
 
     async def test_completed_text_patch_updates_only_returned_field_and_records_preserved_fields(self):
-        updated = await self.repair({"strengths": "Only the named kit has the described benefit."})
+        updated = await self.repair({"strengths": LATE_TAIL})
         expected = deepcopy(self.before)
-        expected["Rival"].strengths = "Only the named kit has the described benefit."
+        expected["Rival"].strengths = "据《Saved source 29》[Rival:q29:r29]原文：" + LATE_TAIL
         self.assertEqual(updated, expected)
         outcome = self.agent.get_repair_outcomes()[0]
         self.assertEqual(outcome["status"], "accepted")
@@ -60,21 +60,18 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated["Rival"].pricing_tiers, self.before["Rival"].pricing_tiers)
         self.assertEqual(updated["Rival"].market_share, self.before["Rival"].market_share)
 
-    async def test_explicit_empty_field_is_a_patch_but_an_empty_object_is_not(self):
-        updated = await self.repair({"strengths": ""})
-        self.assertEqual(updated["Rival"].strengths, "")
-        self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "accepted")
-        updated = await self.repair({})
-        self.assertEqual(updated, self.before)
-        self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
+    async def test_empty_evidence_and_empty_object_cannot_clear_old_facts(self):
+        for payload in ({"strengths": ""}, {"strengths": []}, {}):
+            with self.subTest(payload=payload):
+                updated = await self.repair(payload)
+                self.assertEqual(updated, self.before)
+                self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
 
-    async def test_empty_share_explicitly_withdraws_claim_without_blessing_other_facts_or_qa(self):
-        updated = await self.repair({"market_share": ""})
-        expected = deepcopy(self.before)
-        expected["Rival"].market_share = ""
-        self.assertEqual(updated, expected)
+    async def test_empty_share_cannot_erase_an_old_claim_or_bless_remaining_qa(self):
+        updated = await self.repair({"market_share": []})
+        self.assertEqual(updated, self.before)
         self.assertNotEqual(updated["Rival"].market_share, "0")
-        self.assertEqual(self.agent.get_repair_outcomes()[0]["applied_fields"], ["market_share"])
+        self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
         # Repair acceptance is a typed transaction, not a quality certificate.
         # A remaining source mismatch must still be checked and reject the gate.
         quality = QualityAgent()
@@ -106,7 +103,7 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bad_type_or_missing_nested_field_rejects_entire_patch_with_exact_schema_path(self):
         for payload, field, actual in [
-                ({"strengths": "Valid bounded fact", "pricing_tiers": "wrong"}, "pricing_tiers", "str"),
+                ({"strengths": LATE_TAIL, "pricing_tiers": "wrong"}, "pricing_tiers", "str"),
                 ({"pricing_tiers": [{"price": None}]}, "pricing_tiers[0].price", "NoneType"),
                 ({"product_features": [{"name": "Feature", "description": 7}]}, "product_features[0].description", "int"),
                 ({"product_features": [{"name": "Feature", "description": "Bounded", "citations": [3]}]},
@@ -123,7 +120,7 @@ class CollectionRepairContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_top_level_fields_cannot_modify_identity_or_source_snapshot(self):
         for field in ["name", "citations", "search_sources", "unrequested_field"]:
             with self.subTest(field=field):
-                updated = await self.repair({"strengths": "A bounded fact", field: "replacement"})
+                updated = await self.repair({"strengths": LATE_TAIL, field: "replacement"})
                 self.assertEqual(updated, self.before)
                 self.assertEqual(self.agent.get_repair_outcomes()[0]["schema_errors"][0]["reason"], "unauthorized_field")
 

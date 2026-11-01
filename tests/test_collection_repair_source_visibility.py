@@ -83,7 +83,8 @@ class CollectionRepairSourceVisibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Rival:q29:r29", prompt)
         self.assertEqual(updated["Rival"].product_features[0].citations, ["Rival:q29:r29"])
         self.assertEqual(updated["Rival"].pricing_tiers[0].citations, ["Rival:q0:r0"])
-        self.assertEqual(updated["Rival"].market_share, "17.3% only in the named region.")
+        self.assertEqual(updated["Rival"].market_share,
+                         "据《Saved source 0》[Rival:q0:r0]原文：17.3% only in the named region.")
         self.assertEqual(updated["Rival"].citations, self.before_data["Rival"].citations)
         self.assertEqual(updated["Rival"].search_sources, self.before_data["Rival"].search_sources)
 

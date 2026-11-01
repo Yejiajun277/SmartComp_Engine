@@ -120,15 +120,15 @@ class AuthorizedCollectionRepairTests(unittest.IsolatedAsyncioTestCase):
         result = await self.repair({"product_features": [{"item_id": identity, "changes": {"description": "Unauthorized rewrite", "citations": []}}]}, issues, data=data)
         self.assertEqual(result, self.before)
 
-    async def test_empty_text_withdrawal_is_authorized_and_does_not_validate_other_fields(self):
+    async def test_empty_text_cannot_erase_claims_and_does_not_validate_other_fields(self):
         result = await self.repair({"strengths": ""}, [QualityIssue("critical", "citation", "Rival.strengths", "Unproven strength")])
         self.assertEqual(result["Rival"].strengths, "")
         self.assertEqual(result["Rival"].market_share, self.before["Rival"].market_share)
-        self.assertEqual(self.agent.get_repair_outcomes()[0]["applied_fields"], [])  # already empty
+        self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
         result = await self.repair({"market_share": ""}, [QualityIssue("critical", "citation", "Rival.market_share", "Unproven number")])
-        self.assertEqual(result["Rival"].market_share, "")
+        self.assertEqual(result["Rival"].market_share, self.before["Rival"].market_share)
         self.assertNotEqual(result["Rival"].market_share, "0")
-        self.assertEqual(self.agent.get_repair_outcomes()[0]["applied_fields"], ["market_share"])
+        self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
 
     async def test_whole_array_completeness_can_add_without_overwriting_existing_items(self):
         new = {"tier_name": "Additional kit", "price": "100 yuan", "features": ["Named kit only"], "citations": ["s"]}

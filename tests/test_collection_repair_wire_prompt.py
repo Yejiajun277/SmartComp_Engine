@@ -79,10 +79,11 @@ class CollectionRepairWirePromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("前次补丁校验错误", self.prompts[1])
 
     async def test_only_real_length_on_same_snapshot_and_plan_raises_the_existing_next_request(self):
-        await self.exercise([{"market_share": ""}, {"market_share": ""}], finishes=["length", "stop"])
+        proof = {"market_share": [{"source_id": "s", "exact_quote": "Basic 100 yuan"}]}
+        await self.exercise([proof, proof], finishes=["length", "stop"])
         self.assertEqual(self.budgets, [8192, 16384])
         self.assertEqual(self.results[0], self.before)
-        self.assertEqual(self.results[1]["Rival"].market_share, "")
+        self.assertEqual(self.results[1]["Rival"].market_share, "据[s]原文：Basic 100 yuan")
         self.assertEqual(self.outcomes[0][0]["finish_reason"], "length")
         self.assertEqual(self.outcomes[0][0]["request_max_tokens"], 8192)
         self.assertEqual(self.outcomes[1][0]["finish_reason"], "stop")
