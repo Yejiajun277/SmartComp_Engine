@@ -16,6 +16,8 @@ from models.domain import (
 from core.prompt_loader import load as load_prompts
 from datetime import datetime
 from dataclasses import asdict
+from copy import deepcopy
+import hashlib
 import config
 import json
 
@@ -80,6 +82,10 @@ class QualityAgent(BaseAgent):
         self._prompt_build_feedback = prompts["prompt_build_feedback"]
         self.timeline = QATimeline(max_retries=self.MAX_RETRIES)
         self._passed_fields: set[str] = set()  # 兼容已查字段记录，不豁免后续快照的问题
+        self._collection_review_cache: dict[str, dict] = {}
+        self._collection_review_trace: list[dict] = []
+        self._collection_attempt = 1
+        self._last_quality_request_trace: dict = {}
 
     async def run(self, *args, **kwargs):
         """不直接调用，请使用 check_collection / check_analysis / check_strategy"""
@@ -108,7 +114,11 @@ class QualityAgent(BaseAgent):
     async def _request_quality_json(self, prompt: str) -> tuple[dict, str]:
         """Recheck the same snapshot once if transport/JSON/schema is incomplete."""
         reason = "invalid_quality_response"
-        for attempt, budget in enumerate((8192, 12288)):
+        # This helper is also called concurrently by analysis gates on the
+        # same agent. Accumulate locally across awaits; publish only when this
+        # call returns, so a caller can copy its own trace immediately.
+        request_trace = {"requests": [], "cacheable": False}
+        for attempt, budget in enumerate((8192, 16384)):
             request = prompt
             if attempt:
                 request += (
@@ -119,13 +129,45 @@ class QualityAgent(BaseAgent):
                     "合并重复问题，描述和建议简短；不复述整段原文、不输出思考过程。"
                     "保留所有严重问题；没有问题才返回issues空数组。"
                 )
+            log_count = len(self.llm_logs)
             result, failure = await self.async_ask_llm_json_with_reason(request, max_tokens=budget)
-            if self._valid_quality_response(result):
+            # Use this agent's newly appended response, never module-global or
+            # stale last-call state. Test/custom adapters without response
+            # metadata remain compatible but cannot populate a reuse cache.
+            response = self.llm_logs[-1] if len(self.llm_logs) > log_count else None
+            finish = response.get("finish_reason", "") if response else ""
+            completed = (failure in ("", "success") if response is None
+                         else finish == "stop" and failure == "success")
+            valid = self._valid_quality_response(result)
+            if response is not None and finish != "stop":
+                failure = f"incomplete_finish_reason({finish or 'missing'})"
+            elif not valid:
+                failure = "invalid_quality_response_schema" if result or failure == "success" else failure
+            if response is not None:
+                request_trace["requests"].append({
+                    "max_tokens": budget, "finish_reason": finish,
+                    "checked_at": datetime.now().isoformat(timespec="microseconds"),
+                    "fingerprint": self._collection_review_fingerprint(request),
+                    "failure_reason": "" if completed and valid else failure or "invalid_quality_response",
+                })
+            if completed and valid:
+                request_trace["cacheable"] = response is not None
+                self._last_quality_request_trace = request_trace
                 return result, ""
-            reason = failure if not result else "invalid_quality_response_schema"
+            reason = failure
             reason = reason or "invalid_quality_response"
             self._log(f"   ⚠️ 质检响应未完成（第{attempt + 1}次）: {reason}")
+        self._last_quality_request_trace = request_trace
         return {}, reason
+
+    def _collection_review_fingerprint(self, prompt: str) -> str:
+        """Hash the complete request and non-key runtime contract, never facts prefixes."""
+        contract = {"system_prompt": self.system_prompt, "entity_prompt": prompt,
+                    "provider": config.LLM_PROVIDER, "model": config.MIMO_MODEL,
+                    "base_url": config.MIMO_BASE_URL,
+                    "temperature": config.LLM_TEMPERATURE,
+                    "budgets": [8192, 16384], "review_contract": 1}
+        return hashlib.sha256(json.dumps(contract, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
     # ── Phase 2: 采集数据质检 ──
 
@@ -138,6 +180,12 @@ class QualityAgent(BaseAgent):
     ) -> QualityCheckResult:
         """Phase 2 质检：检查采集数据"""
         self._log(f"🔍 质检采集数据（第{attempt}次）...")
+        # A new collection attempt 1 starts a new run even if an orchestrator
+        # instance is reused. No process-wide or cross-run review cache.
+        if attempt <= 1:
+            self._collection_review_cache.clear()
+        self._collection_attempt = attempt
+        self._collection_review_trace = []
         issues = []
 
         # 完整性检查
@@ -209,6 +257,7 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,  # 首次检查无修正，由 graph node 在重试后设置
             total_fields=total_fields,
+            entity_review_trace=deepcopy(self._collection_review_trace),
         )
 
         # 记录已通过的字段（避免下一轮重复标记为幻觉）
@@ -402,23 +451,51 @@ class QualityAgent(BaseAgent):
                        if key in {name, data.name}}
             has_evidence = any(isinstance(text, str) and text.strip() for text in sources.values()) or any(
                 isinstance(c.snippet, str) and c.snippet.strip() for c in data.citations)
-            if not has_evidence:
-                failures[name] = "missing_original_sources"
-                continue
             prompt = self._prompt_check_collection.format(
                 original_search_texts=json.dumps(sources, ensure_ascii=False, indent=2),
                 competitors_data_json=json.dumps({name: asdict(data)}, ensure_ascii=False, indent=2),
             )
             prompt += "\n本次仅检查一个实体；问题field必须以该实体名和英文句点开头：" + name + "."
+            fingerprint = self._collection_review_fingerprint(prompt)
+            checked_at = datetime.now().isoformat(timespec="microseconds")
+            trace = {"entity": name, "mode": "live", "completed": False,
+                     "fingerprint": fingerprint, "attempt": self._collection_attempt,
+                     "checked_at": checked_at, "source_attempt": self._collection_attempt,
+                     "source_checked_at": checked_at, "request_count": 0,
+                     "requests": [], "failure_reason": ""}
+            self._collection_review_trace.append(trace)
+            if not has_evidence:
+                failures[name] = "missing_original_sources"
+                trace.update(mode="not_checked", failure_reason=failures[name])
+                continue
+            cached = self._collection_review_cache.get(fingerprint)
+            if cached is not None:
+                issues.extend(deepcopy(cached["issues"]))
+                trace.update(mode="reuse", completed=True,
+                             source_attempt=cached["attempt"], source_checked_at=cached["checked_at"])
+                continue
+            self._last_quality_request_trace = {}
             result, reason = await self._request_quality_json(prompt)
+            request_trace = deepcopy(self._last_quality_request_trace)
+            trace["requests"] = request_trace.get("requests", [])
+            trace["request_count"] = len(trace["requests"])
             if not result:
                 failures[name] = reason or "invalid_quality_response"
+                trace["failure_reason"] = failures[name]
                 continue
             entity_issues = self._parse_issues(result)
             for issue in entity_issues:
                 if issue.field != name and not issue.field.startswith(name + "."):
                     issue.field = name + "." + issue.field
             issues.extend(entity_issues)
+            trace["completed"] = True
+            trace["checked_at"] = datetime.now().isoformat(timespec="microseconds")
+            trace["source_checked_at"] = trace["checked_at"]
+            if request_trace.get("cacheable") and fingerprint == self._collection_review_fingerprint(prompt):
+                self._collection_review_cache[fingerprint] = {
+                    "issues": deepcopy(entity_issues), "attempt": self._collection_attempt,
+                    "checked_at": trace["checked_at"],
+                }
         if not competitors_data:
             failures["collection"] = "empty_collection_snapshot"
         if failures:

@@ -16,6 +16,7 @@ import urllib.request
 CASES = {
     "vacuum": "戴森 Dyson V15 Detect 无绳吸尘器，中国家用清洁市场",
     "hotel": "全季酒店住宿服务，中国商旅市场",
+    "music": "Spotify 音乐流媒体订阅服务，美国个人用户市场",
 }
 INTERNAL = re.compile(r"\[[^\[\]\r\n<>]+:(?:q\d+|intro_sup_\d+|sup_[a-z_]+_\d+):r\d+\]")
 

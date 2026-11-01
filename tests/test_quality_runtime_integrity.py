@@ -75,7 +75,7 @@ class QualityRuntimeIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(result.passed)
                 self.assertEqual(result.hallucination_status, "found")
                 self.assertTrue(any(issue.description.startswith("The room price") for issue in result.issues))
-                self.assertEqual([call[1] for call in self.calls], [8192, 12288] * (2 if phase == "collection" else 1))
+                self.assertEqual([call[1] for call in self.calls], [8192, 16384] * (2 if phase == "collection" else 1))
                 # Recovery checks the original artifact, rather than regenerating
                 # the data or trying to certify the truncated response.
                 self.assertTrue(self.calls[1][0].startswith(self.calls[0][0]))

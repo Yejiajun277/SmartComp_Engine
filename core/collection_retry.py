@@ -61,11 +61,50 @@ def collection_source_snapshot(target_sources, rival_sources):
     return {**deepcopy(rival_sources), **deepcopy(target_sources)}
 
 
-def collection_retry_mode(result, missing_fields):
-    # Transport/parse failure supplies no factual correction. Recheck the same
-    # snapshot rather than replacing evidence merely because review failed.
+def completed_collection_repairs(data, result):
+    """Select exact owners of real findings, never an unfinished review itself."""
+    trace = getattr(result, "entity_review_trace", [])
+    if trace:
+        completed = {row.get("entity") for row in trace
+                     if isinstance(row, dict) and row.get("completed") is True}
+    else:
+        # Older saved checks persist the incomplete-entity map in the system
+        # issue. Only that machine-readable map establishes which other entity
+        # checks completed; an opaque failure is not evidence for a repair.
+        failed = set()
+        for issue in result.issues:
+            if issue.field != "__hallucination_check__":
+                continue
+            candidates = [issue.actual] if isinstance(issue.actual, str) and issue.actual.strip() else []
+            prefix, suffix = "幻觉检测未能完成（", "），结果可信度未知"
+            description = issue.description
+            if isinstance(description, str) and description.startswith(prefix) and description.endswith(suffix):
+                candidates.append(description[len(prefix):-len(suffix)])
+            for text in candidates:
+                try:
+                    failures = json.loads(text)
+                except (TypeError, ValueError):
+                    continue
+                if (isinstance(failures, dict) and failures
+                        and all(name in data and isinstance(reason, str) and reason.strip()
+                                for name, reason in failures.items())):
+                    failed.update(failures)
+        completed = set(data) - failed if failed else set()
+    selected = set()
+    for issue in result.issues:
+        if issue.field == "__hallucination_check__":
+            continue
+        owners = [name for name in data if issue.field == name or issue.field.startswith(name + ".")]
+        if len(owners) == 1 and owners[0] in completed:
+            selected.add(owners[0])
+    return {name: value for name, value in data.items() if name in selected}
+
+
+def collection_retry_mode(result, missing_fields, data=None):
+    # Incomplete review alone supplies no correction. A separately completed
+    # entity's explicit finding can still be repaired against its saved source.
     if result.hallucination_status == "failed":
-        return "recheck"
+        return "reextract" if data and completed_collection_repairs(data, result) else "recheck"
     supported = {"strengths", "weaknesses", "channels", "market_share",
                  "user_reviews", "pricing_tiers"}
     covered = {f"{name}.{field}" for name, fields in missing_fields.items()
@@ -109,7 +148,7 @@ def source_fingerprint(data, source_texts):
 async def repair_collection(orchestrator, product_name, product_description, data,
                             source_texts, qa_result, attempt, missing_fields, *, target_name=None):
     """Archive first, then repair staged facts; QA remains the only acceptance gate."""
-    mode = collection_retry_mode(qa_result, missing_fields)
+    mode = collection_retry_mode(qa_result, missing_fields, data)
     if mode == "supplement" and target_name in missing_fields:
         # A target correction uses its already captured evidence, not a new
         # search whose scope could silently replace the original target facts.
@@ -134,6 +173,9 @@ async def repair_collection(orchestrator, product_name, product_description, dat
     agent.restore_source_snapshot(before_sources)
     feedback = (orchestrator.quality_agent.build_supplement_feedback(missing_fields)
                 if mode == "supplement" else await orchestrator.quality_agent.async_build_feedback(qa_result))
+    if mode == "reextract" and qa_result.hallucination_status == "failed":
+        feedback = ("部分实体检查未完成；未完成检查不是事实判断。仅修复本次选中实体在已完成检查中明确指出的问题，"
+                    "未归属或其他实体的问题保留等待完整复查，不据此新增或改写事实。\n" + feedback)
     result_data, result_sources = before_data, before_sources
     try:
         if mode == "recheck":
@@ -143,8 +185,12 @@ async def repair_collection(orchestrator, product_name, product_description, dat
                 product_name, deepcopy(before_data), missing_fields)
             result_sources = {**before_sources, **agent.get_search_texts()}
         else:
-            selected = affected_collection_entities(before_data, qa_result.issues)
+            selected = (completed_collection_repairs(before_data, qa_result)
+                        if qa_result.hallucination_status == "failed"
+                        else affected_collection_entities(before_data, qa_result.issues))
             audit["repair_entities"] = list(selected)
+            if qa_result.hallucination_status == "failed":
+                audit["incomplete_review_preserved"] = True
             repaired = await agent.async_reextract_saved_sources(
                 product_name, product_description, deepcopy(selected), deepcopy(before_sources), feedback)
             if set(repaired) != set(selected):

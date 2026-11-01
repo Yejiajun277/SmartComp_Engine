@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import urllib.request
 
-stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-context')
+stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-review')
 source = Path('/opt/apps/smartcomp')
 output = source / 'output'
 state = json.loads((stage / 'promotion-state.json').read_text())
@@ -87,8 +87,8 @@ city_unchanged()
 tasks_before = no_active()
 before = fingerprint(output)
 rows = accepted.get('tasks', [])
-require(len(rows) == 2 and {r['worker'] for r in rows} == {'generalization-vacuum-context', 'generalization-hotel-context'},
-        'Require exactly the vacuum and hotel acceptances')
+require(len(rows) == 2 and {r['worker'] for r in rows} == {'generalization-vacuum-review', 'generalization-music-review'},
+        'Require exactly the vacuum and music acceptances')
 require(len({r['task_id'] for r in rows}) == 2, 'Acceptance task IDs must be unique')
 workers = {w['name']: w for w in workers_state['workers']}
 payload_copies = []

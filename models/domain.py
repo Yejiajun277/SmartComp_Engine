@@ -314,6 +314,9 @@ class QualityCheckResult:
     coverage_rate: float = 100.0        # 覆盖率 0-100（已填充字段占比）
     correction_count: int = 0           # 本轮被修正/补充的字段数
     total_fields: int = 0               # 本轮检查的总字段数
+    # Collection entity checks: real requests and exact snapshot reuse have
+    # separate provenance. Older saved checks default to no invented trace.
+    entity_review_trace: list[dict] = field(default_factory=list)
 
 
 @dataclass
