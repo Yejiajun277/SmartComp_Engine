@@ -12,13 +12,13 @@ import tarfile
 import time
 import urllib.request
 
-STAGE = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-repair')
+STAGE = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-target')
 SOURCE = Path('/opt/apps/smartcomp')
-BASE = 'sha256:6f0fb45b1ad2453a38f90c4bf52ba96239a376279b86733a9f6ecc3c8531c4d5'
+BASE = 'sha256:0e347bb6969e0b4bcb8c558582ffb78c29e922740e5c9e818dd2cac58c2eaa11'
 CITY = 'sha256:2eb8ea3ee70f7ec805c3930bd9085cc002550891c07e8ccfdd855dfc58432f99'
-ROLLBACK = 'smartcomp-engine-smartcomp-app:pre-generalization-20261101-repair'
-TAG = 'smartcomp-engine-smartcomp-app:generalization-20261101-repair'
-CONTAINER = 'smartcomp-generalization-repair-e2e'
+ROLLBACK = 'smartcomp-engine-smartcomp-app:pre-generalization-20261101-target'
+TAG = 'smartcomp-engine-smartcomp-app:generalization-20261101-target'
+CONTAINER = 'smartcomp-generalization-target-e2e'
 
 def require(ok, message):
     if not ok:
@@ -75,7 +75,7 @@ require(manifest.get('repository') == 'Yejiajun277/SmartComp_Engine', 'Unexpecte
 commit = manifest.get('commit', '')
 require(len(commit) == 40 and all(c in '0123456789abcdef' for c in commit), 'Expected full GitHub SHA')
 require(str(manifest.get('baseline', '')).startswith('3621d6f'), 'Wrong user-change baseline commit')
-require(str(manifest.get('previous_commit', '')).startswith('e321f34f'), 'Wrong current-production commit')
+require(str(manifest.get('previous_commit', '')).startswith('d13266e1'), 'Wrong current-production commit')
 rows = manifest['files']
 files = {row['path']: row['sha256'] for row in rows}
 require(len(files) == len(rows) and files, 'Invalid/duplicate manifest files')

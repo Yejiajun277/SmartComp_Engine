@@ -169,7 +169,8 @@ class CollectionAgent(BaseAgent):
                         max_chars: int = 16000) -> tuple[str, set[str]]:
         """Bound whole source records, round-robin across searches, with real IDs."""
         heading = ("以下是本轮真实来源ID与原文摘录。只引用已显示的ID，不根据平台名猜ID。"
-                   "excerpt_truncated=true表示摘录被截断，未显示的单位、条件或事实保持未知。\n")
+                   "excerpt_truncated=true只表示本次可见摘录被截短，不能据此断言原始全文未披露。"
+                   "未显示的单位、条件或事实保持未知，描述为本次摘录未显示，不要写成原文没有。\n")
         if not citations:
             notice = "没有可绑定的来源ID；搜索文字仅供提取，不能伪造引用。\n"
             return notice + fallback_text[:max(0, max_chars - len(notice))], set()
@@ -295,7 +296,7 @@ class CollectionAgent(BaseAgent):
             entity_name=product_name,
             queries=queries,
             feedback=feedback,
-            cache_search_text=False,
+            cache_search_text=True,
         )
 
     async def async_collect_target_product(self, product_description: str,
@@ -318,7 +319,7 @@ class CollectionAgent(BaseAgent):
             entity_name=product_name,
             queries=queries,
             feedback=feedback,
-            cache_search_text=False,
+            cache_search_text=True,
         )
 
     async def run(self, product_description: str,
@@ -694,15 +695,9 @@ class CollectionAgent(BaseAgent):
         self._record_supplement_sources(entity_name, source_context)
 
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=product_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=source_context,
-            )
-            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result:
+            prompt = self._repair_prompt(entity_name, ["pricing_tiers"], source_context)
+            result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["pricing_tiers"]):
                 pricing_tiers.extend(tier for tier in self._parse_prices(result.get("pricing_tiers"), visible_ids) if tier.price)
 
         return pricing_tiers, extra_cites
@@ -747,16 +742,10 @@ class CollectionAgent(BaseAgent):
         self._record_supplement_sources(entity_name, source_context)
 
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=entity_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=source_context,
-            )
-            result = self.ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("market_share"):
-                market_share = normalize_text_value(result["market_share"])
+            prompt = self._repair_prompt(entity_name, ["market_share"], source_context)
+            result, reason = self.ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["market_share"]):
+                market_share = result["market_share"]
 
         return market_share, extra_cites
 
@@ -798,15 +787,9 @@ class CollectionAgent(BaseAgent):
         self._record_supplement_sources(entity_name, source_context)
 
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=product_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=source_context,
-            )
-            result = await self.async_ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result:
+            prompt = self._repair_prompt(entity_name, ["pricing_tiers"], source_context)
+            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["pricing_tiers"]):
                 pricing_tiers.extend(tier for tier in self._parse_prices(result.get("pricing_tiers"), visible_ids) if tier.price)
 
         return pricing_tiers, extra_cites
@@ -851,16 +834,10 @@ class CollectionAgent(BaseAgent):
         self._record_supplement_sources(entity_name, source_context)
 
         if extra_text and config.ENABLE_LLM:
-            prompts = load_prompts("collection_agent")
-            prompt = prompts["prompt_collect"].format(
-                product_name=entity_name,
-                product_description="",
-                competitor_name=entity_name,
-                search_results=source_context,
-            )
-            result = await self.async_ask_llm_json(prompt, max_tokens=2048, temperature=0)
-            if result and result.get("market_share"):
-                market_share = normalize_text_value(result["market_share"])
+            prompt = self._repair_prompt(entity_name, ["market_share"], source_context)
+            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=4096, temperature=0)
+            if reason == "success" and self._valid_extraction(result, ["market_share"]):
+                market_share = result["market_share"]
 
         return market_share, extra_cites
 

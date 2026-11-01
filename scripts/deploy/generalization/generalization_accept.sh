@@ -11,7 +11,7 @@ import subprocess
 from urllib.parse import unquote
 import urllib.request
 
-stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-repair')
+stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-target')
 output = Path('/opt/apps/smartcomp/output')
 staged = json.loads((stage / 'stage-state.json').read_text())
 manifest_path = stage / 'candidate/candidate-manifest.json'
@@ -86,7 +86,7 @@ require(not acceptance_path.exists(), 'Acceptance record exists; refuse overwrit
 manifest_sha = digest(manifest_path)
 require(manifest_sha == staged['manifest_sha256'] and manifest['commit'] == staged['commit'],
         'Staged manifest changed')
-candidate = inspect('smartcomp-generalization-repair-e2e')
+candidate = inspect('smartcomp-generalization-target-e2e')
 image = staged['candidate_image']
 require(candidate['Image'] == image and
         candidate['Config'].get('Labels', {}).get('org.opencontainers.image.revision') == staged['commit'],
@@ -102,18 +102,18 @@ require(all(t['status'] in ('completed', 'failed', 'cancelled') for t in rows), 
 expected = {r['path']: r['sha256'] for r in manifest['files']}
 code = ('import hashlib,json,pathlib; files=json.loads(' + repr(json.dumps(list(expected))) + '); '
         'print(json.dumps({p:hashlib.sha256((pathlib.Path("/app")/p).read_bytes()).hexdigest() for p in files}))')
-actual = json.loads(docker('exec', 'smartcomp-generalization-repair-e2e', 'python', '-c', code))
+actual = json.loads(docker('exec', 'smartcomp-generalization-target-e2e', 'python', '-c', code))
 require(actual == expected, 'Candidate image contents differ from approved GitHub manifest')
 
 # Bind offline Linux suite evidence to this exact image, SHA, manifest and log.
 test_record_path = stage / 'linux-tests.json'
-test_log_path = stage / 'generalization-repair-linux-tests.log'
+test_log_path = stage / 'generalization-target-linux-tests.log'
 if test_record_path.exists():
     tests = json.loads(test_record_path.read_text())
 else:
     with test_log_path.open('x') as log:
         result = subprocess.run(['sudo', '-n', 'docker', 'run', '--rm', '--network', 'none',
-                                 '--name', 'generalization-repair-linux-tests',
+                                 '--name', 'generalization-target-linux-tests',
                                  '--tmpfs', '/app/output:rw,mode=1777',
                                  '-e', 'PYTHONDONTWRITEBYTECODE=1', image,
                                  'python', '-m', 'unittest', 'discover', '-s', 'tests', '-q'],

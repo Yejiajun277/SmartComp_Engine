@@ -15,7 +15,10 @@ from dataclasses import asdict, is_dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from agents.quality_agent import QualityAgent
-from core.collection_retry import repair_collection
+from core.collection_retry import (
+    repair_collection, collection_entities, split_collection_entities,
+    target_source_snapshot, collection_source_snapshot, validate_collection_names,
+)
 import config
 from models.domain import (
     MarketAnalysis,
@@ -284,6 +287,7 @@ class AnalysisGraphNodes:
         }
 
     async def collect_target_product(self, state: AnalysisState) -> AnalysisState:
+        validate_collection_names(state["competitor_list"])
         await self._emit(state, EventType.AGENT_STARTED, "CollectionAgent", "collection",
                          progress=0.15, message="正在采集目标产品数据...")
 
@@ -296,11 +300,14 @@ class AnalysisGraphNodes:
         data = await self._retry_node(state, "collect_target_product", call)
         timings = self._merge_timing(state, "target_collection", time.perf_counter() - start)
         self.orchestrator.timings = timings
+        sources = target_source_snapshot(self.orchestrator.collection_agent.get_search_texts(),
+                                         data, state["product_name"])
         self.orchestrator._save_artifact_json("00_target_product_data.json", data)
+        self.orchestrator._save_artifact_json("00_target_search_texts.json", sources)
 
         await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
                          progress=0.20, message="目标产品数据采集完成")
-        return {"target_product_data": data, "timings": timings}
+        return {"target_product_data": data, "target_search_texts": sources, "timings": timings}
 
     async def collect_competitors(self, state: AnalysisState) -> AnalysisState:
         n = len(state["competitor_list"].competitors)
@@ -323,6 +330,9 @@ class AnalysisGraphNodes:
             data = state["competitors_data"]
         if not search_texts and state.get("original_search_texts"):
             search_texts = state["original_search_texts"]
+        collection_entities(data, state.get("target_product_data"), state.get("product_name", ""))
+        search_texts = collection_source_snapshot(state.get("target_search_texts", {}), search_texts)
+        self.orchestrator.collection_agent.restore_source_snapshot(search_texts)
         self.orchestrator._save_artifact_json("02_competitors_data.json", data)
         self.orchestrator._save_artifact_json("02_search_texts.json", search_texts)
         await self._emit(state, EventType.AGENT_COMPLETED, "CollectionAgent", "collection",
@@ -342,10 +352,15 @@ class AnalysisGraphNodes:
                              "attempt": state.get("collection_retry_count", 0) + 1,
                          })
         attempt = state.get("collection_retry_count", 0) + 1
+        entities = collection_entities(state["competitors_data"], state.get("target_product_data"),
+                                       state.get("product_name", ""))
 
         # Always save collection artifacts regardless of QA mode
         self.orchestrator._save_artifact_json("02_competitors_data.json", state["competitors_data"])
         self.orchestrator._save_artifact_json("02_search_texts.json", state["original_search_texts"])
+        if state.get("target_product_data") is not None:
+            self.orchestrator._save_artifact_json("00_target_product_data.json", state["target_product_data"])
+            self.orchestrator._save_artifact_json("00_target_search_texts.json", state.get("target_search_texts", {}))
 
         if config.SKIP_QA:
             result = QualityCheckResult(
@@ -371,7 +386,7 @@ class AnalysisGraphNodes:
 
         async def call():
             return await self.orchestrator.quality_agent.check_collection(
-                state["competitors_data"],
+                entities,
                 state["original_search_texts"],
                 competitor_list=state["competitor_list"],
                 attempt=attempt,
@@ -417,17 +432,25 @@ class AnalysisGraphNodes:
                              "retry_count": state.get("collection_retry_count", 0) + 1,
                          })
         quality_agent = self.orchestrator.quality_agent
+        entities = collection_entities(state["competitors_data"], state.get("target_product_data"),
+                                       state.get("product_name", ""))
         missing_fields = quality_agent.extract_missing_fields(
-            state["qa_collection"], state.get("competitors_data")
+            state["qa_collection"], entities
         )
         # 计算本轮缺失字段总数（用于修正率）
         pending_count = sum(len(fields) for fields in missing_fields.values())
         data, search_texts, feedback = await repair_collection(
             self.orchestrator, state["product_name"], state["product_description"],
-            state["competitors_data"], state.get("original_search_texts", {}),
-            state["qa_collection"], state.get("collection_retry_count", 0) + 1, missing_fields)
+            entities, state.get("original_search_texts", {}),
+            state["qa_collection"], state.get("collection_retry_count", 0) + 1, missing_fields,
+            target_name=(state.get("product_name") or state["target_product_data"].name)
+                        if state.get("target_product_data") is not None else None)
+        rivals, target = split_collection_entities(data, state.get("target_product_data"), state.get("product_name", ""))
         return {
-            "competitors_data": data,
+            "competitors_data": rivals,
+            **({"target_product_data": target,
+                "target_search_texts": target_source_snapshot(search_texts, target, state.get("product_name", ""))}
+               if target is not None else {}),
             "original_search_texts": search_texts,
             "collection_supplemented": True,
             "collection_feedback": "",

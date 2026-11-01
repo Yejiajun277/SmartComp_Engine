@@ -26,7 +26,9 @@ class QualityRuntimeIntegrityTests(unittest.IsolatedAsyncioTestCase):
     async def check_phase(self, phase, responses, agent=None):
         agent = agent or QualityAgent()
         self.calls = []
-        queue = iter(responses)
+        # Collection checks complete entity snapshots separately; each fixture
+        # entity gets the same bounded recovery scenario, not an exhausted queue.
+        queue = iter(responses * (2 if phase == "collection" else 1))
 
         async def transport(system, message, **kwargs):
             content, finish = next(queue)
@@ -73,7 +75,7 @@ class QualityRuntimeIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(result.passed)
                 self.assertEqual(result.hallucination_status, "found")
                 self.assertTrue(any(issue.description.startswith("The room price") for issue in result.issues))
-                self.assertEqual([call[1] for call in self.calls], [8192, 12288])
+                self.assertEqual([call[1] for call in self.calls], [8192, 12288] * (2 if phase == "collection" else 1))
                 # Recovery checks the original artifact, rather than regenerating
                 # the data or trying to certify the truncated response.
                 self.assertTrue(self.calls[1][0].startswith(self.calls[0][0]))
@@ -91,7 +93,7 @@ class QualityRuntimeIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(result.passed)
                 self.assertFalse(result.degraded)
                 self.assertEqual(result.hallucination_status, "failed")
-                self.assertEqual(len(self.calls), 2)
+                self.assertEqual(len(self.calls), 4 if phase == "collection" else 2)
                 self.assertTrue(any(i.field == "__hallucination_check__" and i.severity == "critical"
                                     for i in result.issues))
                 self.assertEqual(agent._passed_fields, set())

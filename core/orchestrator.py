@@ -20,7 +20,10 @@ from models.domain import (
     StrategyReport, QualityCheckResult
 )
 from core.artifact_store import ArtifactStore
-from core.collection_retry import repair_collection
+from core.collection_retry import (
+    repair_collection, collection_entities, split_collection_entities,
+    target_source_snapshot, collection_source_snapshot, validate_collection_names,
+)
 from agents.discovery_agent import DiscoveryAgent
 from agents.collection_agent import CollectionAgent
 from agents.dimension_agent import DimensionAgent
@@ -113,6 +116,7 @@ class Orchestrator:
         self._last_market_analysis = state.get("market_analysis")
         self._last_competitor_list = state.get("competitor_list")
         self._last_competitors_data = state.get("competitors_data", {})
+        self._last_target_product_data = state.get("target_product_data")
         self._print_completion_summary(report)
         return report
 
@@ -171,14 +175,18 @@ class Orchestrator:
         print(f"{'█' * 65}")
 
         target_collection_start = time.time()
+        validate_collection_names(competitor_list)
         target_product_data = self.collection_agent.collect_target_product(
             product_description, competitor_list.product_name
         )
         self.timings["target_collection"] = time.time() - target_collection_start
+        target_search_texts = target_source_snapshot(self.collection_agent.get_search_texts(),
+                                                     target_product_data, competitor_list.product_name)
 
         print(f"\n  ⏱️ 目标产品采集耗时: {self.timings['target_collection']:.2f}s")
         print(f"  🎯 目标产品: {target_product_data.name}")
         self._save_artifact_json("00_target_product_data.json", target_product_data)
+        self._save_artifact_json("00_target_search_texts.json", target_search_texts)
 
         # ── Phase 2: 数据采集（串行，逐竞品）──
         print(f"\n{'█' * 65}")
@@ -196,7 +204,9 @@ class Orchestrator:
 
         # ── Phase 2 QA: 采集数据质检 ──
         qa_start = time.time()
-        original_search_texts = self.collection_agent.get_search_texts()
+        original_search_texts = collection_source_snapshot(target_search_texts, self.collection_agent.get_search_texts())
+        self.collection_agent.restore_source_snapshot(original_search_texts)
+        collection_entities(competitors_data, target_product_data, competitor_list.product_name)
 
         if config.SKIP_QA:
             qa_collection = QualityCheckResult(
@@ -209,8 +219,11 @@ class Orchestrator:
             product_name = competitor_list.product_name
             qa_attempt = 1
             while qa_attempt <= QualityAgent.MAX_RETRIES + 1:
+                entities = collection_entities(competitors_data, target_product_data, product_name)
+                self._save_artifact_json("00_target_product_data.json", target_product_data)
+                self._save_artifact_json("00_target_search_texts.json", target_search_texts)
                 qa_collection = await self.quality_agent.check_collection(
-                    competitors_data, original_search_texts,
+                    entities, original_search_texts,
                     competitor_list=competitor_list, attempt=qa_attempt
                 )
                 self.quality_agent.timeline.add_check(qa_collection)
@@ -222,11 +235,15 @@ class Orchestrator:
                 # Preserve the checker result through retries and exhaustion.
                 if qa_attempt <= QualityAgent.MAX_RETRIES:
                     # 提取缺失字段，做针对性补充搜索
-                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, competitors_data)
+                    missing_fields = self.quality_agent.extract_missing_fields(qa_collection, entities)
 
-                    competitors_data, original_search_texts, _ = await repair_collection(
-                        self, product_name, product_description, competitors_data,
-                        original_search_texts, qa_collection, qa_attempt, missing_fields)
+                    repaired, original_search_texts, _ = await repair_collection(
+                        self, product_name, product_description, entities,
+                        original_search_texts, qa_collection, qa_attempt, missing_fields,
+                        target_name=(product_name or target_product_data.name) if target_product_data is not None else None)
+                    competitors_data, target_product_data = split_collection_entities(
+                        repaired, target_product_data, product_name)
+                    target_search_texts = target_source_snapshot(original_search_texts, target_product_data, product_name)
 
                 else:
                     print(f"  ⚠️ 采集数据质检未通过，已达到最大重试次数，降级通过")
@@ -235,6 +252,8 @@ class Orchestrator:
                 qa_attempt += 1
 
         self.timings["qa_collection"] = time.time() - qa_start
+        self._save_artifact_json("00_target_product_data.json", target_product_data)
+        self._save_artifact_json("00_target_search_texts.json", target_search_texts)
         self._save_artifact_json("02_competitors_data.json", competitors_data)
         self._save_artifact_json("02_search_texts.json", original_search_texts)
         self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)

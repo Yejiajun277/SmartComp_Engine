@@ -79,7 +79,7 @@ class QualityAgent(BaseAgent):
         self._prompt_check_strategy = prompts["prompt_check_strategy"]
         self._prompt_build_feedback = prompts["prompt_build_feedback"]
         self.timeline = QATimeline(max_retries=self.MAX_RETRIES)
-        self._passed_fields: set[str] = set()  # 已通过质检的字段，避免重复标记
+        self._passed_fields: set[str] = set()  # 兼容已查字段记录，不豁免后续快照的问题
 
     async def run(self, *args, **kwargs):
         """不直接调用，请使用 check_collection / check_analysis / check_strategy"""
@@ -145,18 +145,12 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
-        if config.ENABLE_LLM and original_search_texts:
+        if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_collection_hallucination(
                 competitors_data, original_search_texts
             )
-            # 过滤掉已通过的字段（避免重复标记同一字段为幻觉）
-            new_hallucination = []
-            for hi in hallucination_issues:
-                if hi.severity == "critical" or (hi.field and hi.field not in self._passed_fields):
-                    new_hallucination.append(hi)
-                elif not hi.field:
-                    new_hallucination.append(hi)
-            issues.extend(new_hallucination)
+            # A prior pass cannot erase this snapshot's source caveats/findings.
+            issues.extend(hallucination_issues)
             if hallucination_status == HallucinationCheckStatus.FAILED.value:
                 issues.append(QualityIssue(
                     severity="critical", category="schema",
@@ -166,18 +160,20 @@ class QualityAgent(BaseAgent):
                 ))
 
         # 引用有效性检查（规则引擎）
-        all_citations = []
-        all_output_ids = []
-        for d in competitors_data.values():
-            all_citations.extend(d.citations)
+        for name, d in competitors_data.items():
+            output_ids = []
             for fi in d.product_features:
-                all_output_ids.extend(fi.citations)
+                output_ids.extend(fi.citations)
             for pt in d.pricing_tiers:
-                all_output_ids.extend(pt.citations)
-        if all_citations:
-            issues.extend(self._check_citation_validity(all_citations, list(set(all_output_ids))))
+                output_ids.extend(pt.citations)
+            # A target cannot borrow a rival's otherwise valid catalog ID.
+            local_issues = self._check_citation_validity(d.citations, list(set(output_ids)))
+            for issue in local_issues:
+                issue.field = f"{name}.{issue.field}"
+            issues.extend(local_issues)
 
-        score = self._calculate_score(issues, phase="collection", competitor_count=len(competitors_data))
+        rival_count = len(competitor_list.competitors) if competitor_list is not None else len(competitors_data)
+        score = self._calculate_score(issues, phase="collection", competitor_count=rival_count)
         passed = (score >= self.PASS_SCORE
                   and hallucination_status != HallucinationCheckStatus.FAILED.value
                   and not any(issue.severity == "critical" for issue in issues))
@@ -332,17 +328,17 @@ class QualityAgent(BaseAgent):
                 pass
             elif not market_share:
                 issues.append(QualityIssue(
-                    severity="critical", category="completeness",
+                    severity="warning", category="completeness",
                     field=f"{name}.market_share",
-                    description="市场份额信息为空",
-                    suggestion="补充该竞品的市场份额数据",
+                    description="资料缺口：未提供已确认的同口径市场份额",
+                    suggestion="保留未披露/未知，不填零或借用集团份额；语义检查仍须核对原文是否已给同口径数据",
                 ))
             elif self._is_meaningless(market_share):
                 issues.append(QualityIssue(
-                    severity="critical", category="completeness",
+                    severity="warning", category="completeness",
                     field=f"{name}.market_share",
-                    description=f"市场份额为无意义文本: '{market_share}'",
-                    suggestion="补充该竞品的实际市场份额数据",
+                    description=f"资料缺口：市场份额未确认（{market_share}）",
+                    suggestion="保留明确缺口与适用范围，不强求未披露数字；来源实际给出份额却遗漏或错配仍须报告",
                 ))
 
             # 文本字段检查（空或过短）
@@ -392,24 +388,44 @@ class QualityAgent(BaseAgent):
         self,
         competitors_data: dict[str, CompetitorData],
         original_search_texts: dict[str, str],
-    ) -> tuple[list[QualityIssue], str]:
+    ) -> tuple[list[QualityIssue], str, str]:
         """采集数据幻觉检测（LLM）"""
         # Inspect the saved snapshot, including scope qualifiers and all source
         # references. Shortening these fields caused false truncation/missing-
         # source findings about information that existed in the actual report.
-        data_summary = {name: asdict(data) for name, data in competitors_data.items()}
+        # Four complete entities exceeded one check's output budget. Keep each
+        # entity's entire source/fact snapshot; split by ownership, not length.
+        # Serial requests also keep the agent's last-call/log state unambiguous.
+        issues, failures = [], {}
+        for name, data in competitors_data.items():
+            sources = {key: text for key, text in original_search_texts.items()
+                       if key in {name, data.name}}
+            has_evidence = any(isinstance(text, str) and text.strip() for text in sources.values()) or any(
+                isinstance(c.snippet, str) and c.snippet.strip() for c in data.citations)
+            if not has_evidence:
+                failures[name] = "missing_original_sources"
+                continue
+            prompt = self._prompt_check_collection.format(
+                original_search_texts=json.dumps(sources, ensure_ascii=False, indent=2),
+                competitors_data_json=json.dumps({name: asdict(data)}, ensure_ascii=False, indent=2),
+            )
+            prompt += "\n本次仅检查一个实体；问题field必须以该实体名和英文句点开头：" + name + "."
+            result, reason = await self._request_quality_json(prompt)
+            if not result:
+                failures[name] = reason or "invalid_quality_response"
+                continue
+            entity_issues = self._parse_issues(result)
+            for issue in entity_issues:
+                if issue.field != name and not issue.field.startswith(name + "."):
+                    issue.field = name + "." + issue.field
+            issues.extend(entity_issues)
+        if not competitors_data:
+            failures["collection"] = "empty_collection_snapshot"
+        if failures:
+            reason = json.dumps(failures, ensure_ascii=False)
+            self._log(f"   ⚠️ 实体采集检查未完成: {reason}")
+            return issues, HallucinationCheckStatus.FAILED.value, reason
 
-        prompt = self._prompt_check_collection.format(
-            original_search_texts=json.dumps(original_search_texts, ensure_ascii=False, indent=2),
-            competitors_data_json=json.dumps(data_summary, ensure_ascii=False, indent=2),
-        )
-
-        result, reason = await self._request_quality_json(prompt)
-        if not result:
-            self._log(f"   ⚠️ 幻觉检测失败: {reason}")
-            return [], HallucinationCheckStatus.FAILED.value, reason
-
-        issues = self._parse_issues(result)
         hallucination_issues = [i for i in issues if i.category == "hallucination"]
         status = HallucinationCheckStatus.FOUND.value if hallucination_issues else HallucinationCheckStatus.PASSED.value
         return issues, status, ""
@@ -994,6 +1010,10 @@ class QualityAgent(BaseAgent):
                     val = getattr(data, field_name, "")
                     if not isinstance(val, str):
                         _add_missing(name, field_name)
+                    elif field_name == "market_share":
+                        # An honest evidence gap is not a mandatory business
+                        # value. Actual critical QA findings are handled below.
+                        continue
                     elif not val or not val.strip():
                         _add_missing(name, field_name)
                     elif _is_truncated(val):
