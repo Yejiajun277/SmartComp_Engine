@@ -154,6 +154,8 @@ class CollectionAgent(BaseAgent):
                                              original_search_texts: dict[str, str],
                                              feedback: str = "", *, repair_plan: dict | None = None) -> dict[str, CompetitorData]:
         """Repair against the same immutable evidence; never search or auto-supplement."""
+        previous_failures = {row.get("entity"): row for row in self._repair_outcomes
+                             if row.get("status") == "failed"}
         self._repair_outcomes = []
         self._last_search_texts = deepcopy(original_search_texts)
         updated = deepcopy(competitors_data)
@@ -185,7 +187,9 @@ class CollectionAgent(BaseAgent):
                       "仅allow_add=true的数组可用 {\"add\":{完整新条目}}，新增条目包含全部字段和真实引用。"
                       "不得返回未授权字段/子字段、未知或重复item_id、删除操作、伪造来源ID。"
                       "数值、SKU、地区、日期、单位和条件必须来自当前实体真实来源，不补全截断资料。\n"
-                      f"### 结构化写入授权（内部item_id仅用于定位，不是来源证据）\n{json.dumps(authority, ensure_ascii=False)}\n"
+                      f"### 结构化写入授权（控制资料，不是输出格式）\n{json.dumps(authority, ensure_ascii=False)}\n"
+                      "上面的text_fields、arrays、items、version等是权限控制键，不能作为响应根层键；"
+                      "内部item_id只用于定位，不是来源证据。\n"
                       f"### 真实来源（仅使用以下ID和完整原文）\n{context}\n"
                       f"### 完整质检反馈（不是事实来源或写权限）\n{feedback}")
             previous = asdict(original)
@@ -197,9 +201,24 @@ class CollectionAgent(BaseAgent):
                          "原断言不受来源支持时可以撤回或保留未知，不能把背景内容当作来源补证。")
             prompt += "\n来源来自已保存快照，本轮没有重新联网搜索。"
             prompt += f"\n### 当前产品背景（非来源证据）\n{product_name}\n{product_description}"
+            previous = previous_failures.get(name, {})
+            same_previous_plan = previous.get("repair_plan") == authority
+            request_budget = 16384 if same_previous_plan and previous.get("finish_reason") == "length" else 8192
+            if same_previous_plan and previous.get("schema_errors"):
+                prompt += ("\n### 前次补丁校验错误（同一快照及授权；上次未写入任何事实）\n"
+                           + json.dumps(previous["schema_errors"], ensure_ascii=False)
+                           + "\n根据这些真实校验错误修正响应格式，不改写或放宽授权。")
+            prompt += ("\n### 响应格式：根层直接使用获准的事实字段\n"
+                       "根层只写本轮获准的实际字段名（见下方示例），数组字段直接写更新操作列表；"
+                       "禁止用text_fields或arrays包装。以下是根据当前授权生成的完整JSON结构示例，"
+                       "只展示schema：尖括号内是类型占位，不是事实；必须用真实来源内容替换，不得原样返回。"
+                       "示例未授权新增任何事实，未返回字段/条目仍保持原值。\n```json\n"
+                       + json.dumps(self._repair_output_example(authority), ensure_ascii=False, indent=2)
+                       + "\n```")
             log_count = len(self.llm_logs)
-            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=8192, temperature=0)
+            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=request_budget, temperature=0)
             response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
+            outcome.update(request_max_tokens=request_budget, finish_reason=response.get("finish_reason", ""))
             if (reason != "success" or response.get("finish_reason") != "stop"
                     or response.get("success") is not True or response.get("parse_error")):
                 outcome["reason"] = (reason if reason != "success" else
@@ -218,6 +237,27 @@ class CollectionAgent(BaseAgent):
             outcome.update(status="accepted" if changes["applied_fields"] else "not_changed",
                            reason="complete_authorized_patch" if changes["applied_fields"] else "no_fact_changes")
         return updated
+
+    @staticmethod
+    def _repair_output_example(authority):
+        """A valid output object shape, distinct from the control-plan shape."""
+        def placeholder(attribute):
+            if attribute == "citations":
+                return ["<从当前实体真实目录选择的来源ID>"]
+            if attribute == "features":
+                return ["<真实原文支持的条件>"]
+            return "<仅依据本实体真实来源修正的文本>"
+
+        example = {field: placeholder(field) for field in authority.get("text_fields", [])}
+        for field, array in authority.get("arrays", {}).items():
+            example[field] = [{"item_id": identity, "changes": {
+                attribute: placeholder(attribute) for attribute in entry["fields"]}}
+                for identity, entry in array.get("items", {}).items()]
+            if array.get("allow_add"):
+                attributes = ("name", "description", "citations") if field == "product_features" else (
+                    "tier_name", "price", "features", "citations")
+                example[field].append({"add": {attribute: placeholder(attribute) for attribute in attributes}})
+        return example
 
     @staticmethod
     def _field_search_terms(field_name: str) -> list[str]:
