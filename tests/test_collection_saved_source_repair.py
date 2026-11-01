@@ -75,7 +75,7 @@ class CollectionSavedSourceRepairTests(unittest.IsolatedAsyncioTestCase):
     async def test_incomplete_bad_shape_or_truncated_reextract_preserves_snapshot(self):
         bad_shape = payload()
         bad_shape["pricing_tiers"] = "not an array"
-        for response, finish in (({}, "stop"), ({"market_share": ""}, "stop"),
+        for response, finish in (({}, "stop"), ({"market_share": None}, "stop"),
                                   (bad_shape, "stop"), (payload(), "length")):
             with self.subTest(response=response, finish=finish):
                 agent = CollectionAgent()

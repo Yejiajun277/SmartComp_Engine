@@ -140,7 +140,8 @@ class QualityAgent(BaseAgent):
                          else finish == "stop" and failure == "success")
             valid = self._valid_quality_response(result)
             if response is not None and finish != "stop":
-                failure = f"incomplete_finish_reason({finish or 'missing'})"
+                ending = f"incomplete_finish_reason({finish or 'missing'})"
+                failure = (failure + "; " + ending) if failure and failure != "success" else ending
             elif not valid:
                 failure = "invalid_quality_response_schema" if result or failure == "success" else failure
             if response is not None:
@@ -664,7 +665,7 @@ class QualityAgent(BaseAgent):
                         description=f"定价对比未覆盖竞品 '{name}'",
                         suggestion="补充该竞品的定价对比数据",
                     ))
-            if not pra.value_ranking:
+            if not pra.value_ranking and pra.comparable_basis:
                 issues.append(QualityIssue(
                     severity="warning", category="completeness",
                     field="value_ranking",

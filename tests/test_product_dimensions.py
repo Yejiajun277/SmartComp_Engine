@@ -17,7 +17,27 @@ def response(rows):
             "differentiation_points": [], "summary": "基于采集资料"}
 
 
+def collected(name):
+    texts = [f"{name} only China 2025 500g SKU: 20g protein.", f"{name} only EU 2026 1kg SKU: 24g protein.", f"{name} China 2025 ingredients disclosed."]
+    return CompetitorData(name, product_features=[FeatureItem("Fact", t, [f"{name}:fact{i}"]) for i,t in enumerate(texts)],
+        citations=[Citation(f"{name}:fact{i}", snippet=t) for i,t in enumerate(texts)])
+
+def bound_row(feature, names, index=0):
+    return {"feature":feature,"evidence":{n:[f"product_features[{index}]"] for n in names}}
+
+def bound_response(rows=(), names=(), index=0, advantages=(), points=()):
+    return {"feature_matrix":list(rows),"competitive_advantages":[
+        {"competitor":n,"our_evidence":[f"product_features[{i}]"],"their_evidence":[f"product_features[{i}]"]} for n,i in advantages],
+        "differentiation_points":[{"facts":[{"entity":n,"fact_ids":[f"product_features[{i}]"]}]} for n,i in points],
+        "summary":{"facts":[{"entity":n,"fact_ids":[f"product_features[{index}]"]} for n in names]}}
+
+
 class ProductDimensionTests(unittest.IsolatedAsyncioTestCase):
+    async def run_bound(self, names, replies):
+        return await self.run_with_transport({n:collected(n) for n in names},
+            [(json.dumps(x,ensure_ascii=False) if isinstance(x,dict) else x,t) for x,t in replies],
+            target=collected("OPTIMUM NUTRITION"))
+
     async def test_full_product_scope_and_source_qualifiers_reach_analysis(self):
         data = CompetitorData("CompA", product_features=[
             FeatureItem(f"Feature {n}", "Original details " * 30 + f"MODEL_SCOPE_{n}", [f"c{n}"])
@@ -81,43 +101,27 @@ class ProductDimensionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("不足", result.summary)
 
     async def test_invalid_truncated_chunks_split_before_discarding_parse_failure(self):
-        competitors = {name: CompetitorData(name) for name in "ABCD"}
-        def leaf(name):
-            return (json.dumps(response([{"feature": "蛋白含量", "values": {
-                name: "✅", "OPTIMUM NUTRITION": "🔶"}}]), ensure_ascii=False), False)
-        result = await self.run_with_transport(competitors, [
-            ('{"feature_matrix":[', True), ('{"feature_matrix":[', True),
-            leaf("A"), leaf("B"), ('{"feature_matrix":[', True), leaf("C"), leaf("D")])
-        self.assertEqual(result.feature_matrix[0].values,
-                         {"OPTIMUM NUTRITION": "🔶", "A": "✅", "B": "✅", "C": "✅", "D": "✅"})
-        self.assertEqual(len(self.requests), 7)
-        self.assertEqual([row.feature for row in result.feature_matrix], ["蛋白含量", "配料透明度"])
+        leaves=[(bound_response([bound_row("蛋白含量",["OPTIMUM NUTRITION",n])]),False) for n in "ABCD"]
+        result=await self.run_bound("ABCD",[("{",True),("{",True),*leaves[:2],("{",True),*leaves[2:]])
+        for n in ["OPTIMUM NUTRITION",*"ABCD"]:
+            self.assertIn(n+" only China 2025",result.feature_matrix[0].values[n])
+        self.assertEqual(len(self.requests),7)
+        self.assertEqual([r.feature for r in result.feature_matrix],["蛋白含量","配料透明度"])
 
     async def test_partial_chunks_keep_all_cells_and_do_not_erase_known_target(self):
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "AB"}, [
-                ("{", True),
-                (json.dumps(response([{"feature": "蛋白含量", "values": {
-                    "A": "✅", "OPTIMUM NUTRITION": "🔶"}}]), ensure_ascii=False), False),
-                ("", False)])
-        self.assertEqual(result.feature_matrix[0].values,
-                         {"OPTIMUM NUTRITION": "🔶", "A": "✅", "B": "⚪"})
-        self.assertEqual(result.feature_matrix[1].values,
-                         {"OPTIMUM NUTRITION": "⚪", "A": "⚪", "B": "⚪"})
-        self.assertIn("降级", result.summary)
-        self.assertIn("2家竞品（A、B）", result.summary)
-        self.assertIn("未知4/6格", result.summary)
+        result=await self.run_bound("AB",[("{",True),(bound_response([bound_row("蛋白含量",["OPTIMUM NUTRITION","A"])]),False),("",False)])
+        for n in ["OPTIMUM NUTRITION","A"]:
+            self.assertIn(n+" only China 2025",result.feature_matrix[0].values[n])
+        self.assertEqual(result.feature_matrix[0].values["B"],"⚪")
+        self.assertTrue(all(v=="⚪" for v in result.feature_matrix[1].values.values()))
+        for s in ["降级","2家竞品（A、B）","未知4/6格"]: self.assertIn(s,result.summary)
 
     async def test_requested_names_normalize_explanatory_suffix_and_exclude_other_rows(self):
-        result = await self.run_with_transport({"A": CompetitorData("A")}, [
-            (json.dumps(response([
-                {"feature": "蛋白含量（每份克数）", "values": {"A": "✅", "Stranger": "✅"}},
-                {"feature": "AI助手", "values": {"A": "✅"}},
-                {"feature": "非蛋白含量", "values": {"A": "❌"}},
-            ]), ensure_ascii=False), False)])
-        self.assertEqual([row.feature for row in result.feature_matrix], ["蛋白含量", "配料透明度"])
-        self.assertEqual(result.feature_matrix[0].values,
-                         {"OPTIMUM NUTRITION": "⚪", "A": "✅"})
+        result=await self.run_bound("A",[(bound_response([bound_row("蛋白含量（每份克数）",["A","Stranger"]),bound_row("AI助手",["A"]),bound_row("非蛋白含量",["A"])]),False)])
+        self.assertEqual([r.feature for r in result.feature_matrix],["蛋白含量","配料透明度"])
+        self.assertEqual(set(result.feature_matrix[0].values),{"OPTIMUM NUTRITION","A"})
+        self.assertIn("A only China 2025",result.feature_matrix[0].values["A"])
+        self.assertEqual(result.feature_matrix[0].values["OPTIMUM NUTRITION"],"⚪")
 
     async def test_all_truncations_stop_at_single_competitor_with_unknown_coverage(self):
         result = await self.run_with_transport(
@@ -129,119 +133,47 @@ class ProductDimensionTests(unittest.IsolatedAsyncioTestCase):
                          {"OPTIMUM NUTRITION": "⚪", "A": "⚪", "B": "⚪", "C": "⚪", "D": "⚪"})
 
     async def test_recovered_advantages_replace_parent_entries_and_obsolete_citations(self):
-        parent = response([])
-        parent["competitive_advantages"] = [
-            {"competitor": "A", "our_advantage": "obsolete A", "their_advantage": "old A",
-             "citations": ["A:q0:r0"]},
-            {"competitor": "B", "our_advantage": "obsolete B", "their_advantage": "old B",
-             "citations": ["B:q0:r0"]},
-        ]
-        child_a = response([])
-        child_a["competitive_advantages"] = [
-            {"competitor": "A", "our_advantage": "recovered A", "their_advantage": "new A",
-             "citations": ["A:q1:r0"]}]
-        child_b = response([])
-        child_b["competitive_advantages"] = [
-            {"competitor": "B", "our_advantage": "recovered B", "their_advantage": "new B",
-             "citations": ["B:q1:r0"]}]
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "AB"},
-            [(json.dumps(parent), True), (json.dumps(child_a), False), (json.dumps(child_b), False)])
-        self.assertEqual([(adv.competitor, adv.our_advantage, adv.their_advantage)
-                          for adv in result.competitive_advantages],
-                         [("A", "recovered A", "new A"), ("B", "recovered B", "new B")])
-        self.assertEqual(result.citations, ["A:q1:r0", "B:q1:r0"])
-        self.assertEqual([adv.citations for adv in result.competitive_advantages],
-                         [["A:q1:r0"], ["B:q1:r0"]])
+        result=await self.run_bound("AB",[(bound_response(advantages=[("A",0),("B",0)]),True),(bound_response(advantages=[("A",1)]),False),(bound_response(advantages=[("B",1)]),False)])
+        self.assertEqual([a.competitor for a in result.competitive_advantages],["A","B"])
+        for a in result.competitive_advantages:
+            self.assertIn("EU 2026",a.our_advantage)
+            self.assertIn("EU 2026",a.their_advantage)
+        self.assertEqual(set(result.citations),{"OPTIMUM NUTRITION:fact1","A:fact1","B:fact1"})
 
     async def test_parent_advantage_survives_when_recovery_has_no_replacement(self):
-        parent = response([])
-        parent["competitive_advantages"] = [
-            {"competitor": "A", "our_advantage": "old A", "citations": ["A:q0:r0"]},
-            {"competitor": "B", "our_advantage": "known B", "citations": ["B:q0:r0"]},
-        ]
-        child_a = response([])
-        child_a["competitive_advantages"] = [
-            {"competitor": "A", "our_advantage": "recovered A", "citations": ["A:q1:r0"]}]
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "AB"},
-            [(json.dumps(parent), True), (json.dumps(child_a), False), ("", False)])
-        self.assertEqual([(adv.competitor, adv.our_advantage)
-                          for adv in result.competitive_advantages],
-                         [("A", "recovered A"), ("B", "known B")])
-        self.assertEqual(result.citations, ["A:q1:r0", "B:q0:r0"])
+        result=await self.run_bound("AB",[(bound_response(advantages=[("A",0),("B",0)]),True),(bound_response(advantages=[("A",1)]),False),("",False)])
+        self.assertEqual([a.competitor for a in result.competitive_advantages],["A","B"])
+        self.assertIn("EU 2026",result.competitive_advantages[0].their_advantage)
+        self.assertIn("China 2025",result.competitive_advantages[1].their_advantage)
+        self.assertIn("B:fact0",result.citations)
 
     async def test_recovered_summary_describes_full_scope_and_merged_unknown_cells(self):
-        parent = response([])
-        parent["summary"] = "过时全局结论：所有品牌都一样"
-        one_rival = response([
-            {"feature": "蛋白含量", "values": {"OPTIMUM NUTRITION": "✅", "A": "🔶"}},
-            {"feature": "配料透明度", "values": {"OPTIMUM NUTRITION": "⚪", "A": "✅"}},
-        ])
-        one_rival["summary"] = "本次只比较1家竞品A，我方仅在已采集标准款范围可比较。"
-        qualified_advantage = "仅对已采集标准款，来源描述了较高蛋白比例"
-        one_rival["competitive_advantages"] = [{
-            "competitor": "A", "our_advantage": qualified_advantage,
-            "their_advantage": "暂无充分证据", "citations": ["A:q0:r0"]}]
-        two_rivals = response([
-            {"feature": "蛋白含量", "values": {"OPTIMUM NUTRITION": "✅", "B": "❌", "C": "⚪"}},
-            {"feature": "配料透明度", "values": {"OPTIMUM NUTRITION": "⚪", "B": "⚪", "C": "✅"}},
-        ])
-        two_rivals["summary"] = "本次仅含两家竞品B和C；不能把某个SKU结论扩展到全品牌。"
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "ABC"},
-            [(json.dumps(parent), True), (json.dumps(one_rival), False), (json.dumps(two_rivals), False)])
-        self.assertIn("3家竞品（A、B、C）", result.summary)
-        self.assertIn("OPTIMUM NUTRITION", result.summary)
-        self.assertIn("2个维度", result.summary)
-        self.assertIn("未知3/8格", result.summary)
-        self.assertIn("1项", result.summary)
-        self.assertIn("分片恢复", result.summary)
-        self.assertNotIn("过时全局结论", result.summary)
-        overall_summary = result.summary.split("\n局部比较", 1)[0]
-        self.assertNotIn("本次只比较1家", overall_summary)
-        self.assertNotIn("本次仅含两家", overall_summary)
-        self.assertIn("局部比较（仅包含 A）：" + one_rival["summary"], result.summary)
-        self.assertIn("局部比较（仅包含 B、C）：" + two_rivals["summary"], result.summary)
-        self.assertEqual(result.competitive_advantages[0].our_advantage, qualified_advantage)
-        self.assertEqual(result.competitive_advantages[0].citations, ["A:q0:r0"])
+        parent=response([]); parent["summary"]="过时全局结论"
+        one=bound_response([bound_row("蛋白含量",["OPTIMUM NUTRITION","A"]),bound_row("配料透明度",["A"],2)],["A"],advantages=[("A",0)])
+        two=bound_response([bound_row("蛋白含量",["OPTIMUM NUTRITION","B"]),bound_row("配料透明度",["C"],2)],["B","C"])
+        result=await self.run_bound("ABC",[(parent,True),(one,False),(two,False)])
+        for s in ["3家竞品（A、B、C）","2个维度","未知3/8格","1项","局部比较（仅包含 A）","局部比较（仅包含 B、C）"]: self.assertIn(s,result.summary)
+        self.assertNotIn("过时全局结论",result.summary)
+        self.assertIn("A only China 2025",result.competitive_advantages[0].their_advantage)
 
     async def test_recovered_differentiation_replaces_stale_parent_and_limits_duplicates(self):
-        parent = response([])
-        parent["differentiation_points"] = ["过时的全局差异", "过时的全局差异", "过时第二项"]
-        child_a = response([])
-        child_a["differentiation_points"] = ["仅采集款蛋白来源不同", "需补齐配料证据"]
-        child_bc = response([])
-        child_bc["differentiation_points"] = ["需补齐配料证据", "C仅标准款可比较", "最后一项"]
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "ABC"},
-            [(json.dumps(parent), True), (json.dumps(child_a), False), (json.dumps(child_bc), False)])
-        self.assertEqual(result.differentiation_points,
-                         ["仅采集款蛋白来源不同", "需补齐配料证据", "C仅标准款可比较"])
+        parent=response([]); parent["differentiation_points"]=["过时全局差异"]
+        one=bound_response(points=[("OPTIMUM NUTRITION",0),("A",0)])
+        two=bound_response(points=[("OPTIMUM NUTRITION",0),("C",0),("B",0)])
+        result=await self.run_bound("ABC",[(parent,True),(one,False),(two,False)])
+        self.assertEqual(len(result.differentiation_points),3)
+        for point,n in zip(result.differentiation_points,["OPTIMUM NUTRITION","A","C"]): self.assertIn(n+" only China 2025",point)
+        self.assertNotIn("过时全局差异"," ".join(result.differentiation_points))
 
     async def test_primary_budget_allows_complete_response_without_unnecessary_splitting(self):
-        """A real parse succeeds only when the whole-request budget exceeds 4096."""
-        calls = []
-        async def transport(system_prompt, user_message, **kwargs):
-            budget = kwargs["max_tokens"]
-            calls.append(budget)
-            if budget > 4096:
-                content = json.dumps(response([{
-                    "feature": "蛋白含量", "values": {
-                        "OPTIMUM NUTRITION": "✅", "A": "🔶", "B": "❌", "C": "✅"}}]))
-            else:
-                content = '{"feature_matrix":['
-            return {"content": content, "finish_reason": "stop" if budget > 4096 else "length",
-                    "usage": {}, "timestamp": "", "model": "fixture",
-                    "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-                    "duration_ms": 0}
-        with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", transport):
-            result = await ProductAgent().run(
-                "OPTIMUM NUTRITION", {name: CompetitorData(name) for name in "ABC"},
-                sub_dimensions=DIMENSIONS)
-        self.assertEqual(result.feature_matrix[0].values,
-                         {"OPTIMUM NUTRITION": "✅", "A": "🔶", "B": "❌", "C": "✅"})
-        self.assertEqual(calls, [8192])
+        calls=[]
+        async def transport(system,prompt,**kwargs):
+            budget=kwargs["max_tokens"];calls.append(budget)
+            return {"content":json.dumps(bound_response([bound_row("蛋白含量",["OPTIMUM NUTRITION",*"ABC"])])) if budget>4096 else "{","finish_reason":"stop" if budget>4096 else "length"}
+        with patch("config.ENABLE_LLM",True),patch("agents.base_agent.async_llm_call",transport):
+            result=await ProductAgent().run("OPTIMUM NUTRITION",{n:collected(n) for n in "ABC"},collected("OPTIMUM NUTRITION"),DIMENSIONS)
+        self.assertEqual(calls,[8192])
+        for n in ["OPTIMUM NUTRITION",*"ABC"]: self.assertIn(n+" only China 2025",result.feature_matrix[0].values[n])
 
     async def test_recovery_without_differences_does_not_salvage_stale_global_conclusion(self):
         parent = response([])
@@ -253,79 +185,35 @@ class ProductDimensionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.differentiation_points, [])
 
     async def test_local_summary_qualifiers_reach_strategy_input_and_json_export(self):
-        child_a = response([{"feature": "蛋白含量", "values": {"A": "✅"}}])
-        child_a["summary"] = "仅适用于2025年在中国销售的500g无糖SKU。"
-        child_a["competitive_advantages"] = [{
-            "competitor": "A", "our_advantage": "含糖量较低", "citations": ["A:q0:r0"]}]
-        child_bc = response([])
-        child_bc["summary"] = "仅限2024年欧洲1kg原味SKU，不适用于其他配方。"
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "ABC"},
-            [("{", True), (json.dumps(child_a), False), (json.dumps(child_bc), False)])
-        self.assertIn("3家竞品（A、B、C）", result.summary)
-        self.assertIn("局部比较（仅包含 A）：" + child_a["summary"], result.summary)
-        self.assertIn("局部比较（仅包含 B、C）：" + child_bc["summary"], result.summary)
-        self.assertEqual(result.competitive_advantages[0].our_advantage, "含糖量较低")
-        strategy_input = StrategyAgent()._build_analysis_text(
-            "OPTIMUM NUTRITION", result, PricingAnalysis(), MarketAnalysis())
-        exported = json.loads(json.dumps(asdict(result), ensure_ascii=False))
-        for qualifier in (child_a["summary"], child_bc["summary"]):
-            self.assertIn(qualifier, strategy_input)
-            self.assertIn(qualifier, exported["summary"])
+        one=bound_response([bound_row("蛋白含量",["A"])],["A"],advantages=[("A",0)])
+        two=bound_response(names=["B","C"],index=1)
+        result=await self.run_bound("ABC",[("{",True),(one,False),(two,False)])
+        strategy=StrategyAgent()._build_analysis_text("OPTIMUM NUTRITION",result,PricingAnalysis(),MarketAnalysis())
+        exported=json.loads(json.dumps(asdict(result),ensure_ascii=False))
+        for s in ["A only China 2025 500g SKU","B only EU 2026 1kg SKU","C only EU 2026 1kg SKU"]:
+            self.assertIn(s,strategy)
+            self.assertIn(s,exported["summary"])
 
     async def test_nested_recovery_preserves_original_subset_notes_without_obsolete_parent(self):
-        obsolete_ab = response([])
-        obsolete_ab["summary"] = "过时AB批次限定"
-        obsolete_ab["competitive_advantages"] = [{"competitor": "A", "our_advantage": "过时优势"}]
-        child_a = response([])
-        child_a["summary"] = "A仅中国2025年500g规格"
-        child_a["competitive_advantages"] = [{"competitor": "A", "our_advantage": "新优势"}]
-        child_b = response([])
-        child_b["summary"] = "B仅日本2024年无糖规格"
-        child_cd = response([])
-        child_cd["summary"] = "C、D仅欧洲2024年系列"
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "ABCD"},
-            [("{", True), (json.dumps(obsolete_ab), True), (json.dumps(child_a), False),
-             (json.dumps(child_b), False), (json.dumps(child_cd), False)])
-        self.assertIn("4家竞品（A、B、C、D）", result.summary)
-        self.assertIn("局部比较（仅包含 A）：" + child_a["summary"], result.summary)
-        self.assertIn("局部比较（仅包含 B）：" + child_b["summary"], result.summary)
-        self.assertIn("局部比较（仅包含 C、D）：" + child_cd["summary"], result.summary)
-        self.assertNotIn("过时AB批次限定", result.summary)
-        self.assertNotIn("局部比较（仅包含 A、B）", result.summary)
-        self.assertEqual(result.summary.count("分片恢复合并"), 1)
+        result=await self.run_bound("ABCD",[("{",True),(bound_response(names=["A"],advantages=[("A",0)]),True),
+            (bound_response(names=["A"],index=1,advantages=[("A",1)]),False),(bound_response(names=["B"],index=1),False),(bound_response(names=["C","D"],index=1),False)])
+        for n in "ABCD": self.assertIn(n+" only EU 2026",result.summary)
+        self.assertNotIn("A only China 2025",result.summary)
+        self.assertNotIn("局部比较（仅包含 A、B）",result.summary)
+        self.assertEqual(result.summary.count("分片恢复合并"),1)
 
     async def test_parent_qualification_survives_for_unreplaced_parent_advantage(self):
-        parent = response([])
-        parent["summary"] = "原始批次仅涵盖2025年中国500g无糖规格"
-        parent["competitive_advantages"] = [
-            {"competitor": "A", "our_advantage": "过时A"},
-            {"competitor": "B", "our_advantage": "含糖量较低", "citations": ["B:q0:r0"]},
-        ]
-        child_a = response([])
-        child_a["summary"] = "A的恢复资料仅适用于2026年欧盟原味规格"
-        child_a["competitive_advantages"] = [{"competitor": "A", "our_advantage": "新A"}]
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "AB"},
-            [(json.dumps(parent), True), (json.dumps(child_a), False), ("", False)])
-        self.assertEqual(result.competitive_advantages[1].our_advantage, "含糖量较低")
-        self.assertIn(parent["summary"], result.summary)
-        self.assertIn("局部比较（仅包含 A、B）", result.summary)
-        self.assertIn("保留原批次判断：B", result.summary)
-        self.assertIn("局部比较（仅包含 A）：" + child_a["summary"], result.summary)
+        result=await self.run_bound("AB",[(bound_response(names=["A","B"],advantages=[("A",0),("B",0)]),True),
+            (bound_response(names=["A"],index=1,advantages=[("A",1)]),False),("",False)])
+        self.assertIn("B only China 2025",result.competitive_advantages[1].their_advantage)
+        for s in ["B only China 2025","保留原批次判断：B","A only EU 2026"]: self.assertIn(s,result.summary)
 
     async def test_parent_qualification_survives_for_unreplaced_matrix_cell(self):
-        parent = response([{"feature": "蛋白含量", "values": {"A": "✅"}}])
-        parent["summary"] = "原矩阵仅适用于2024年美国销售的1kg SKU。"
-        result = await self.run_with_transport(
-            {name: CompetitorData(name) for name in "AB"},
-            [(json.dumps(parent), True), (json.dumps(response([])), False),
-             (json.dumps(response([])), False)])
-        self.assertEqual(result.feature_matrix[0].values["A"], "✅")
-        self.assertEqual(result.competitive_advantages, [])
-        self.assertIn(parent["summary"], result.summary)
-        self.assertIn("保留原批次判断：A", result.summary)
+        result=await self.run_bound("AB",[(bound_response([bound_row("蛋白含量",["A"])],["A"]),True),(bound_response(),False),(bound_response(),False)])
+        self.assertIn("A only China 2025",result.feature_matrix[0].values["A"])
+        self.assertEqual(result.competitive_advantages,[])
+        self.assertIn("A only China 2025",result.summary)
+        self.assertIn("保留原批次判断：A",result.summary)
 
 
 if __name__ == "__main__":

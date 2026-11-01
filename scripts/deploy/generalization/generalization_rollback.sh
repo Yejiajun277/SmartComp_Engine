@@ -10,13 +10,13 @@ import shutil
 import subprocess
 import urllib.request
 
-stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-review')
+stage = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-scope')
 source = Path('/opt/apps/smartcomp')
 record = stage / 'promotion-state.json'
 state = json.loads(record.read_text())
 backup = Path(state['backup'])
 assert backup.parent == stage and backup.name.startswith('promotion-backup-')
-assert state['old_image'] == 'sha256:3dfec3bf0d02187b7556612c5f38f951ae3a5567f0e8e909200a558e46a119f8'
+assert state['old_image'] == 'sha256:3fc0013bb129bbbb8abd5573424c3934ba632f9c4598042fcd4e06d4dd991413'
 
 def run(args):
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()

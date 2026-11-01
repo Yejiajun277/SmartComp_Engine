@@ -243,6 +243,7 @@ class UserReputation:
     score: str = ""                         # 评分
     keywords: list[str] = field(default_factory=list)  # 关键词
     citations: list[str] = field(default_factory=list)     # 引用 ID 列表
+    source_text: str = ""                   # 原采集评价及评分范围，不等于统一口径评分
 
 
 @dataclass

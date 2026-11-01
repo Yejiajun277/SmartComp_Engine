@@ -11,6 +11,16 @@ UNKNOWN = "资料不足"
 _SOURCE_LIMIT = re.compile(r"标题|原文截断|表述不完整|原文不完整|不详|未注明|未披露|未知|仅供参考|另有来源|据另一来源")
 _NOT_COMPARABLE = re.compile(
     r"(?:不可|不能|不宜|无法)[^。；;\n]{0,12}(?:比较|排名|排序)|不具可比性|not\s+(?:directly\s+)?comparable|cannot\s+rank|incomparable", re.I)
+_US_REGION = re.compile(
+    r"美国|美國|美区|美區|(?<![A-Za-z0-9_])(?:United\s+States(?:\s+of\s+America)?|USA|U\.S\.A\.|U\.S\.|US)(?![A-Za-z0-9_]|\$)", re.I)
+_PRICE_COMPARISON = re.compile(
+    r"排名|排序|性价比|价差|价[格位]?梯度|更[便宜贵低高优]|最[便宜贵低高优]|低于|高于|领先|优于|便宜|昂贵|"
+    r"\b(?:rank\w*|cheap\w*|cheapest|pricier|cheaper|expensive|best|worst|better|worse|higher|lower)\b|\bvalue\s+(?:for\s+money|leader)\b", re.I)
+_COMPARISON_GAP = "未确认同一市场、日期、规格/权益和计价单位的可比报价；仅展示来源报价与限制，不可直接排名。"
+_CURRENCY_CODES = r"USD|CNY|EUR|GBP|JPY|HKD|TWD|AUD|CAD|NZD|SGD|CHF"
+_MONEY_TOKEN = re.compile(
+    r"(?:US\$|(?<![A-Za-z])(?:" + _CURRENCY_CODES + r")(?![A-Za-z])|[$€£¥￥])\s*(\d+(?:[,.]\d+)*)"
+    r"|(\d+(?:[,.]\d+)*)\s*(?:(?:" + _CURRENCY_CODES + r")(?![A-Za-z])|美元|人民币|日元|欧元|英镑|港元|港币|新台币|元)", re.I)
 
 @dataclass
 class _PricingBatch:
@@ -58,17 +68,124 @@ class PricingAgent(BaseAgent):
         return isinstance(value, str) and value.strip() not in {"", UNKNOWN, "未知", "暂无公开信息", "暂无数据", "⚪", "—"}
 
     @staticmethod
-    def _scope_notes(references):
+    def _amounts(text):
+        return set(re.findall(r"\d+(?:[,.]\d+)*", text))
+
+    @staticmethod
+    def _money_amounts(text):
+        return {value for match in _MONEY_TOKEN.finditer(text) for value in match.groups() if value}
+
+    @staticmethod
+    def _offering_matches(label, sentence):
+        """Require an offering label, not a prefix of a longer priced offering.
+
+        Keep word separators so 'Individual Plus' cannot become 'Individual'.
+        Only ordinary quote grammar may follow the label before the amount;
+        an unrecognised model modifier remains an unconfirmed binding. This
+        deliberately does not guess that two different offering names are aliases.
+        """
+        words = re.findall(r"\w+", label)
+        if not words:
+            return False
+        pattern = r"[\W_]*".join(re.escape(word) for word in words)
+        if words[0][0].isascii() and words[0][0].isalnum():
+            pattern = r"(?<![A-Za-z0-9_])" + pattern
+        for match in re.finditer(pattern, sentence, re.I):
+            tail = sentence[match.end():]
+            price = next(_MONEY_TOKEN.finditer(tail), None)
+            gap = tail[:price.start()] if price else tail
+            gap = _US_REGION.sub("", gap)
+            gap = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", gap)
+            gap = re.sub(r"\b(?:plan|package|tier|sku|price|priced|cost|costs|at|is|now|in|the|for)\b", "", gap, flags=re.I)
+            gap = re.sub(r"价格|價格|报价|報價|售价|售價|定价|定價|套餐|方案|每台|每月|为|為|在", "", gap)
+            if not re.sub(r"[\W_]", "", gap):
+                return True
+        return False
+
+    @classmethod
+    def _quote_sentences(cls, data, tier, citation_ids):
+        """Return source sentences tied to this offering and original amount."""
+        amounts = cls._money_amounts(tier.price)
+        label = re.split(r"[（(]", _US_REGION.sub("", tier.tier_name), maxsplit=1)[0].strip()
+        if not amounts or not label:
+            return []
+        sources = {cite.id: cite for cite in data.citations}
+        result = []
+        for cid in citation_ids:
+            cite = sources.get(cid)
+            if cite is None:
+                continue
+            # Do not borrow a region from an unrelated paragraph of a source.
+            for sentence in re.split(r"[。；;\n]|(?<!\d)\.(?!\d)", cite.snippet):
+                if amounts <= cls._money_amounts(sentence) and cls._offering_matches(label, sentence):
+                    result.append(sentence)
+        return result
+
+    @classmethod
+    def _price_has_us_scope(cls, data, tier, citation_ids):
+        """A dollar sign, search query or another tier is never a country."""
+        return any(_US_REGION.search(sentence) for sentence in cls._quote_sentences(data, tier, citation_ids))
+
+    @classmethod
+    def _bound_region(cls, text, data, citation_ids=None):
+        if not _US_REGION.search(text):
+            return text
+        amounts = cls._amounts(text)
+        selected = [tier for tier in data.pricing_tiers if amounts & cls._amounts(tier.price)]
+        if not re.search(r"\$|USD|美元", text + " ".join(tier.price for tier in selected), re.I):
+            return text
+        if not selected:
+            return _US_REGION.sub("美元计价（来源未注明地区）", text)
+        for tier in selected:
+            ids = [cid for cid in tier.citations if citation_ids is None or cid in citation_ids]
+            if not cls._price_has_us_scope(data, tier, ids):
+                return _US_REGION.sub("美元计价（来源未注明地区）", text)
+        return text
+
+    @classmethod
+    def _scope_notes(cls, references):
         notes = {}
         for entity, data in references.items():
             original = []
             for tier in data.pricing_tiers:
-                for line in [f"{tier.tier_name}: {tier.price}", *tier.features]:
-                    if isinstance(line, str) and _SOURCE_LIMIT.search(line):
-                        original.append(line)
+                # Keep every native quote's scope, not just lines containing a
+                # few uncertainty keywords. These are collected terms, not a
+                # newly inferred current-market offer.
+                line = f"{tier.tier_name}: {tier.price}"
+                original.append(cls._bound_region(line, data, tier.citations))
+                original.extend(tier.features)
+                ids = [cid for cid in tier.citations if any(cite.id == cid for cite in data.citations)]
+                original.append("报价来源：" + (" ".join(f"[{cid}]" for cid in ids) if ids else "资料不足，未绑定有效来源"))
             if original:
                 notes[entity] = list(dict.fromkeys(original))
         return notes
+
+    @staticmethod
+    def _without_comparisons(text):
+        # Price facts remain in the source-bound native quote notes. Do not
+        # leave a softer ranking in a cell after rejecting the ranking array.
+        parts = re.split(r"(?<=[。；;！!?？])|\n", text)
+        return "".join(part for part in parts if not _PRICE_COMPARISON.search(part)).strip() or UNKNOWN
+
+    def _enforce_scope(self, analysis, references, basis):
+        for row in analysis.dimension_comparison:
+            for entity, value in row.values.items():
+                if entity in references:
+                    value = self._bound_region(value, references[entity], row.citations or None)
+                row.values[entity] = value if basis else self._without_comparisons(value)
+        for item in analysis.pricing_comparison:
+            for name in ("free_tier", "paid_tier", "pricing_model"):
+                value = getattr(item, name)
+                if item.competitor in references:
+                    value = self._bound_region(value, references[item.competitor], item.citations or None)
+                setattr(item, name, value if basis or not value else self._without_comparisons(value))
+        if not basis:
+            original = analysis.summary + " " + analysis.pricing_strategy_analysis
+            diagnostics = [word for word in ("降级", "截断", "格式异常") if word in original]
+            analysis.value_ranking = []
+            analysis.summary = ("、".join(diagnostics) + "；" if diagnostics else "") + _COMPARISON_GAP
+            analysis.pricing_strategy_analysis = "各报价的原始规格、价格、条件及来源单独保留；现有证据不足以形成跨品牌价格优劣或性价比结论。"
+        return analysis
 
     def _validated_basis(self, basis, references):
         """Bind comparison context to the chosen original tier and its sources."""
@@ -112,7 +229,10 @@ class PricingAgent(BaseAgent):
                 context = tier_text + " " + source_text
                 if _SOURCE_LIMIT.search(context):
                     continue
-                if all(normalize(basis[name]) in normalize(context) for name in fields):
+                if _US_REGION.search(basis["region"]) and not self._price_has_us_scope(data, tier, ids):
+                    continue
+                if any(all(normalize(basis[name]) in normalize(sentence) for name in fields)
+                       for sentence in self._quote_sentences(data, tier, ids)):
                     supported = True
                     break
             if not supported:
@@ -149,11 +269,7 @@ class PricingAgent(BaseAgent):
         if product_name not in references or _NOT_COMPARABLE.search(prose):
             basis = {}
         analysis.comparable_basis = basis
-        if not basis:
-            analysis.value_ranking = []
-            note = "未确认同一市场、日期、规格/权益和计价单位的可比报价；仅展示来源报价与限制，不可直接排名。"
-            if note not in analysis.summary:
-                analysis.summary += ("\n" if analysis.summary else "") + note
+        self._enforce_scope(analysis, references, basis)
         analysis.citations = list(dict.fromkeys(cid for item in [*analysis.pricing_comparison, *analysis.dimension_comparison] for cid in item.citations))
         return analysis
 
@@ -256,6 +372,9 @@ class PricingAgent(BaseAgent):
         if any("降级" in summary for _, summary, _ in notes):
             merged.summary += "部分请求采用降级结果，未知报价不参与推算或排名。"
         merged.summary += "\n分组报价未确认全体同口径，不可直接排名。"
+        references = {product_name: target_product_data} if target_product_data is not None else {}
+        references.update(competitors_data)
+        self._enforce_scope(merged, references, {})
         return _PricingBatch(merged, notes)
 
     def _build_competitors_text(self, product_name, competitors_data, target_product_data=None):
@@ -269,7 +388,10 @@ class PricingAgent(BaseAgent):
             lines.append(f"- 优势: {data.strengths}")
             lines.append(f"- 劣势: {data.weaknesses}")
             if data.citations:
-                lines.append("- 数据来源:\n" + self.build_citations_text(data.citations))
+                price_sources = {cid for tier in data.pricing_tiers for cid in tier.citations}
+                lines.append("- 数据来源（价阶绑定来源保留完整已保存摘要）:\n" + "\n".join(
+                    self.build_citations_text([cite], max_snippet=len(cite.snippet) if cite.id in price_sources else 200)
+                    for cite in data.citations))
         if target_product_data:
             append_entity(product_name, target_product_data)
         for name, data in competitors_data.items():

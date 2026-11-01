@@ -65,26 +65,49 @@ class CollectionAgent(BaseAgent):
     @staticmethod
     def _valid_extraction(result: dict, fields: list[str]) -> bool:
         """Missing fields are a failed response; explicit unknowns are valid facts."""
-        if not isinstance(result, dict) or any(field not in result for field in fields):
-            return False
+        return not CollectionAgent._extraction_schema_errors(result, fields)
+
+    @staticmethod
+    def _extraction_schema_errors(result: object, fields: list[str]) -> list[dict]:
+        """Return paths/types only: rejection diagnostics never contain model facts."""
+        errors = []
+
+        def expect(path, value, kind, present=True):
+            if not present or not isinstance(value, kind):
+                errors.append({"field": path, "expected": kind.__name__,
+                               "actual_type": type(value).__name__ if present else "missing",
+                               "reason": "invalid_type"})
+                return False
+            return True
+
+        if not expect("$", result, dict):
+            return errors
         for field in fields:
+            if field not in result:
+                expect(field, None, list if field in ("product_features", "pricing_tiers") else str, False)
+                continue
             value = result[field]
             if field in ("product_features", "pricing_tiers"):
-                if not isinstance(value, list):
-                    return False
+                if not expect(field, value, list):
+                    continue
                 required = ("name", "description") if field == "product_features" else ("tier_name", "price")
-                for item in value:
-                    if not isinstance(item, dict) or any(not isinstance(item.get(key), str) for key in required):
-                        return False
-                    if "citations" in item and (not isinstance(item["citations"], list)
-                            or any(not isinstance(cid, str) for cid in item["citations"])):
-                        return False
-                    if field == "pricing_tiers" and (not isinstance(item.get("features", []), list)
-                            or any(not isinstance(feature, str) for feature in item.get("features", []))):
-                        return False
-            elif field not in CompetitorData.TEXT_FIELDS or not isinstance(value, str):
-                return False
-        return True
+                for index, item in enumerate(value):
+                    item_path = f"{field}[{index}]"
+                    if not expect(item_path, item, dict):
+                        continue
+                    for key in required:
+                        expect(f"{item_path}.{key}", item.get(key), str, key in item)
+                    for key in ("citations", "features") if field == "pricing_tiers" else ("citations",):
+                        if key not in item:
+                            continue
+                        if expect(f"{item_path}.{key}", item[key], list):
+                            for offset, text in enumerate(item[key]):
+                                expect(f"{item_path}.{key}[{offset}]", text, str)
+            elif field in CompetitorData.TEXT_FIELDS:
+                expect(field, value, str)
+            else:
+                errors.append({"field": field, "reason": "unknown_field"})
+        return errors
 
     def _apply_extraction(self, original: CompetitorData, result: dict,
                           fields: list[str], visible_ids: set[str]) -> CompetitorData:
@@ -100,7 +123,8 @@ class CollectionAgent(BaseAgent):
         return candidate
 
     @staticmethod
-    def _repair_prompt(entity: str, fields: list[str], context: str, feedback: str = "") -> str:
+    def _repair_prompt(entity: str, fields: list[str], context: str, feedback: str = "", *,
+                       allow_partial: bool = False) -> str:
         schema = {}
         for field in fields:
             if field == "product_features":
@@ -109,11 +133,15 @@ class CollectionAgent(BaseAgent):
                 schema[field] = [{"tier_name": "", "price": "", "features": [], "citations": []}]
             else:
                 schema[field] = ""
+        field_contract = (
+            "仅输出质检要求纠正的字段补丁；下列结构是允许字段及类型，不要求全部返回。"
+            "未返回字段保持原值，不要为省略字段填空；确需撤回的文本显式用空字符串、数组用空数组。"
+            if allow_partial else "每个字段都必须输出，未知文本用空字符串，未知数组用空数组。")
         return (f"请仅从以下真实来源重新提取 {entity} 的指定字段。只输出完整JSON，不要输出其他字段。\n"
                 "保留原文的统计主体、市场、时间、地区、型号、计价单位和促销条件，"
                 "不能将集团/子品牌/地区的范围扩大为当前实体。缺失范围保持未知；"
                 "不支持的断言删除或留空，不能猜测数字或补全截断原文。"
-                "每个字段都必须输出，未知文本用空字符串，未知数组用空数组。"
+                + field_contract +
                 "条目仅绑定本次目录展示的精确来源ID，不能盲填全部ID。\n"
                 f"### 真实来源（仅使用以下ID和原文）\n{context}\n"
                 f"### 输出结构\n{json.dumps(schema, ensure_ascii=False)}\n"
@@ -143,7 +171,7 @@ class CollectionAgent(BaseAgent):
                 original.citations, source_text, max_chars=None, excerpt_chars=None)
             if original.citations:
                 context += "\n### 当前实体完整保存的原始搜索文本（非新搜索）\n" + source_text
-            prompt = self._repair_prompt(name, fields, context, feedback)
+            prompt = self._repair_prompt(name, fields, context, feedback, allow_partial=True)
             previous = asdict(original)
             prompt += ("\n### 待修复提取快照（背景，不是来源证据）\n"
                        + json.dumps({field: previous[field] for field in fields}, ensure_ascii=False, indent=2)
@@ -153,14 +181,28 @@ class CollectionAgent(BaseAgent):
                          "原断言不受来源支持时可以撤回或保留未知，不能把背景内容当作来源补证。")
             prompt += "\n来源来自已保存快照，本轮没有重新联网搜索。"
             prompt += f"\n### 当前产品背景（非来源证据）\n{product_name}\n{product_description}"
+            log_count = len(self.llm_logs)
             result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=8192, temperature=0)
-            if reason != "success" or not self._valid_extraction(result, fields):
-                outcome["reason"] = reason if reason != "success" else "incomplete_or_invalid_schema"
+            response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
+            if reason != "success" or response.get("finish_reason") != "stop":
+                outcome["reason"] = (reason if reason != "success" else
+                                     f"incomplete_finish_reason({response.get('finish_reason') or 'missing'})")
                 continue
-            candidate = self._apply_extraction(original, result, fields, visible_ids)
-            self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet for c in original.citations))
+            patch_fields = [field for field in fields if isinstance(result, dict) and field in result]
+            errors = self._extraction_schema_errors(result, patch_fields)
+            if isinstance(result, dict):
+                errors.extend({"field": field, "reason": "unknown_field"} for field in result if field not in fields)
+                if not result:
+                    errors.append({"field": "$", "reason": "empty_patch"})
+            if errors:
+                outcome.update(reason="incomplete_or_invalid_schema", schema_errors=errors)
+                continue
+            candidate = self._apply_extraction(original, result, patch_fields, visible_ids)
+            self._validate_against_source(candidate, source_text + "\n" + "\n".join(c.snippet for c in original.citations),
+                                          field_names=set(patch_fields))
             updated[name] = candidate
-            outcome.update(status="accepted", reason="complete_json_from_saved_sources")
+            outcome.update(status="accepted", reason="complete_json_from_saved_sources",
+                           applied_fields=patch_fields, preserved_fields=[field for field in fields if field not in patch_fields])
         return updated
 
     @staticmethod

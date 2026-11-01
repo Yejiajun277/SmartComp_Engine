@@ -2,7 +2,7 @@
 """Product comparison with category-safe dimensions and bounded recovery."""
 import re
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 
 from agents.base_agent import BaseAgent
 from models.domain import CompetitorData, ProductAnalysis, FeatureComparison, CompetitiveAdvantage
@@ -15,6 +15,7 @@ class _ProductBatch:
     """Transient recovery provenance; rendered notes live in the public summary."""
     analysis: ProductAnalysis
     notes: list[tuple[tuple[str, ...], str]] = field(default_factory=list)
+    narrative_citations: list[str] = field(default_factory=list)
 
 
 class ProductAgent(BaseAgent):
@@ -84,8 +85,8 @@ class ProductAgent(BaseAgent):
         analysis.competitive_advantages = [adv for adv in analysis.competitive_advantages
                                            if adv.competitor in competitors_data]
         analysis.citations = list(dict.fromkeys(
-            cite for item in [*analysis.feature_matrix, *analysis.competitive_advantages]
-            for cite in item.citations))
+            [*analysis.citations, *(cite for item in [*analysis.feature_matrix, *analysis.competitive_advantages]
+                                    for cite in item.citations)]))
         return analysis
 
     async def run(self, product_name: str,
@@ -126,7 +127,134 @@ class ProductAgent(BaseAgent):
         if feedback:
             text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
         prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=text)
-        return await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=max_tokens)
+        result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=max_tokens)
+        if result:
+            result = self._ground_result(result, product_name, competitors_data, target_product_data)
+        return result, truncated
+
+    @staticmethod
+    def _entity_facts(data: CompetitorData) -> dict:
+        """Stable entity-local selectors; quotations retain the whole saved scope.
+
+        Tier features are product facts too: a combined SKU comparison may have
+        positive evidence for one SKU only in its individual tier description.
+        Prices themselves are intentionally outside this product catalog.
+        """
+        sources = {citation.id for citation in data.citations if citation.id}
+        facts = {}
+        for index, item in enumerate(data.product_features):
+            text = "：".join(value for value in (item.name, item.description) if value)
+            facts[f"product_features[{index}]"] = {
+                "text": text,
+                "citations": list(dict.fromkeys(c for c in item.citations if c in sources)),
+            }
+        for tier_index, tier in enumerate(data.pricing_tiers):
+            for feature_index, text in enumerate(tier.features):
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                facts[f"pricing_tiers[{tier_index}].features[{feature_index}]"] = {
+                    "text": f"{tier.tier_name}：{text}",
+                    "citations": list(dict.fromkeys(c for c in tier.citations if c in sources)),
+                }
+        return facts
+
+    def _ground_result(self, result, product_name, competitors_data, target_product_data):
+        """Project selected saved facts, never an unqualified model paraphrase.
+
+        A row-wide source citation cannot prove that one status applies to every
+        SKU in a column. Text cells therefore retain the original fact and its
+        version/region qualifiers; absent bindings remain genuine gaps. This is
+        not a semantic verification of the collected fact (the QA gate does that).
+        """
+        entities = dict(competitors_data)
+        if target_product_data:
+            entities[product_name] = target_product_data
+        catalogs = {name: self._entity_facts(data) for name, data in entities.items()}
+        if not isinstance(result, dict):
+            return {}
+        def select(entity, fact_ids):
+            if not isinstance(fact_ids, list):
+                return [], []
+            selected, citations = [], []
+            for fact_id in fact_ids:
+                if not isinstance(fact_id, str):
+                    continue
+                fact = catalogs.get(entity, {}).get(fact_id)
+                if not fact or not fact["text"] or not fact["citations"]:
+                    continue
+                if fact["text"] not in selected:
+                    selected.append(fact["text"])
+                citations.extend(fact["citations"])
+            return selected, list(dict.fromkeys(citations))
+
+        def project(facts):
+            lines, citations = [], []
+            if not isinstance(facts, list):
+                return lines, citations
+            for item in facts:
+                if not isinstance(item, dict) or not isinstance(item.get("entity"), str):
+                    continue
+                entity = item["entity"]
+                selected, refs = select(entity, item.get("fact_ids"))
+                lines.extend(f"{entity}｜{text}" for text in selected)
+                citations.extend(refs)
+            return list(dict.fromkeys(lines)), list(dict.fromkeys(citations))
+
+        rows, all_citations = [], []
+        raw_rows = result.get("feature_matrix")
+        for row in raw_rows if isinstance(raw_rows, list) else []:
+            if not isinstance(row, dict) or not isinstance(row.get("feature"), str):
+                continue
+            evidence = row.get("evidence")
+            evidence = evidence if isinstance(evidence, dict) else {}
+            values, refs = {}, []
+            for entity in (product_name, *competitors_data):
+                selected, bound_refs = select(entity, evidence.get(entity))
+                values[entity] = ("采集事实（仅限下述原文范围）：" + "；".join(selected)
+                                  if selected else "⚪")
+                refs.extend(bound_refs)
+            refs = list(dict.fromkeys(refs))
+            rows.append({"feature": row["feature"], "values": values, "citations": refs})
+            all_citations.extend(refs)
+
+        advantages = []
+        raw_advantages = result.get("competitive_advantages")
+        for item in raw_advantages if isinstance(raw_advantages, list) else []:
+            if (not isinstance(item, dict) or not isinstance(item.get("competitor"), str)
+                    or item["competitor"] not in competitors_data):
+                continue
+            rival = item["competitor"]
+            ours, our_refs = select(product_name, item.get("our_evidence"))
+            theirs, their_refs = select(rival, item.get("their_evidence"))
+            if not ours and not theirs:
+                continue
+            refs = list(dict.fromkeys(our_refs + their_refs))
+            advantages.append({"competitor": rival,
+                "our_advantage": "比较依据（仅限采集规格）：" + "；".join(ours) if ours else "资料不足，不能确认优势。",
+                "their_advantage": "比较依据（仅限采集规格）：" + "；".join(theirs) if theirs else "资料不足，不能确认优势。",
+                "citations": refs})
+            all_citations.extend(refs)
+
+        points, narrative_citations = [], []
+        raw_points = result.get("differentiation_points")
+        for item in raw_points if isinstance(raw_points, list) else []:
+            if not isinstance(item, dict):
+                continue
+            lines, refs = project(item.get("facts"))
+            if lines:
+                points.append("；".join(lines))
+                all_citations.extend(refs)
+                narrative_citations.extend(refs)
+        raw_summary = result.get("summary")
+        lines, refs = project(raw_summary.get("facts") if isinstance(raw_summary, dict) else None)
+        all_citations.extend(refs)
+        narrative_citations.extend(refs)
+        return {"feature_matrix": rows, "competitive_advantages": advantages,
+                "differentiation_points": points[:3],
+                "summary": ("按采集规格逐项比较，不外推其他SKU/地区：\n" + "\n".join(lines)
+                            if lines else "资料不足：摘要缺少有效的逐实体事实绑定，未保留无范围的模型断言。"),
+                "citations": list(dict.fromkeys(all_citations)),
+                "_narrative_citations": list(dict.fromkeys(narrative_citations))}
 
     async def _run_chunked(self, product_name: str,
                            competitors_data: dict[str, CompetitorData],
@@ -169,7 +297,7 @@ class ProductAgent(BaseAgent):
     @staticmethod
     def _scoped_batch(analysis, competitors_data):
         notes = [(tuple(competitors_data), analysis.summary)] if analysis.summary else []
-        return _ProductBatch(analysis, notes)
+        return _ProductBatch(analysis, notes, getattr(analysis, "_narrative_citations", []))
 
     def _merge_analyses(self, batches, product_name, competitors_data, dimensions,
                         *, replace_parent: bool = False):
@@ -183,6 +311,9 @@ class ProductAgent(BaseAgent):
         # A truncated parent's global conclusions are obsolete after recovery.
         # Peer batches contribute scoped points in order, with exact duplicates removed.
         point_sources = analyses[1:] if replace_parent else analyses
+        narrative_batches = batches[1:] if replace_parent else batches
+        narrative_citations = list(dict.fromkeys(
+            cite for batch in narrative_batches for cite in batch.narrative_citations))
         merged = ProductAnalysis(
             feature_matrix=[row for analysis in analyses for row in analysis.feature_matrix],
             competitive_advantages=list(advantages.values()),
@@ -190,6 +321,7 @@ class ProductAgent(BaseAgent):
                 point.strip() for analysis in point_sources
                 for point in analysis.differentiation_points
                 if isinstance(point, str) and point.strip()))[:3],
+            citations=narrative_citations,
         )
         merged = self._complete_analysis(merged, product_name, competitors_data, dimensions)
         # Batch-local narratives cannot describe the scope of the merged report.
@@ -232,10 +364,13 @@ class ProductAgent(BaseAgent):
             if retained:
                 suffix = f"【保留原批次判断：{'、'.join(retained)}；其余以恢复结果为准】"
                 notes = [(scope, text + suffix) for scope, text in batches[0].notes] + notes
+                narrative_citations = list(dict.fromkeys(
+                    narrative_citations + batches[0].narrative_citations))
+                merged.citations = list(dict.fromkeys(merged.citations + narrative_citations))
         notes = list(dict.fromkeys(notes))
         for scope, text in notes:
             merged.summary += f"\n局部比较（仅包含 {'、'.join(scope)}）：{text}"
-        return _ProductBatch(merged, notes)
+        return _ProductBatch(merged, notes, narrative_citations)
 
 
     def _build_competitors_text(self, product_name: str,
@@ -247,11 +382,8 @@ class ProductAgent(BaseAgent):
         def append_entity(name: str, data: CompetitorData):
             label = name if name != product_name else f"{name}(我方产品)"
             lines.append(f"\n### {label}")
-            if data.product_features:
-                lines.append("- 产品功能（完整原始条目、限定和引用）: " + json.dumps(
-                    [asdict(feature) for feature in data.product_features], ensure_ascii=False))
-            else:
-                lines.append("- 产品功能: 暂无数据")
+            lines.append("- 产品功能（完整原始条目、限定和引用；ID仅在本实体内有效）: " + json.dumps(
+                self._entity_facts(data), ensure_ascii=False))
             lines.append(f"- 优势: {data.strengths}")
             lines.append(f"- 劣势: {data.weaknesses}")
             if data.citations:
@@ -267,7 +399,7 @@ class ProductAgent(BaseAgent):
 
     def _parse_product_analysis(self, result: dict) -> ProductAnalysis:
         """解析LLM返回的产品分析结果，提取引用 ID"""
-        all_citation_ids = []
+        all_citation_ids = list(result.get("citations", []))
 
         feature_matrix = []
         for fm in result.get("feature_matrix", []):
@@ -290,13 +422,16 @@ class ProductAgent(BaseAgent):
                 citations=adv_cites,
             ))
 
-        return ProductAnalysis(
+        analysis = ProductAnalysis(
             feature_matrix=feature_matrix,
             competitive_advantages=advantages,
             differentiation_points=result.get("differentiation_points", []),
             summary=result.get("summary", ""),
             citations=list(set(all_citation_ids)),
         )
+        # Internal recovery provenance is excluded from the persisted dataclass.
+        analysis._narrative_citations = result.get("_narrative_citations", [])
+        return analysis
 
     def _rule_analyze(self, product_name: str,
                        competitors_data: dict[str, CompetitorData],

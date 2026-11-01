@@ -424,7 +424,7 @@ class AnalysisQualityPromptIntegrityTests(unittest.IsolatedAsyncioTestCase):
             ), {
                 "market_share_data": [{"competitor": "Dymatize", "share_estimate": "Unknown", "trend": "No measured share", "citations": ["market-source"]}],
                 "growth_trends": "More low-sugar launches",
-                "user_reputation": {"Dymatize": {"score": "Unknown", "keywords": ["Taste"], "citations": ["review-source"]}},
+                "user_reputation": {"Dymatize": {"score": "Unknown", "keywords": ["Taste"], "citations": ["review-source"], "source_text": ""}},
                 "user_profiles": {"Dymatize": {"target_audience": "Strength athletes", "age_range": "", "occupation_distribution": [], "use_cases": [], "pain_points": [], "citations": ["profile-source"]}},
                 "channel_analysis": "Official retail", "summary": "Qualitative market signals", "citations": ["market-source"],
             }),

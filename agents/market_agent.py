@@ -1,261 +1,228 @@
 # -*- coding: utf-8 -*-
-"""
-agents/market_agent.py — 市场分析Agent
-
-职责：分析市场份额、增长趋势、用户口碑、渠道策略
-LLM调用：1次
-外部工具：无
-提示词来源：prompts/market_agent.md
-"""
+"""Market evidence projection with entity-local sources and bounded recovery."""
+from dataclasses import asdict
+import json
+import re
 
 from agents.base_agent import BaseAgent
 from models.domain import CompetitorData, MarketAnalysis, MarketShareItem, UserReputation, UserProfile
 from core.prompt_loader import load as load_prompts
 import config
-import json
 
 
 class MarketAgent(BaseAgent):
-    """市场分析Agent — 市场格局与趋势"""
+    """Select source bindings; numerical conclusions remain saved collection facts."""
+
+    _SOURCE_FIELDS = {"market_share", "user_reviews", "channels"}
 
     def __init__(self):
         prompts = load_prompts("market_agent")
-        super().__init__(
-            agent_id="MarketAgent",
-            system_prompt=prompts["system_prompt"],
-        )
+        super().__init__(agent_id="MarketAgent", system_prompt=prompts["system_prompt"])
         self._prompt_analyze = prompts["prompt_analyze"]
 
-    async def run(self, product_name: str,
-                  competitors_data: dict[str, CompetitorData],
-                  target_product_data: CompetitorData | None = None,
-                  feedback: str = "") -> MarketAnalysis:
-        """
-        主运行逻辑：全量数据分析市场格局
-
-        Args:
-            product_name: 用户产品名称
-            competitors_data: 竞品采集数据
-
-        Returns:
-            MarketAnalysis: 市场分析结果
-        """
-        self._log("📈 开始市场分析...")
-
-        competitors_text = self._build_competitors_text(product_name, competitors_data, target_product_data)
-
-        # 注入质检反馈
-        if feedback:
-            competitors_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
-
-        if config.ENABLE_LLM:
-            prompt = self._prompt_analyze.format(
-                product_name=product_name,
-                competitors_text=competitors_text,
-            )
-            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
-            if result:
-                if truncated and len(competitors_data) >= 2:
-                    self._log(f"⚠️ 检测到输出截断，启动分片重试...")
-                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
-                    if chunked:
-                        return chunked
-                analysis = self._parse_market_analysis(result)
-                self._log(f"✅ 市场分析完成: {len(analysis.market_share_data)}个竞品市场数据")
-                return analysis
-            else:
-                if truncated and len(competitors_data) >= 2:
-                    self._log(f"⚠️ JSON解析失败+截断，尝试分片重试...")
-                    chunked = await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
-                    if chunked:
-                        return chunked
-                self._log("⚠️ LLM市场分析失败，降级到规则引擎")
-
-        return self._rule_analyze(product_name, competitors_data)
-
-    async def _run_chunked(self, product_name: str,
-                           competitors_data: dict[str, CompetitorData],
-                           target_product_data: CompetitorData | None,
-                           feedback: str) -> MarketAnalysis | None:
-        """分片重试：将竞品拆成多批分别调用LLM，再合并结果。"""
-        all_names = list(competitors_data.keys())
-        if len(all_names) < 2:
-            return None
-
-        mid = len(all_names) // 2
-        chunks = [
-            {name: competitors_data[name] for name in all_names[:mid]},
-            {name: competitors_data[name] for name in all_names[mid:]},
-        ]
-
-        all_share = []
-        all_reputation = {}
-        all_profiles = {}
-        analyses = []
-        all_citations = []
-
-        for i, chunk in enumerate(chunks):
-            self._log(f"  📦 分片 {i+1}/{len(chunks)}: {list(chunk.keys())}")
-            chunk_text = self._build_competitors_text(product_name, chunk, target_product_data)
-            if feedback:
-                chunk_text += f"\n\n### 质检反馈（请据此修正）\n{feedback}"
-
-            prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=chunk_text)
-            result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=4096)
-            if not result:
-                self._log(f"  ⚠️ 分片 {i+1} 调用失败，跳过")
-                continue
-
-            if truncated and len(chunk) >= 2:
-                self._log(f"  ⚠️ 分片 {i+1} 仍然截断，继续拆分...")
-                sub = await self._run_chunked(product_name, chunk, target_product_data, feedback)
-                if sub:
-                    all_share.extend(sub.market_share_data)
-                    all_reputation.update(sub.user_reputation)
-                    all_profiles.update(sub.user_profiles)
-                    all_citations.extend(sub.citations)
-                    if sub.growth_trends:
-                        analyses.append(sub.growth_trends)
-                continue
-
-            parsed = self._parse_market_analysis(result)
-            all_share.extend(parsed.market_share_data)
-            all_reputation.update(parsed.user_reputation)
-            all_profiles.update(parsed.user_profiles)
-            all_citations.extend(parsed.citations)
-            if parsed.growth_trends:
-                analyses.append(parsed.growth_trends)
-
-        if not all_share and not all_reputation:
-            return None
-
-        self._log(f"✅ 分片合并完成: {len(all_share)}个市场份额, {len(all_reputation)}个口碑, {len(all_profiles)}个画像")
-        return MarketAnalysis(
-            market_share_data=all_share,
-            growth_trends="；".join(analyses) if analyses else "",
-            user_reputation=all_reputation,
-            user_profiles=all_profiles,
-            channel_analysis="",
-            summary="",
-            citations=list(set(all_citations)),
-        )
-
-    def _build_competitors_text(self, product_name: str,
-                                 competitors_data: dict[str, CompetitorData],
-                                 target_product_data: CompetitorData | None = None) -> str:
-        """构建竞品市场数据文本，附带引用来源编号"""
-        lines = []
-
-        def append_entity(name: str, data: CompetitorData):
-            label = name if name != product_name else f"{name}(我方产品)"
-            lines.append(f"\n### {label}")
-            lines.append(f"- 市场份额: {data.market_share[:300]}")
-            lines.append(f"- 用户评价: {data.user_reviews[:300]}")
-            lines.append(f"- 渠道策略: {data.channels[:200]}")
-            if data.citations:
-                lines.append(f"- 数据来源:")
-                lines.append(self.build_citations_text(data.citations))
-
-        if target_product_data:
-            append_entity(product_name, target_product_data)
-        for name, data in competitors_data.items():
-            append_entity(name, data)
-        return "\n".join(lines)
-
-    # 商业/财务术语黑名单（pain_points 中不允许出现）
-    _COMMERCIAL_TERMS = {
-        "定价", "涨幅", "C端", "B端", "获客", "变现", "营收", "毛利",
-        "净利", "ARPU", "LTV", "CAC", "ROI", "GMV", "付费率",
-        "续费", "客单价", "转化率", "复购", "漏斗", "投放",
-    }
-
-    @classmethod
-    def _sanitize_pain_points(cls, pain_points: list[str]) -> list[str]:
-        """过滤掉商业/财务术语，只保留用户视角的痛点"""
-        cleaned = []
-        for pp in pain_points:
-            if not pp or not pp.strip():
-                continue
-            # 检查是否包含商业术语
-            if any(term in pp for term in cls._COMMERCIAL_TERMS):
-                continue
-            cleaned.append(pp.strip())
-        return cleaned if cleaned else ["暂无用户视角痛点数据"]
+    @staticmethod
+    def _entities(product_name, competitors_data, target_product_data=None):
+        entities = {}
+        if target_product_data is not None:
+            if product_name in competitors_data:
+                raise ValueError("Target and rival identities must be distinct")
+            entities[product_name] = target_product_data
+        entities.update(competitors_data)
+        return entities
 
     @staticmethod
-    def _normalize_trend(trend: str) -> str:
-        """标准化趋势描述为枚举值"""
-        t = trend.strip()
-        if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑", "高速", "快速增长"]):
-            return "上升"
-        elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓", "小幅下降"]):
-            return "下降"
+    def _source_catalog(name, data):
+        return {cite.id: cite for cite in data.citations if cite.id and cite.snippet.strip()
+                and cite.competitor in ("", name, data.name)}
+
+    def _build_competitors_text(self, product_name: str, competitors_data: dict[str, CompetitorData],
+                                target_product_data: CompetitorData | None = None) -> str:
+        """Keep full fields and source metadata; do not duplicate raw search_sources."""
+        records = {}
+        for name, data in self._entities(product_name, competitors_data, target_product_data).items():
+            records[name] = asdict(data)
+            records[name].pop("search_sources", None)
+        return json.dumps(records, ensure_ascii=False, indent=2)
+
+    @classmethod
+    def _valid_selection(cls, result):
+        if not isinstance(result, dict) or not isinstance(result.get("entity_sources"), dict):
+            return False
+        for name, fields in result["entity_sources"].items():
+            if not isinstance(name, str) or not isinstance(fields, dict):
+                return False
+            for field, refs in fields.items():
+                if field not in cls._SOURCE_FIELDS or not isinstance(refs, list) or any(
+                        not isinstance(cid, str) for cid in refs):
+                    return False
+        return True
+
+    async def _request_selection(self, product_name, competitors_data, target_product_data, feedback):
+        text = self._build_competitors_text(product_name, competitors_data, target_product_data)
+        if feedback:
+            text += "\n\n### 完整质检反馈（不是事实来源）\n" + feedback
+        prompt = self._prompt_analyze.format(product_name=product_name, competitors_text=text)
+        log_count = len(self.llm_logs)
+        result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192)
+        response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
+        complete = not truncated and response.get("finish_reason") == "stop" and self._valid_selection(result)
+        # Parseable length/content-filter responses are not completed selections.
+        return (result, False) if complete else ({}, True)
+
+    async def run(self, product_name: str, competitors_data: dict[str, CompetitorData],
+                  target_product_data: CompetitorData | None = None, feedback: str = "") -> MarketAnalysis:
+        self._log("📈 开始市场事实与来源核对...")
+        if config.ENABLE_LLM:
+            result, incomplete = await self._request_selection(
+                product_name, competitors_data, target_product_data, feedback)
+            if incomplete and len(competitors_data) >= 2:
+                return await self._run_chunked(product_name, competitors_data, target_product_data, feedback)
+            if result:
+                analysis = self._parse_market_analysis(result, product_name, competitors_data, target_product_data)
+                return self._mark_source_review(analysis, dict.fromkeys(
+                    self._entities(product_name, competitors_data, target_product_data), True))
+            analysis = self._parse_market_analysis({}, product_name, competitors_data, target_product_data)
+            return self._mark_source_review(analysis, dict.fromkeys(
+                self._entities(product_name, competitors_data, target_product_data), False))
+        return self._rule_analyze(product_name, competitors_data, target_product_data)
+
+    @staticmethod
+    def _mark_source_review(analysis, states):
+        """Persist a readable evidence gap; transient states serve nested merges."""
+        finished = [name for name, value in states.items() if value is True]
+        unfinished = [name for name, value in states.items() if value is False]
+        unrequested = [name for name, value in states.items() if value is None]
+        if unfinished:
+            note = "来源对应核对未完成：" + "、".join(unfinished) + "。"
+            if finished:
+                note += "已完成：" + "、".join(finished) + "。"
+            note += "未完成部分仅保留已采集原文供复核。"
+        elif unrequested:
+            note = "尚未进行来源对应核对；以下仅保留已采集原文供复核。"
         else:
-            return "稳定"
+            note = "来源对应核对已完成；原采集事实及其限制仍逐项保留。"
+        analysis.summary = note + "\n" + analysis.summary
+        analysis._source_review_states = dict(states)
+        return analysis
 
-    def _parse_market_analysis(self, result: dict) -> MarketAnalysis:
-        """解析LLM返回的市场分析结果，提取引用 ID"""
-        all_citation_ids = []
+    async def _run_chunked(self, product_name: str, competitors_data: dict[str, CompetitorData],
+                           target_product_data: CompetitorData | None, feedback: str) -> MarketAnalysis:
+        """At most 2*N-1 requests including the initial call; failed leaves retain facts."""
+        names = list(competitors_data)
+        if len(names) < 2:
+            analysis = self._parse_market_analysis({}, product_name, competitors_data, target_product_data)
+            return self._mark_source_review(analysis, dict.fromkeys(
+                self._entities(product_name, competitors_data, target_product_data), False))
+        analyses = []
+        mid = len(names) // 2
+        for subset in (names[:mid], names[mid:]):
+            chunk = {name: competitors_data[name] for name in subset}
+            result, incomplete = await self._request_selection(product_name, chunk, target_product_data, feedback)
+            if incomplete and len(chunk) >= 2:
+                analysis = await self._run_chunked(product_name, chunk, target_product_data, feedback)
+            else:
+                analysis = self._parse_market_analysis(result, product_name, chunk, target_product_data)
+                self._mark_source_review(analysis, dict.fromkeys(
+                    self._entities(product_name, chunk, target_product_data), not incomplete))
+            analyses.append(analysis)
+        merged = self._parse_market_analysis({}, product_name, competitors_data, target_product_data)
+        # Rebuild from the full immutable map, then merge only checked source
+        # IDs. Target duplication and chunk-generated statistics cannot survive.
+        for row in merged.market_share_data:
+            row.citations = list(dict.fromkeys(cid for analysis in analyses
+                for part in analysis.market_share_data if part.competitor == row.competitor for cid in part.citations))
+        for name, reputation in merged.user_reputation.items():
+            reputation.citations = list(dict.fromkeys(cid for analysis in analyses
+                if name in analysis.user_reputation for cid in analysis.user_reputation[name].citations))
+        merged.citations = list(dict.fromkeys([*merged.citations,
+            *(cid for analysis in analyses for cid in analysis.citations)]))
+        states = dict.fromkeys(self._entities(product_name, competitors_data, target_product_data), False)
+        for analysis in analyses:
+            for name, completed in analysis._source_review_states.items():
+                # The target snapshot is identical in every branch: one real
+                # completed source review suffices; a failed sibling cannot
+                # discard that completed review or claim an unchecked rival.
+                states[name] = states[name] or completed
+        return self._mark_source_review(merged, states)
 
-        market_share_data = []
-        for ms in result.get("market_share_data", []):
-            ms_cites = self.extract_citation_ids(ms)
-            all_citation_ids.extend(ms_cites)
-            market_share_data.append(MarketShareItem(
-                competitor=ms.get("competitor", ""),
-                share_estimate=ms.get("share_estimate", ""),
-                trend=self._normalize_trend(ms.get("trend", "")),
-                citations=ms_cites,
-            ))
+    @staticmethod
+    def _normalize_trend(trend) -> str:
+        """No default stability and no direction inferred from a substring/negation."""
+        return {"上升": "上升", "增长": "上升", "下降": "下降", "稳定": "稳定"}.get(
+            trend.strip() if isinstance(trend, str) else "", "未知")
 
-        user_reputation = {}
-        for name, rep in result.get("user_reputation", {}).items():
-            rep_cites = self.extract_citation_ids(rep)
-            all_citation_ids.extend(rep_cites)
-            user_reputation[name] = UserReputation(
-                score=rep.get("score", ""),
-                keywords=rep.get("keywords", []),
-                citations=rep_cites,
-            )
+    @staticmethod
+    def _literal(text):
+        return re.sub(r"\s+", "", text)
 
-        user_profiles = {}
-        for name, profile in result.get("user_profiles", {}).items():
-            profile_cites = self.extract_citation_ids(profile)
-            all_citation_ids.extend(profile_cites)
-            user_profiles[name] = UserProfile(
-                target_audience=profile.get("target_audience", ""),
-                age_range=profile.get("age_range", ""),
-                occupation_distribution=profile.get("occupation_distribution", []),
-                use_cases=profile.get("use_cases", []),
-                pain_points=self._sanitize_pain_points(profile.get("pain_points", [])),
-                citations=profile_cites,
-            )
+    @classmethod
+    def _rating_evidence(cls, name, data):
+        """Retain a source-bound native rating; never synthesize a unified score.
 
-        return MarketAnalysis(
-            market_share_data=market_share_data,
-            growth_trends=result.get("growth_trends", ""),
-            user_reputation=user_reputation,
-            user_profiles=user_profiles,
-            channel_analysis=result.get("channel_analysis", ""),
-            summary=result.get("summary", ""),
-            citations=list(set(all_citation_ids)),
-        )
+        The whole saved statement, not just a matching numeral, must occur in
+        one entity-owned snippet. A translated/paraphrased statement that cannot
+        be bound this way remains fully visible in source_text; unknown here
+        does not mean the underlying source has no rating.
+        """
+        text = data.user_reviews
+        if not re.search(r"评分|評分|星级|星級|\brating\b|\brated\b|\bscore\b", text, re.I):
+            return "未知", []
+        if re.search(r"(?:未(?:披露|提供|公开)?|没有|无|no\s+(?:public\s+)?)\s*(?:评分|評分|rating|score)", text, re.I):
+            return "未知", []
+        if re.search(r"估计|估算|推测|推算|预测|假设|模拟|estimated|assumed|predicted|synthetic|hypothetical", text, re.I):
+            return "未知", []
+        ratings = []
+        for match in re.finditer(r"(?<![\d./])(\d+(?:\.\d+)?)\s*(?:/|out\s+of)\s*(\d+(?:\.\d+)?)(?![\d./])", text, re.I):
+            value, scale = map(float, match.groups())
+            if scale in (5, 10, 100) and 0 <= value <= scale:
+                ratings.append(match.group(0))
+        if len(ratings) != 1:
+            return "未知", []
+        normalized = cls._literal(text)
+        refs = [cid for cid, cite in cls._source_catalog(name, data).items()
+                if normalized and normalized in cls._literal(cite.snippet)]
+        return (ratings[0], refs) if refs else ("未知", [])
 
-    def _rule_analyze(self, product_name: str,
-                       competitors_data: dict[str, CompetitorData]) -> MarketAnalysis:
-        """规则引擎市场分析"""
-        market_share_data = []
-        for name, data in competitors_data.items():
-            market_share_data.append(MarketShareItem(
-                competitor=name,
-                share_estimate=data.market_share[:100] if data.market_share else "未知",
-                trend="未知",
-            ))
+    def _parse_market_analysis(self, result: dict, product_name: str = "",
+                               competitors_data: dict[str, CompetitorData] | None = None,
+                               target_product_data: CompetitorData | None = None) -> MarketAnalysis:
+        """Project authoritative saved fields; model output supplies source IDs only."""
+        entities = self._entities(product_name, competitors_data or {}, target_product_data)
+        selections = result.get("entity_sources", {}) if isinstance(result, dict) else {}
+        selections = selections if isinstance(selections, dict) else {}
+        analysis = MarketAnalysis()
+        all_refs = []
+        for name, data in entities.items():
+            catalog = self._source_catalog(name, data)
+            selected = selections.get(name, {})
+            selected = selected if isinstance(selected, dict) else {}
 
-        return MarketAnalysis(
-            market_share_data=market_share_data,
-            growth_trends="(规则引擎分析，详情请启用LLM)",
-            user_reputation={},
-            channel_analysis="",
-            summary="基于搜索结果的简单市场信息提取（建议启用LLM获得深度分析）",
-        )
+            def refs(field):
+                values = selected.get(field, [])
+                values = values if isinstance(values, list) else []
+                return list(dict.fromkeys(cid for cid in values if isinstance(cid, str) and cid in catalog))
+
+            share_refs = refs("market_share")
+            analysis.market_share_data.append(MarketShareItem(name, data.market_share or "未知", "未知", share_refs))
+            score, score_refs = self._rating_evidence(name, data)
+            review_refs = list(dict.fromkeys([*score_refs, *refs("user_reviews")]))
+            analysis.user_reputation[name] = UserReputation(score=score, citations=review_refs, source_text=data.user_reviews)
+            # No separately collected demographic/trend facts exist in the
+            # current schema. Do not turn review/spec text into ages, occupations,
+            # user proportions, growth, or default stability.
+            analysis.user_profiles[name] = UserProfile(target_audience="未知", age_range="未知")
+            all_refs.extend([*share_refs, *review_refs, *refs("channels")])
+        analysis.growth_trends = "未合并不同主体、年份或统计口径；趋势未知。\n" + "\n".join(
+            f"{name}｜采集市场记录：{data.market_share or '未知'}" for name, data in entities.items())
+        analysis.channel_analysis = "\n".join(f"{name}｜{data.channels or '未知'}" for name, data in entities.items())
+        analysis.summary = "按实体保留采集原文与适用范围，不估算缺失的份额、评分或人群统计。\n" + "\n".join(
+            f"{row.competitor}｜市场记录：{row.share_estimate}；趋势：未知；可直接绑定评分：{analysis.user_reputation[row.competitor].score}"
+            for row in analysis.market_share_data)
+        analysis.citations = list(dict.fromkeys(all_refs))
+        return analysis
+
+    def _rule_analyze(self, product_name: str, competitors_data: dict[str, CompetitorData],
+                       target_product_data: CompetitorData | None = None) -> MarketAnalysis:
+        analysis = self._parse_market_analysis({}, product_name, competitors_data, target_product_data)
+        return self._mark_source_review(analysis, dict.fromkeys(
+            self._entities(product_name, competitors_data, target_product_data), None))

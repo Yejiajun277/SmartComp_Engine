@@ -19,6 +19,8 @@ from core.search_client import SearchClient
 from core.prompt_loader import load as load_prompts
 import config
 import json
+from copy import deepcopy
+from dataclasses import asdict
 
 
 class StrategyAgent(BaseAgent):
@@ -110,14 +112,49 @@ class StrategyAgent(BaseAgent):
                 report = self._parse_strategy_report(product_name, competitor_count, result)
                 report.citation_index = citation_index
                 report.target_product_data = target_product_data
+                self._seal_report_context(report, product_analysis, pricing_analysis, market_analysis)
                 self._log(f"✅ 策略建议完成: {len(report.action_plan)}项行动方案")
                 return report
             else:
                 self._log("⚠️ LLM策略建议失败，降级到规则引擎")
 
-        return self._rule_strategy(product_name, competitor_count,
-                                    product_analysis, pricing_analysis, market_analysis,
-                                    citation_index, target_product_data)
+        report = self._rule_strategy(product_name, competitor_count,
+                                     product_analysis, pricing_analysis, market_analysis,
+                                     citation_index, target_product_data)
+        return self._seal_report_context(report, product_analysis, pricing_analysis, market_analysis)
+
+    @staticmethod
+    def _seal_report_context(report, product_analysis=None, pricing_analysis=None, market_analysis=None):
+        """The report may propose strategy, but cannot rewrite upstream facts."""
+        for field, analysis in (("product_analysis_summary", product_analysis),
+                                ("pricing_analysis_summary", pricing_analysis),
+                                ("market_analysis_summary", market_analysis)):
+            if analysis is not None:
+                setattr(report, field, analysis.summary)
+        data = report.target_product_data
+        if data is not None:
+            allowed = {citation.id for citation in data.citations}
+            def citations(values):
+                return list(dict.fromkeys(value for value in values if value in allowed))
+            def text_item(title, value):
+                return IntroItem(title=title, summary=value,
+                                 citations=citations(BaseAgent.extract_citation_ids({"text": value})))
+            report.target_product_intro = TargetProductIntro(
+                hero_summary=data.strengths,
+                core_capabilities=[IntroItem(title=item.name, summary=item.description,
+                                             citations=citations(item.citations))
+                                   for item in data.product_features],
+                monetization=[IntroItem(title=item.tier_name,
+                                        summary="；".join([item.price, *item.features]),
+                                        citations=citations(item.citations))
+                              for item in data.pricing_tiers],
+                market_user=[text_item(title, value) for title, value in
+                             (("市场信息", data.market_share), ("用户评价", data.user_reviews)) if value],
+                strengths=[text_item("优势", data.strengths)] if data.strengths else [],
+                weaknesses=[text_item("局限", data.weaknesses)] if data.weaknesses else [],
+                channel=text_item("渠道", data.channels) if data.channels else None,
+            )
+        return report
 
     def _build_analysis_text(self, product_name: str,
                               product_analysis: ProductAnalysis,
@@ -130,19 +167,22 @@ class StrategyAgent(BaseAgent):
         lines.append("## 一、产品分析")
         if product_analysis.feature_matrix:
             features = [fm.feature for fm in product_analysis.feature_matrix]
-            lines.append(f"对比功能维度: {', '.join(features[:10])}")
+            lines.append(f"对比功能维度: {', '.join(features)}")
+            for row in product_analysis.feature_matrix:
+                lines.append(f"- 产品维度 {row.feature}: {json.dumps(row.values, ensure_ascii=False)}"
+                             + (f" [{','.join(row.citations)}]" if row.citations else ""))
         if product_analysis.competitive_advantages:
-            for adv in product_analysis.competitive_advantages[:5]:
+            for adv in product_analysis.competitive_advantages:
                 cite_tag = f" [{','.join(adv.citations)}]" if adv.citations else ""
                 lines.append(f"- vs {adv.competitor}: 我方优势={adv.our_advantage}, 对方优势={adv.their_advantage}{cite_tag}")
         if product_analysis.differentiation_points:
-            lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points[:5])}")
+            lines.append(f"差异化点: {', '.join(product_analysis.differentiation_points)}")
         lines.append(f"摘要: {product_analysis.summary}")
 
         # 定价分析
         lines.append("\n## 二、定价分析")
         if pricing_analysis.pricing_comparison:
-            for pc in pricing_analysis.pricing_comparison[:5]:
+            for pc in pricing_analysis.pricing_comparison:
                 cite_tag = f" [{','.join(pc.citations)}]" if pc.citations else ""
                 lines.append(f"- {pc.competitor}: 价格与方案={pc.paid_tier}, 免费方案（如有）={pc.free_tier}, 计价方式={pc.pricing_model}{cite_tag}")
         for row in pricing_analysis.dimension_comparison:
@@ -161,9 +201,13 @@ class StrategyAgent(BaseAgent):
         # 市场分析
         lines.append("\n## 三、市场分析")
         if market_analysis.market_share_data:
-            for ms in market_analysis.market_share_data[:5]:
+            for ms in market_analysis.market_share_data:
                 cite_tag = f" [{','.join(ms.citations)}]" if ms.citations else ""
                 lines.append(f"- {ms.competitor}: 份额={ms.share_estimate}, 趋势={ms.trend}{cite_tag}")
+        for name, reputation in market_analysis.user_reputation.items():
+            lines.append(f"- {name} 用户口碑及原文范围: " + json.dumps(asdict(reputation), ensure_ascii=False))
+        for name, profile in market_analysis.user_profiles.items():
+            lines.append(f"- {name} 用户画像及限制: " + json.dumps(asdict(profile), ensure_ascii=False))
         lines.append(f"增长趋势: {market_analysis.growth_trends}")
         lines.append(f"渠道分析: {market_analysis.channel_analysis}")
         lines.append(f"摘要: {market_analysis.summary}")
@@ -552,9 +596,9 @@ class StrategyAgent(BaseAgent):
                            expected_impact="提升市场份额"),
             ],
             risk_assessment="(规则引擎分析，详情请启用LLM)",
-            product_analysis_summary=product_analysis.summary[:100],
-            pricing_analysis_summary=pricing_analysis.summary[:100],
-            market_analysis_summary=market_analysis.summary[:100],
+            product_analysis_summary=product_analysis.summary,
+            pricing_analysis_summary=pricing_analysis.summary,
+            market_analysis_summary=market_analysis.summary,
             summary="基于SWOT模板的简单策略建议（建议启用LLM获得深度分析）",
             citation_index=citation_index or CitationIndex(),
         )
@@ -712,11 +756,32 @@ class StrategyAgent(BaseAgent):
         from datetime import datetime
         from models.domain import CompetitorData, FeatureComparison, CompetitiveAdvantage, PricingItem, MarketShareItem
 
+        # Rendering a saved report must not modify its authoritative JSON.
+        report = self._seal_report_context(deepcopy(report), product_analysis, pricing_analysis, market_analysis)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         # ── 辅助函数 ──
         def esc(text: str) -> str:
             return html_mod.escape(str(text)) if text else ""
+
+        def product_scope_notes(summary: str, default_scope: str = ""):
+            notes = re.findall(
+                r"(?:^|\n)局部比较（仅包含 ([^\n]*?)）：(.*?)(?=\n局部比较（仅包含 |\Z)",
+                summary or "", re.S,
+            ) or [(default_scope, summary or "")]
+            cleaned = []
+            for scope, note in notes:
+                if note.startswith(("规则降级：", "分片恢复合并：")):
+                    note = "资料不足，尚不能作出该范围的产品判断。"
+                for suffix in (
+                    "；模型输出截断，降级保留已解析内容，缺失数据标为⚪。",
+                    "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。",
+                ):
+                    note = note.replace(suffix, "")
+                note = re.sub(r"【保留原批次判断：(.*?)；其余以恢复结果为准】",
+                              r"【本条限定适用于：\1】", note)
+                cleaned.append((scope, note))
+            return cleaned
 
         def pricing_offer(item) -> str:
             parts = [value for value in (item.paid_tier, item.free_tier)
@@ -847,14 +912,8 @@ class StrategyAgent(BaseAgent):
             return None
 
         def normalize_trend(trend: str) -> str:
-            """标准化趋势描述为枚举值：上升/稳定/下降"""
-            t = trend.strip()
-            if any(k in t for k in ["上升", "增长", "上涨", "↗", "↑", "高速", "快速增长", "大幅增长"]):
-                return "上升"
-            elif any(k in t for k in ["下降", "下滑", "下跌", "↘", "↓", "小幅下降", "大幅下降"]):
-                return "下降"
-            else:
-                return "稳定"
+            """Only explicit stored direction enums receive a direction icon."""
+            return (trend or "").strip() or "未知"
 
         def trend_icon(trend: str) -> str:
             normalized = normalize_trend(trend)
@@ -862,8 +921,9 @@ class StrategyAgent(BaseAgent):
                 return f'<span style="color:#22c55e;">↗ {esc(normalized)}</span>'
             elif normalized == "下降":
                 return f'<span style="color:#ef4444;">↘ {esc(normalized)}</span>'
-            else:
+            elif normalized == "稳定":
                 return f'<span style="color:#64748b;">→ {esc(normalized)}</span>'
+            return f'<span style="color:#64748b;">{esc(normalized)}</span>'
 
         def render_intro_items(items: list[IntroItem], empty_text: str = "暂无公开信息") -> str:
             if not items:
@@ -1137,12 +1197,10 @@ class StrategyAgent(BaseAgent):
                     <td style="padding:8px 14px;font-size:13px;text-align:center;" colspan="2">{no_data_label}</td>
                 </tr>'''
 
-            # 市场份额行（从 target_product_data 提取我方数据）
-            our_share = ""
-            our_trend = ""
-            if report.target_product_data and report.target_product_data.market_share:
-                our_share = report.target_product_data.market_share[:150]
-                our_trend = "上升"
+            # Use the same qualified analysis in every market presentation.
+            our_market = share_map.get(report.product_name)
+            our_share = our_market.share_estimate if our_market else "未知"
+            our_trend = our_market.trend if our_market else "未知"
 
             if ms:
                 share_display = esc(ms.share_estimate) if ms.share_estimate else no_data_label
@@ -1227,25 +1285,9 @@ class StrategyAgent(BaseAgent):
             product_scope_html = ""
             source_summary = product_analysis.summary or ""
             if source_summary:
-                scope_notes = re.findall(
-                    r"(?:^|\n)局部比较（仅包含 ([^\n]*?)）：(.*?)(?=\n局部比较（仅包含 |\Z)",
-                    source_summary, re.S,
-                )
-                if not scope_notes:
-                    scope_notes = [("、".join(competitor_names), source_summary)]
+                scope_notes = product_scope_notes(source_summary, "、".join(competitor_names))
                 note_items = []
                 for scope, note in scope_notes:
-                    if note.startswith(("规则降级：", "分片恢复合并：")):
-                        note = "资料不足，尚不能作出该范围的产品判断。"
-                    for internal_suffix in (
-                        "；模型输出截断，降级保留已解析内容，缺失数据标为⚪。",
-                        "；单竞品输出仍截断，降级保留已解析内容，缺失数据标为⚪。",
-                    ):
-                        note = note.replace(internal_suffix, "")
-                    note = re.sub(
-                        r"【保留原批次判断：(.*?)；其余以恢复结果为准】",
-                        r"【本条限定适用于：\1】", note,
-                    )
                     note_items.append(
                         f'<li style="margin-top:8px;"><strong>适用竞品：{esc(scope)}</strong>'
                         f'<p style="margin:4px 0;white-space:pre-line;">{esc(note)}</p></li>'
@@ -1382,29 +1424,23 @@ class StrategyAgent(BaseAgent):
         # ══════════════════════════════════════════════
         market_html = ""
         if market_analysis and market_analysis.market_share_data:
-            max_share = 0
-            share_data = []
-            for ms in market_analysis.market_share_data:
-                num_match = re.search(r'([\d.]+)', ms.share_estimate)
-                share_num = float(num_match.group(1)) if num_match else 0
-                max_share = max(max_share, share_num)
-                share_data.append((ms, share_num))
-
-            share_data_sorted = sorted(share_data, key=lambda x: x[1], reverse=True)
-
             share_bars = ""
-            for ms, share_num in share_data_sorted:
-                bar_width = (share_num / max_share * 100) if max_share > 0 else 50
-                bar_width = max(bar_width, 5)
+            for ms in market_analysis.market_share_data:
+                # Years, user counts, denials and several scoped percentages
+                # are text, not a single share value. Do not rank unlike scopes.
+                match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*%\s*", ms.share_estimate or "")
+                share_num = float(match.group(1)) if match else None
+                if share_num is not None and 0 <= share_num <= 100:
+                    share_visual = f'''<div data-market-share-value="{share_num}" style="background:#f1f5f9;border-radius:6px;height:10px;overflow:hidden;margin-top:6px;">
+                        <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{share_num:.1f}%;border-radius:6px;"></div></div>'''
+                else:
+                    share_visual = ""
                 share_bars += f'''
                 <div style="display:flex;align-items:center;margin-bottom:12px;">
                     <div style="width:120px;font-size:14px;font-weight:500;flex-shrink:0;">{esc(ms.competitor)}{cite_sup(ms.citations)}</div>
                     <div style="flex:1;margin:0 12px;">
-                        <div style="background:#f1f5f9;border-radius:6px;height:28px;overflow:hidden;">
-                            <div style="background:linear-gradient(90deg,#3b82f6,#6366f1);height:100%;width:{bar_width:.1f}%;border-radius:6px;display:flex;align-items:center;padding:0 10px;">
-                                <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;">{esc(ms.share_estimate)}</span>
-                            </div>
-                        </div>
+                        <div style="font-size:13px;line-height:1.6;overflow-wrap:anywhere;">{esc(ms.share_estimate) if ms.share_estimate else '未知'}</div>
+                        {share_visual}
                     </div>
                     <div style="width:80px;text-align:right;flex-shrink:0;">{trend_icon(ms.trend)}</div>
                 </div>'''
@@ -1422,6 +1458,7 @@ class StrategyAgent(BaseAgent):
                         <div style="font-weight:600;font-size:14px;margin-bottom:6px;word-wrap:break-word;overflow-wrap:break-word;">{esc(name)}</div>
                         <div style="font-size:20px;font-weight:700;color:#f59e0b;margin-bottom:4px;">{esc(rep.score) if rep.score else '—'}{cite_sup(rep.citations)}</div>
                         <div>{kw_tags}</div>
+                        {('<div style="font-size:12px;line-height:1.65;color:#64748b;margin-top:8px;overflow-wrap:anywhere;">' + esc(getattr(rep, 'source_text', '')) + '</div>') if getattr(rep, 'source_text', '') else ''}
                     </div>'''
                 reputation_html = f'''
                 <div style="margin-top:20px;">
@@ -1686,11 +1723,14 @@ class StrategyAgent(BaseAgent):
         # 三维摘要
         summary_cards = ""
         if report.product_analysis_summary:
+            product_summary_display = "\n".join(
+                (f"适用竞品：{scope}；" if scope else "") + note
+                for scope, note in product_scope_notes(report.product_analysis_summary))
             summary_cards += f'''
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;flex:1;min-width:200px;">
                 <div style="font-size:24px;margin-bottom:8px;">🔧</div>
                 <div style="font-weight:600;font-size:14px;margin-bottom:6px;">产品分析</div>
-                <div style="font-size:13px;color:#64748b;line-height:1.6;">{esc(report.product_analysis_summary)}</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;white-space:pre-line;">{esc(product_summary_display)}</div>
             </div>'''
         if report.pricing_analysis_summary:
             summary_cards += f'''

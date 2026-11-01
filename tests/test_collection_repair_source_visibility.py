@@ -121,7 +121,7 @@ class CollectionRepairSourceVisibilityTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_evidence_or_incomplete_bad_truncated_output_keeps_old_facts(self):
         malformed = response()
         malformed["pricing_tiers"] = "not an array"
-        for payload, finish in (({}, "stop"), ({"market_share": "17.3%"}, "stop"),
+        for payload, finish in (({}, "stop"), ({"market_share": 17.3}, "stop"),
                                 (malformed, "stop"), (response(), "length")):
             with self.subTest(payload=payload, finish=finish):
                 updated = await self.repair(payload=payload, finish=finish)

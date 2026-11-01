@@ -11,15 +11,15 @@ import subprocess
 import time
 import urllib.request
 
-STAGE = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-review')
+STAGE = Path('/home/ubuntu/maintenance/smartcomp-generalization-20261101-scope')
 SOURCE = Path('/opt/apps/smartcomp')
 CANDIDATE = STAGE / 'candidate'
 OUTPUT = SOURCE / 'output'
 STATE = STAGE / 'promotion-state.json'
-TAG = 'smartcomp-engine-smartcomp-app:generalization-20261101-review'
-ROLLBACK = 'smartcomp-engine-smartcomp-app:pre-generalization-20261101-review'
+TAG = 'smartcomp-engine-smartcomp-app:generalization-20261101-scope'
+ROLLBACK = 'smartcomp-engine-smartcomp-app:pre-generalization-20261101-scope'
 LATEST = 'smartcomp-engine-smartcomp-app:latest'
-ORIGINAL = 'sha256:3dfec3bf0d02187b7556612c5f38f951ae3a5567f0e8e909200a558e46a119f8'
+ORIGINAL = 'sha256:3fc0013bb129bbbb8abd5573424c3934ba632f9c4598042fcd4e06d4dd991413'
 COMPOSE = ['sudo', '-n', 'docker', 'compose', '-p', 'smartcomp-engine',
            '-f', str(SOURCE / 'docker-compose.yml'),
            '-f', str(SOURCE / 'docker-compose.production.yml')]
@@ -121,7 +121,7 @@ image_listed = {row['path']: row['sha256'] for row in rows}
 require(len(image_listed) == len(rows), 'Duplicate image manifest entries')
 listed = image_listed
 require(str(manifest.get('baseline', '')).startswith('3621d6f'), 'Unexpected user-change baseline')
-require(str(manifest.get('previous_commit', '')).startswith('0c9b06d9'), 'Unexpected production commit')
+require(manifest.get('previous_commit') == '4af953a2121645ec75d43e12d7f4afb40b6df57b', 'Unexpected production commit')
 runtime = manifest['runtime']
 require(runtime and len(set(runtime)) == len(runtime), 'Invalid runtime file list')
 for relative, expected in listed.items():
@@ -147,7 +147,7 @@ require(staged['commit'] == commit and staged['candidate_image'] == candidate_id
         staged['manifest_sha256'] == digest(manifest_path), 'Stage record mismatch')
 require(accepted.get('pass') is True and accepted.get('candidate_image') == candidate_id,
         'Acceptance does not pass for this exact image')
-test_container = inspect('smartcomp-generalization-review-e2e')
+test_container = inspect('smartcomp-generalization-scope-e2e')
 require(test_container['Image'] == candidate_id, 'E2E container is not the accepted image')
 require(test_container['State']['Status'] == 'running', 'E2E container stopped')
 require(len(test_container['Mounts']) == 1 and
@@ -156,7 +156,7 @@ require(len(test_container['Mounts']) == 1 and
         test_container['Mounts'][0]['RW'] is False,
         'E2E output must be the production bind mounted read-only')
 require(fetch(18081, '/api/health') == {'status': 'ok'}, 'Candidate unhealthy')
-image_hashes = json.loads(docker('exec', 'smartcomp-generalization-review-e2e', 'python', '-c',
+image_hashes = json.loads(docker('exec', 'smartcomp-generalization-scope-e2e', 'python', '-c',
     'import hashlib,json,pathlib; files=json.loads(' + repr(json.dumps(list(image_listed))) + '); '
     'print(json.dumps({p:hashlib.sha256((pathlib.Path("/app")/p).read_bytes()).hexdigest() for p in files}))'))
 require(image_hashes == image_listed, 'Candidate image contents differ from manifest')

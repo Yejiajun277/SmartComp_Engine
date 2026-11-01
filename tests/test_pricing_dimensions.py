@@ -136,10 +136,15 @@ class PricingDimensionTests(unittest.IsolatedAsyncioTestCase):
         parent["pricing_comparison"] = [{"competitor": "A", "paid_tier": "¥399/晚", "pricing_model": "按晚", "citations": ["A:q0:r0"]}]
         child = result([])
         child["pricing_comparison"] = [{"competitor": "A", "paid_tier": "资料不足", "pricing_model": "按房晚，日期限定", "citations": ["A:q1:r1"]}]
+        native = CompetitorData("A", pricing_tiers=[PricingTier("2026上海标准房含早", "¥399/晚", citations=["A:q0:r0"])],
+                                citations=[Citation("A:q0:r0", snippet="2026上海标准房含早报价¥399/晚")])
         analysis = await self.run_transport([(json.dumps(parent, ensure_ascii=False), True),
-                                             (json.dumps(child, ensure_ascii=False), False), ("", False)], dimensions=HOTEL)
+                                             (json.dumps(child, ensure_ascii=False), False), ("", False)], dimensions=HOTEL,
+                                             competitors={"A": native, "B": CompetitorData("B")})
         self.assertEqual(analysis.pricing_comparison[0].paid_tier, "¥399/晚")
-        self.assertIn(parent["summary"], analysis.summary)
+        self.assertIn("2026上海标准房含早", " ".join(analysis.source_scope_notes["A"]))
+        html = StrategyAgent().format_html_report(StrategyReport("Target", competitor_count=2), pricing_analysis=analysis)
+        self.assertIn("2026上海标准房含早", html)
         self.assertIn("A:q0:r0", analysis.pricing_comparison[0].citations)
 
     async def test_nested_recovery_keeps_original_subset_price_qualifications(self):
@@ -149,14 +154,21 @@ class PricingDimensionTests(unittest.IsolatedAsyncioTestCase):
         b["summary"] = "B仅2025北京套房，不含早。"
         cd = result([])
         cd["summary"] = "C和D仅广州周末房型，均不可取消。"
+        native = {}
+        for name, scope in (("A", "2026上海标准房，含双早"), ("B", "2025北京套房，不含早"),
+                            ("C", "广州周末房型，不可取消"), ("D", "广州周末房型，不可取消")):
+            cid = name + ":price"
+            native[name] = CompetitorData(name, pricing_tiers=[PricingTier(scope, "资料不足", citations=[cid])],
+                                          citations=[Citation(cid, snippet=scope)])
         analysis = await self.run_transport([("{", True), ("{", True),
             (json.dumps(a, ensure_ascii=False), False), (json.dumps(b, ensure_ascii=False), False),
             (json.dumps(cd, ensure_ascii=False), False)], dimensions=HOTEL,
-            competitors={name: CompetitorData(name) for name in "ABCD"})
-        self.assertIn("4家竞品（A、B、C、D）", analysis.summary)
-        self.assertIn("适用竞品（A）：" + a["summary"], analysis.summary)
-        self.assertIn("适用竞品（B）：" + b["summary"], analysis.summary)
-        self.assertIn("适用竞品（C、D）：" + cd["summary"], analysis.summary)
+            competitors=native)
+        html = StrategyAgent().format_html_report(StrategyReport("Target", competitor_count=4), pricing_analysis=analysis)
+        for name, scope in (("A", "2026上海标准房，含双早"), ("B", "2025北京套房，不含早"),
+                            ("C", "广州周末房型，不可取消"), ("D", "广州周末房型，不可取消")):
+            self.assertIn(scope, " ".join(analysis.source_scope_notes[name]))
+            self.assertIn(scope, html)
 
     async def test_corrected_competitor_does_not_keep_parent_batch_conclusions(self):
         parent = result([{"feature": "Installation fee", "values": {"A": "Free", "B": "Free"}}])
@@ -167,16 +179,21 @@ class PricingDimensionTests(unittest.IsolatedAsyncioTestCase):
         child["pricing_comparison"] = [{"competitor": "A", "paid_tier": "USD15"}]
         child["summary"] = "Correction: A charges USD300 installation; previous claim withdrawn."
         child["pricing_strategy_analysis"] = "A total cost must include USD300 installation."
+        native = {"A": CompetitorData("A", pricing_tiers=[PricingTier("Base SKU", "USD15; installation USD300", citations=["A:price"])],
+                                      citations=[Citation("A:price", snippet="Base SKU USD15; installation USD300")]),
+                  "B": CompetitorData("B", pricing_tiers=[PricingTier("2025 US base SKU only", "Free installation", citations=["B:price"])],
+                                      citations=[Citation("B:price", snippet="2025 US base SKU only: Free installation")])}
         analysis = await self.run_transport([(json.dumps(parent), True), (json.dumps(child), False), ("", False)],
-                                            dimensions="1. **Installation fee**: actual cost")
+                                            dimensions="1. **Installation fee**: actual cost", competitors=native)
         self.assertEqual(analysis.dimension_comparison[0].values["A"], "USD300 installation fee")
         self.assertEqual(analysis.dimension_comparison[0].values["B"], "Free")
         self.assertNotIn(parent["pricing_strategy_analysis"], analysis.pricing_strategy_analysis)
         self.assertNotIn("适用竞品（A、B）：" + parent["summary"], analysis.summary)
-        self.assertIn("仅保留B", analysis.summary)
-        self.assertIn("并非当前结论", analysis.summary)
-        self.assertIn("2025 US base SKU only", analysis.summary)
-        self.assertIn(child["summary"], analysis.summary)
+        self.assertNotIn(parent["summary"], analysis.summary)
+        self.assertIn("2025 US base SKU only", " ".join(analysis.source_scope_notes["B"]))
+        html = StrategyAgent().format_html_report(StrategyReport("Target", competitor_count=2), pricing_analysis=analysis)
+        self.assertIn("2025 US base SKU only", html)
+        self.assertIn("installation USD300", html)
 
     async def test_recovered_charge_can_withdraw_parent_free_offer(self):
         parent = result([])
