@@ -30,6 +30,10 @@ _EMPTY_RESULT = {
     "finish_reason": "",
     "duration_ms": 0.0,
     "timestamp": "",
+    "usage_known": False,
+    "usage_reported": False,
+    "request_bytes": 0,
+    "usage_reservation_tokens": 0,
 }
 
 
@@ -53,16 +57,27 @@ def _mimo_payload(system_prompt, user_message, temperature, max_tokens, json_mod
     return payload
 
 
-def _mimo_response(result, duration_ms, thinking=None):
+def _request_usage_reservation(payload):
+    request_bytes = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return {"request_bytes": request_bytes,
+            "usage_reservation_tokens": request_bytes + payload["max_completion_tokens"] + 4096}
+
+
+def _mimo_response(result, duration_ms, thinking=None, *, request_payload=None):
     """Reasoning is never a final answer; retain counts without storing its text."""
     choice = (result.get("choices") or [{}])[0]
     message = choice.get("message") or {}
     content = message.get("content")
     content = content if isinstance(content, str) else ""
-    usage = result.get("usage") or {}
-    details = usage.get("completion_tokens_details") or {}
-    prompt_tokens = usage.get("prompt_tokens", 0)
-    completion_tokens = usage.get("completion_tokens", 0)
+    raw_usage = result.get("usage")
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
+    details = usage.get("completion_tokens_details")
+    details = details if isinstance(details, dict) else {}
+    raw_prompt, raw_completion = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    prompt_known = type(raw_prompt) is int and raw_prompt >= 0
+    completion_known = type(raw_completion) is int and raw_completion >= 0
+    prompt_tokens = raw_prompt if prompt_known else 0
+    completion_tokens = raw_completion if completion_known else 0
     prompt_details = usage.get("prompt_tokens_details")
     cached_tokens = prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None
     # Missing/invalid metadata is unknown, never evidence of a complete miss.
@@ -80,6 +95,9 @@ def _mimo_response(result, duration_ms, thinking=None):
         "finish_reason": choice.get("finish_reason", "unknown"),
         "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds"),
         "thinking": thinking,
+        "usage_known": prompt_known and completion_known,
+        "usage_reported": bool(usage),
+        **(_request_usage_reservation(request_payload) if request_payload is not None else {}),
     }
 
 
@@ -128,7 +146,11 @@ def _call_mimo(system_prompt: str, user_message: str,
             session.trust_env = config.MIMO_USE_SYSTEM_PROXY
             return session.post(api_url, headers=headers, json=payload, timeout=300)
 
+    reservation_total = 0
     for attempt in range(2):
+        request_meta = _request_usage_reservation(payload)
+        reservation_total += request_meta["usage_reservation_tokens"]
+        request_meta["usage_reservation_tokens"] = reservation_total
         t0 = time.time()
         try:
             print(f"  [mimo] [{agent_id}] 🔄 调用 mimo (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
@@ -156,14 +178,24 @@ def _call_mimo(system_prompt: str, user_message: str,
                 if attempt == 0:
                     time.sleep(1)
                     continue
-                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-            response = _mimo_response(result, duration_ms, thinking)
+            response = _mimo_response(result, duration_ms, thinking, request_payload=payload)
+            response.update(request_meta)
+            # A later response cannot settle usage of an earlier failed HTTP
+            # attempt. Preserve the reported numbers, but reserve the full call.
+            response["usage_known"] = response["usage_known"] and attempt == 0
             content, finish_reason = response["content"], response["finish_reason"]
             _last_finish_reason = finish_reason
             _last_usage = {key: response[key] for key in
                            ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
-                            "cached_tokens", "uncached_tokens", "content_chars")}
+                            "cached_tokens", "uncached_tokens", "content_chars", "usage_known",
+                            "usage_reported", "request_bytes", "usage_reservation_tokens")}
+
+            if finish_reason == "content_filter":
+                _last_call_error = "provider_content_filter"
+                print(f"  [mimo] [{agent_id}] ❌ 提供方拒绝请求 (finish_reason=content_filter)")
+                return response
 
             if not content:
                 _last_call_error = f"empty_response(finish_reason={finish_reason})"
@@ -188,7 +220,7 @@ def _call_mimo(system_prompt: str, user_message: str,
             print(f"  [mimo] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
             if attempt == 0:
                 continue
-            return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+            return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
         except requests.exceptions.ConnectionError as e:
             duration_ms = (time.time() - t0) * 1000
             _last_call_error = f"connection_error({str(e)[:200]})"
@@ -198,7 +230,7 @@ def _call_mimo(system_prompt: str, user_message: str,
             if attempt == 0:
                 time.sleep(2)
                 continue
-            return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+            return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
@@ -234,7 +266,11 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
         timeout=300,
         trust_env=config.MIMO_USE_SYSTEM_PROXY,
     ) as client:
+        reservation_total = 0
         for attempt in range(2):
+            request_meta = _request_usage_reservation(payload)
+            reservation_total += request_meta["usage_reservation_tokens"]
+            request_meta["usage_reservation_tokens"] = reservation_total
             t0 = time.time()
             try:
                 print(f"  [mimo] [{agent_id}] 🔄 异步调用 mimo (attempt {attempt + 1}, prompt长度: {prompt_len}字)...")
@@ -262,14 +298,22 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
                     if attempt == 0:
                         await asyncio.sleep(1)
                         continue
-                    return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                    return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
-                response = _mimo_response(result, duration_ms, thinking)
+                response = _mimo_response(result, duration_ms, thinking, request_payload=payload)
+                response.update(request_meta)
+                response["usage_known"] = response["usage_known"] and attempt == 0
                 content, finish_reason = response["content"], response["finish_reason"]
                 _last_finish_reason = finish_reason
                 _last_usage = {key: response[key] for key in
                                ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
-                                "cached_tokens", "uncached_tokens", "content_chars")}
+                                "cached_tokens", "uncached_tokens", "content_chars", "usage_known",
+                                "usage_reported", "request_bytes", "usage_reservation_tokens")}
+
+                if finish_reason == "content_filter":
+                    _last_call_error = "provider_content_filter"
+                    print(f"  [mimo] [{agent_id}] ❌ 提供方拒绝请求 (finish_reason=content_filter)")
+                    return response
 
                 if not content:
                     _last_call_error = f"empty_response(finish_reason={finish_reason})"
@@ -294,7 +338,7 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
                 print(f"  [mimo] [{agent_id}] ⏱️ 请求超时 (attempt {attempt + 1})")
                 if attempt == 0:
                     continue
-                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
             except httpx.ConnectError as e:
                 duration_ms = (time.time() - t0) * 1000
                 _last_call_error = f"connection_error({str(e)[:200]})"
@@ -304,7 +348,7 @@ async def _async_call_mimo(system_prompt: str, user_message: str,
                 if attempt == 0:
                     await asyncio.sleep(2)
                     continue
-                return {**_EMPTY_RESULT, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
+                return {**_EMPTY_RESULT, **request_meta, "duration_ms": duration_ms, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
     return {**_EMPTY_RESULT, "timestamp": datetime.now().isoformat(timespec="seconds")}
 
@@ -339,7 +383,7 @@ def llm_call(system_prompt: str, user_message: str,
             agent_id,
             json_mode=json_mode, **({"thinking": thinking} if thinking is not None else {}),
         )
-        if result["content"]:
+        if result["content"] and result.get("finish_reason") != "content_filter":
             _call_stats["success"] += 1
             return result
 
@@ -388,7 +432,7 @@ async def async_llm_call(system_prompt: str, user_message: str,
             agent_id,
             json_mode=json_mode, **({"thinking": thinking} if thinking is not None else {}),
         )
-        if result["content"]:
+        if result["content"] and result.get("finish_reason") != "content_filter":
             _call_stats["success"] += 1
             return result
 

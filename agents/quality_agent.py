@@ -85,6 +85,9 @@ class QualityAgent(BaseAgent):
         self.timeline = QATimeline(max_retries=self.MAX_RETRIES)
         self._passed_fields: set[str] = set()  # 兼容已查字段记录，不豁免后续快照的问题
         self._collection_review_cache: dict[str, dict] = {}
+        # Refusals block the exact rejected request; they are never successful
+        # semantic-review cache entries and never cross a new collection run.
+        self._provider_rejections: set[str] = set()
         self._collection_review_trace: list[dict] = []
         self._collection_attempt = 1
         self._last_quality_request_trace: dict = {}
@@ -120,6 +123,11 @@ class QualityAgent(BaseAgent):
         # same agent. Accumulate locally across awaits; publish only when this
         # call returns, so a caller can copy its own trace immediately.
         request_trace = {"requests": [], "cacheable": False}
+        fingerprint = self._collection_review_fingerprint(prompt)
+        if fingerprint in self._provider_rejections:
+            request_trace["blocked_provider_rejection"] = True
+            self._last_quality_request_trace = request_trace
+            return {}, "provider_content_filter"
         for attempt, budget in enumerate(self._QUALITY_BUDGETS):
             request = prompt
             if attempt:
@@ -142,7 +150,11 @@ class QualityAgent(BaseAgent):
             completed = (failure in ("", "success") if response is None
                          else finish == "stop" and failure == "success")
             valid = self._valid_quality_response(result)
-            if response is not None and finish != "stop":
+            rejected = finish == "content_filter" or failure in {"provider_content_filter", "content_filter"}
+            if rejected:
+                completed = False
+                failure = "provider_content_filter"
+            elif response is not None and finish != "stop":
                 ending = f"incomplete_finish_reason({finish or 'missing'})"
                 failure = (failure + "; " + ending) if failure and failure != "success" else ending
             elif not valid:
@@ -155,6 +167,11 @@ class QualityAgent(BaseAgent):
                     "fingerprint": self._collection_review_fingerprint(request),
                     "failure_reason": "" if completed and valid else failure or "invalid_quality_response",
                 })
+            if rejected:
+                self._provider_rejections.add(fingerprint)
+                self._last_quality_request_trace = request_trace
+                self._log("   ❌ 提供方拒绝质检请求；停止本任务，不重试或降级通过")
+                return {}, "provider_content_filter"
             if completed and valid:
                 request_trace["cacheable"] = response is not None
                 self._last_quality_request_trace = request_trace
@@ -190,6 +207,7 @@ class QualityAgent(BaseAgent):
         # instance is reused. No process-wide or cross-run review cache.
         if attempt <= 1:
             self._collection_review_cache.clear()
+            self._provider_rejections.clear()
         self._collection_attempt = attempt
         self._collection_review_trace = []
         issues = []
@@ -199,6 +217,7 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
+        fail_reason = ""
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_collection_hallucination(
                 competitors_data, original_search_texts
@@ -264,6 +283,7 @@ class QualityAgent(BaseAgent):
             correction_count=0,  # 首次检查无修正，由 graph node 在重试后设置
             total_fields=total_fields,
             entity_review_trace=deepcopy(self._collection_review_trace),
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         # 记录已通过的字段（避免下一轮重复标记为幻觉）
@@ -495,6 +515,11 @@ class QualityAgent(BaseAgent):
             if not result:
                 failures[name] = reason or "invalid_quality_response"
                 trace["failure_reason"] = failures[name]
+                if request_trace.get("blocked_provider_rejection"):
+                    trace["mode"] = "not_checked"
+                    trace["blocked_provider_rejection"] = True
+                if reason == "provider_content_filter":
+                    return issues, HallucinationCheckStatus.FAILED.value, reason
                 continue
             entity_issues = self._parse_issues(result)
             for issue in entity_issues:
@@ -542,6 +567,7 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
+        fail_reason = ""
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_analysis_hallucination(
                 analysis_type, analysis, competitors_data,
@@ -604,6 +630,7 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,
             total_fields=total_fields,
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"
@@ -841,6 +868,7 @@ class QualityAgent(BaseAgent):
 
         # 幻觉检测（仅 LLM 模式）
         hallucination_status = HallucinationCheckStatus.SKIPPED.value
+        fail_reason = ""
         if config.ENABLE_LLM:
             hallucination_issues, hallucination_status, fail_reason = await self._check_strategy_hallucination(
                 report, product_analysis, pricing_analysis, market_analysis
@@ -890,6 +918,7 @@ class QualityAgent(BaseAgent):
             coverage_rate=coverage_rate,
             correction_count=0,
             total_fields=total_fields,
+            non_retryable_reason="provider_content_filter" if fail_reason == "provider_content_filter" else "",
         )
 
         status = "✅ 通过" if passed else "❌ 未通过"

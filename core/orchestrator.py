@@ -35,6 +35,14 @@ from agents.quality_agent import QualityAgent
 import config
 
 
+class NonRetryableQualityError(RuntimeError):
+    """Terminal provider decision, with task-level failure metadata."""
+
+    def __init__(self, reason: str, failure: dict):
+        super().__init__(reason)
+        self.failure = failure
+
+
 class Orchestrator:
     """
     竞品分析主控编排器
@@ -117,8 +125,28 @@ class Orchestrator:
         self._last_competitor_list = state.get("competitor_list")
         self._last_competitors_data = state.get("competitors_data", {})
         self._last_target_product_data = state.get("target_product_data")
+        failure = state.get("failure", {})
+        if failure.get("non_retryable_reason"):
+            raise NonRetryableQualityError(failure["non_retryable_reason"], failure)
         self._print_completion_summary(report)
         return report
+
+    def _fail_non_retryable_quality(self, result, product_name, competitor_count):
+        reason = getattr(result, "non_retryable_reason", "")
+        if not reason:
+            return
+        from workflow.nodes import AnalysisGraphNodes
+        state = {"qa_checks": self.quality_agent.timeline.checks}
+        failure = AnalysisGraphNodes._failure_payload(state, result.phase, result, "")
+        self._last_status = "failed"
+        self._save_artifact_json("failed_state.json", failure)
+        self._save_artifact_json("qa_timeline.json", self.quality_agent.timeline)
+        logs = self._collect_llm_logs()
+        self._save_artifact_json("llm_logs.json", logs)
+        self._save_artifact_json("token_summary.json", self._build_token_summary(logs))
+        self._finalize_artifacts(status="failed", product_name=product_name,
+                                 competitor_count=competitor_count)
+        raise NonRetryableQualityError(reason, failure)
 
     async def _analyze_legacy(self, product_description: str,
                              max_competitors: int = config.DEFAULT_COMPETITOR_COUNT) -> StrategyReport:
@@ -229,6 +257,10 @@ class Orchestrator:
                     competitor_list=competitor_list, attempt=qa_attempt
                 )
                 self.quality_agent.timeline.add_check(qa_collection)
+                if getattr(qa_collection, "non_retryable_reason", ""):
+                    self._save_artifact_json("02_competitors_data.json", competitors_data)
+                    self._save_artifact_json("02_search_texts.json", original_search_texts)
+                    self._fail_non_retryable_quality(qa_collection, product_name, len(competitor_list.competitors))
 
                 if qa_collection.passed:
                     break
@@ -351,6 +383,16 @@ class Orchestrator:
                 check_current_analysis("pricing", pricing_analysis),
                 check_current_analysis("market", market_analysis),
             )
+            initial_checks = (qa_product, qa_pricing, qa_market)
+            terminal = next((check for check in initial_checks
+                             if getattr(check, "non_retryable_reason", "")), None)
+            if terminal:
+                for check in initial_checks:
+                    self.quality_agent.timeline.add_check(check)
+                self._save_artifact_json("04_product_analysis.json", product_analysis)
+                self._save_artifact_json("05_pricing_analysis.json", pricing_analysis)
+                self._save_artifact_json("06_market_analysis.json", market_analysis)
+                self._fail_non_retryable_quality(terminal, product_name, len(competitor_list.competitors))
 
             # 打回未通过的分析 Agent
             for qa_result, agent_name, atype in [
@@ -391,6 +433,11 @@ class Orchestrator:
                         qa_result = await check_current_analysis("market", market_analysis, qa_attempt + 1)
 
                     self.quality_agent.timeline.add_check(qa_result)
+                    if getattr(qa_result, "non_retryable_reason", ""):
+                        self._save_artifact_json("04_product_analysis.json", product_analysis)
+                        self._save_artifact_json("05_pricing_analysis.json", pricing_analysis)
+                        self._save_artifact_json("06_market_analysis.json", market_analysis)
+                        self._fail_non_retryable_quality(qa_result, product_name, len(competitor_list.competitors))
                     qa_attempt += 1
 
                 if not qa_result.passed:
@@ -438,6 +485,7 @@ class Orchestrator:
                     attempt=qa_attempt
                 )
                 self.quality_agent.timeline.add_check(qa_strategy)
+                self._fail_non_retryable_quality(qa_strategy, product_name, len(competitor_list.competitors))
 
                 if qa_strategy.passed:
                     break
@@ -618,39 +666,61 @@ class Orchestrator:
 
     @staticmethod
     def _build_token_summary(llm_logs: list[dict]) -> dict:
-        """从 LLM 日志中构建 Token 用量汇总。"""
+        """Keep known usage and unknown-call reservations visibly separate."""
         per_agent = {}
-        total_prompt = 0
-        total_completion = 0
-        total_calls = 0
-
+        def empty():
+            return {"call_count": 0, "prompt_tokens": 0, "completion_tokens": 0,
+                    "total_tokens": 0, "known_subtotal": 0, "unknown_call_count": 0,
+                    "usage_complete": True, "usage_reservation_tokens": 0,
+                    "usage_reservation_known_subtotal": 0, "usage_reservation_complete": True}
+        overall = empty()
         for entry in llm_logs:
-            agent_id = entry.get("agent_id", "unknown")
-            prompt_tok = entry.get("prompt_tokens", 0)
-            completion_tok = entry.get("completion_tokens", 0)
-
-            if agent_id not in per_agent:
-                per_agent[agent_id] = {
-                    "call_count": 0,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                }
-
-            per_agent[agent_id]["call_count"] += 1
-            per_agent[agent_id]["prompt_tokens"] += prompt_tok
-            per_agent[agent_id]["completion_tokens"] += completion_tok
-            per_agent[agent_id]["total_tokens"] += prompt_tok + completion_tok
-
-            total_prompt += prompt_tok
-            total_completion += completion_tok
-            total_calls += 1
-
+            if entry.get("type") == "search":
+                continue
+            agent_id = entry.get("agent_id") or entry.get("agent") or "unknown"
+            prompt_tok, completion_tok = entry.get("prompt_tokens"), entry.get("completion_tokens")
+            valid = all(type(value) is int and value >= 0 for value in (prompt_tok, completion_tok))
+            known = (valid and entry.get("usage_known") is not False
+                     and entry.get("usage_reported") is not False
+                     and (entry.get("usage_known") is True or prompt_tok + completion_tok > 0))
+            reservation = None
+            if not known:
+                provided = entry.get("usage_reservation_tokens")
+                if type(provided) is int and provided > 0:
+                    reservation = provided
+                request_bytes = entry.get("request_bytes")
+                caps = [entry.get(key) for key in ("max_completion_tokens", "max_tokens")]
+                caps = [value for value in caps if type(value) is int and value > 0]
+                if type(request_bytes) is int and request_bytes > 0 and caps:
+                    reservation = max(reservation or 0, request_bytes + max(caps) + 4096)
+            agent = per_agent.setdefault(agent_id, empty())
+            for bucket in (overall, agent):
+                bucket["call_count"] += 1
+                if known:
+                    bucket["prompt_tokens"] += prompt_tok
+                    bucket["completion_tokens"] += completion_tok
+                    bucket["total_tokens"] += prompt_tok + completion_tok
+                    bucket["known_subtotal"] += prompt_tok + completion_tok
+                else:
+                    bucket["unknown_call_count"] += 1
+                    bucket["usage_complete"] = False
+                    bucket["usage_reservation_known_subtotal"] += reservation or 0
+                    if reservation is None:
+                        bucket["usage_reservation_tokens"] = None
+                        bucket["usage_reservation_complete"] = False
+                    elif bucket["usage_reservation_tokens"] is not None:
+                        bucket["usage_reservation_tokens"] += reservation
         return {
-            "total_calls": total_calls,
-            "total_prompt_tokens": total_prompt,
-            "total_completion_tokens": total_completion,
-            "total_tokens": total_prompt + total_completion,
+            "total_calls": overall["call_count"],
+            "total_prompt_tokens": overall["prompt_tokens"],
+            "total_completion_tokens": overall["completion_tokens"],
+            "total_tokens": overall["total_tokens"],
+            "known_subtotal": overall["known_subtotal"],
+            "unknown_call_count": overall["unknown_call_count"],
+            "usage_complete": overall["usage_complete"],
+            "usage_reservation_tokens": overall["usage_reservation_tokens"],
+            "usage_reservation_known_subtotal": overall["usage_reservation_known_subtotal"],
+            "usage_reservation_complete": overall["usage_reservation_complete"],
             "per_agent": per_agent,
         }
 

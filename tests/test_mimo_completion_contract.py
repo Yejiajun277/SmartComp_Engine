@@ -135,7 +135,7 @@ class NativeCompletionContractTests(unittest.IsolatedAsyncioTestCase):
         result, reason = await agent._request_quality_json("complete saved facts")
         self.assertEqual(result, {})
         self.assertIn("content_filter", reason)
-        self.assertEqual(len(self.payloads), 2)
+        self.assertEqual(len(self.payloads), 1)
         self.assertFalse(agent._last_quality_request_trace["cacheable"])
         self.assertTrue(all(p["thinking"] == {"type": "enabled"} for p in self.payloads))
 

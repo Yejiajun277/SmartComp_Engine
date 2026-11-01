@@ -319,6 +319,7 @@ class QualityCheckResult:
     # Collection entity checks: real requests and exact snapshot reuse have
     # separate provenance. Older saved checks default to no invented trace.
     entity_review_trace: list[dict] = field(default_factory=list)
+    non_retryable_reason: str = ""      # Explicit provider refusal; never repair/degrade into success.
 
 
 @dataclass

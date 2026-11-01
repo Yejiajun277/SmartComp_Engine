@@ -74,7 +74,8 @@ class CacheUsageTests(unittest.IsolatedAsyncioTestCase):
     async def test_live_terminal_and_reloaded_task_logs_preserve_only_safe_cost_metadata(self):
         metrics = {"cached_tokens": 40, "uncached_tokens": 60, "reasoning_tokens": 17,
                    "content_chars": 14, "thinking": "enabled", "max_completion_tokens": 16384,
-                   "requested_temperature": 0.3}
+                   "requested_temperature": 0.3, "usage_known": False, "usage_reported": False,
+                   "request_bytes": 1200, "usage_reservation_tokens": 21680}
         entries = [dict(metrics), {**metrics, "cached_tokens": 0, "uncached_tokens": 100}, {}]
         logs = [{"agent_id": "QualityAgent", "result": '{"issues": []}', "prompt_tokens": 100,
                  "completion_tokens": 25, "finish_reason": "stop", **item,

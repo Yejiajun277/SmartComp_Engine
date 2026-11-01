@@ -376,6 +376,7 @@ class TaskManager:
                         **{k: log_entry.get(k) for k in (
                             "cached_tokens", "uncached_tokens", "reasoning_tokens", "content_chars",
                             "thinking", "max_completion_tokens", "requested_temperature",
+                            "usage_known", "usage_reported", "request_bytes", "usage_reservation_tokens",
                         )},
                         "success": log_entry.get("success", True),
                     })
@@ -572,6 +573,7 @@ def _collect_llm_logs(orchestrator) -> list[dict]:
                     **{key: log.get(key) for key in (
                         "cached_tokens", "uncached_tokens", "reasoning_tokens", "content_chars",
                         "thinking", "max_completion_tokens", "requested_temperature",
+                        "usage_known", "usage_reported", "request_bytes", "usage_reservation_tokens",
                     )},
                     "success": log.get("success", True),
                     "parse_error": log.get("parse_error", ""),

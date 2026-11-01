@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import { updateLlmLogPagination } from '../src/utils/llmLogs.js';
 
@@ -43,4 +44,15 @@ test('technical trace retains the selected page size when refreshed logs remount
 
   assert.deepEqual(selected, { current: 1, pageSize: 50 });
   assert.deepEqual(nextPage, { current: 2, pageSize: 50 });
+});
+
+test('expanded token detail uses the same legacy sum and unknown state as the table', async (t) => {
+  const module = await loadLlmLogsModule(t);
+  const table = module.LlmLogsTable({ logs: [], columns: [] });
+  const render = record => renderToStaticMarkup(table.props.expandable.expandedRowRender(record));
+  const legacy = render({ prompt_tokens: 100, completion_tokens: 25, total_tokens: 0 });
+  assert.match(legacy, /Total: 125/);
+  const missing = render({ usage_known: false, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+  assert.match(missing, /Token 用量未知/);
+  assert.doesNotMatch(missing, /Total: 0/);
 });

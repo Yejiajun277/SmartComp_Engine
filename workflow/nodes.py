@@ -181,7 +181,7 @@ class AnalysisGraphNodes:
         if qa_result:
             for issue in qa_result.issues:
                 issues.append(asdict(issue) if is_dataclass(issue) else issue)
-        return {
+        payload = {
             "phase": phase,
             "target_agent": qa_result.target_agent if qa_result else "",
             "score": qa_result.score if qa_result else 0,
@@ -200,6 +200,12 @@ class AnalysisGraphNodes:
                 for check in state.get("qa_checks", [])
             ],
         }
+        reason = getattr(qa_result, "non_retryable_reason", "")
+        if reason:
+            payload.update(non_retryable_reason=reason,
+                           failed_node="qa_analysis" if phase in ("product", "pricing", "market") else f"qa_{phase}",
+                           failed_phase=phase, failed_agent="QualityAgent")
+        return payload
 
     async def initialize_run(self, state: AnalysisState) -> AnalysisState:
         started = time.perf_counter()
@@ -1000,7 +1006,7 @@ class AnalysisGraphNodes:
         )
         return {
             "status": "failed",
-            "error": f"quality_exhausted:{failure['phase']}",
+            "error": failure.get("non_retryable_reason") or f"quality_exhausted:{failure['phase']}",
             "failure": failure,
             "report": report,
             "raw_llm_logs": report.raw_llm_logs,
@@ -1008,6 +1014,9 @@ class AnalysisGraphNodes:
 
     @staticmethod
     def _first_failed_phase(state: AnalysisState) -> str:
+        for phase in ("collection", "product", "pricing", "market", "strategy"):
+            if getattr(state.get(f"qa_{phase}"), "non_retryable_reason", ""):
+                return phase
         for phase in ("collection", "product", "pricing", "market", "strategy"):
             result = state.get(f"qa_{phase}")
             if result and not result.passed:

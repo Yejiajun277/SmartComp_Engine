@@ -112,8 +112,8 @@ class CollectionReviewReuseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(first.passed)
                 self.assertFalse(second.passed)
                 self.assertEqual(second.hallucination_status, "failed")
-                self.assertEqual(len(self.calls), 4)
-                self.assertEqual(second.entity_review_trace[0]["mode"], "live")
+                self.assertEqual(len(self.calls), 1 if finish == "content_filter" else 4)
+                self.assertEqual(second.entity_review_trace[0]["mode"], "not_checked" if finish == "content_filter" else "live")
                 self.assertFalse(second.entity_review_trace[0]["completed"])
 
     async def test_completed_clean_review_can_pass_again_without_a_new_request(self):
@@ -138,9 +138,10 @@ class CollectionReviewReuseTests(unittest.IsolatedAsyncioTestCase):
                     result = await self.review()
                 self.assertFalse(result.passed)
                 self.assertEqual(result.hallucination_status, "failed")
-                self.assertEqual(calls, [16384, 16384])
+                self.assertEqual(calls, [16384] if failure == "content_filter" else [16384, 16384])
                 self.assertFalse(result.entity_review_trace[0]["completed"])
-                self.assertEqual(result.entity_review_trace[0]["failure_reason"], failure)
+                self.assertEqual(result.entity_review_trace[0]["failure_reason"],
+                                 "provider_content_filter" if failure == "content_filter" else failure)
                 self.assertEqual(self.agent._collection_review_cache, {})
 
     async def test_completed_entity_reuse_does_not_hide_another_unfinished_entity(self):

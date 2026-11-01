@@ -64,6 +64,10 @@ class BaseAgent(ABC):
             "reasoning_tokens": result.get("reasoning_tokens", 0) if isinstance(result, dict) else 0,
             "cached_tokens": result.get("cached_tokens") if isinstance(result, dict) else None,
             "uncached_tokens": result.get("uncached_tokens") if isinstance(result, dict) else None,
+            "usage_known": result.get("usage_known") if isinstance(result, dict) else False,
+            "usage_reported": result.get("usage_reported") if isinstance(result, dict) else False,
+            "request_bytes": result.get("request_bytes", 0) if isinstance(result, dict) else 0,
+            "usage_reservation_tokens": result.get("usage_reservation_tokens", 0) if isinstance(result, dict) else 0,
             "content_chars": len(content) if isinstance(content, str) else 0,
             "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
             "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
@@ -74,7 +78,7 @@ class BaseAgent(ABC):
             "thinking": thinking,
             "max_completion_tokens": tokens,
             "max_tokens": tokens,
-            "success": bool(content),
+            "success": bool(content) and result.get("finish_reason") != "content_filter" if isinstance(result, dict) else bool(content),
             "parse_error": "",
             # Prompt 归档（可选，通过 config 控制）
             "system_prompt_archive": self.system_prompt if config.ARCHIVE_PROMPTS else "",
@@ -88,7 +92,7 @@ class BaseAgent(ABC):
             except Exception:
                 pass
 
-        return content
+        return "" if self.llm_logs[-1].get("finish_reason") == "content_filter" else content
 
     def ask_llm_json(self, user_message: str,
                      temperature: float = None,
@@ -121,6 +125,9 @@ class BaseAgent(ABC):
             json_mode=True,
             **({"thinking": thinking} if thinking is not None else {}),
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "content_filter":
+            self.llm_logs[-1]["parse_error"] = "provider_content_filter"
+            return {}, "provider_content_filter"
         if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
             reason = "truncated_output(finish_reason=length)"
             self.llm_logs[-1]["parse_error"] = reason
@@ -165,6 +172,10 @@ class BaseAgent(ABC):
             "reasoning_tokens": result.get("reasoning_tokens", 0) if isinstance(result, dict) else 0,
             "cached_tokens": result.get("cached_tokens") if isinstance(result, dict) else None,
             "uncached_tokens": result.get("uncached_tokens") if isinstance(result, dict) else None,
+            "usage_known": result.get("usage_known") if isinstance(result, dict) else False,
+            "usage_reported": result.get("usage_reported") if isinstance(result, dict) else False,
+            "request_bytes": result.get("request_bytes", 0) if isinstance(result, dict) else 0,
+            "usage_reservation_tokens": result.get("usage_reservation_tokens", 0) if isinstance(result, dict) else 0,
             "content_chars": len(content) if isinstance(content, str) else 0,
             "total_tokens": result.get("total_tokens", 0) if isinstance(result, dict) else 0,
             "duration_ms": result.get("duration_ms", 0.0) if isinstance(result, dict) else 0.0,
@@ -175,7 +186,7 @@ class BaseAgent(ABC):
             "thinking": thinking,
             "max_completion_tokens": tokens,
             "max_tokens": tokens,
-            "success": bool(content),
+            "success": bool(content) and result.get("finish_reason") != "content_filter" if isinstance(result, dict) else bool(content),
             "parse_error": "",
         })
 
@@ -185,7 +196,7 @@ class BaseAgent(ABC):
             except Exception:
                 pass
 
-        return content
+        return "" if self.llm_logs[-1].get("finish_reason") == "content_filter" else content
 
     async def async_ask_llm_json(self, user_message: str,
                                  temperature: float = None,
@@ -217,6 +228,9 @@ class BaseAgent(ABC):
             json_mode=True,
             **({"thinking": thinking} if thinking is not None else {}),
         )
+        if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "content_filter":
+            self.llm_logs[-1]["parse_error"] = "provider_content_filter"
+            return {}, "provider_content_filter"
         if self.llm_logs and self.llm_logs[-1].get("finish_reason") == "length":
             reason = "truncated_output(finish_reason=length)"
             self.llm_logs[-1]["parse_error"] = reason
