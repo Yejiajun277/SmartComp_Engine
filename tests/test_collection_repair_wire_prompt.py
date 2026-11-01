@@ -16,6 +16,7 @@ class CollectionRepairWirePromptTests(unittest.IsolatedAsyncioTestCase):
                        change_authority_before_second=False):
         self.agent, self.prompts = CollectionAgent(), []
         self.budgets, self.outcomes = [], []
+        self.thinking_modes = []
         data = snapshot()
         self.before = deepcopy(data)
         sources = {"Rival": "Original complete source"}
@@ -26,6 +27,7 @@ class CollectionRepairWirePromptTests(unittest.IsolatedAsyncioTestCase):
         async def transport(system, prompt, **kwargs):
             self.prompts.append(prompt)
             self.budgets.append(kwargs["max_tokens"])
+            self.thinking_modes.append(kwargs.get("thinking"))
             return {"content": json.dumps(next(queue)), "finish_reason": next(finish_queue)}
         self.results = []
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", transport):
@@ -82,6 +84,7 @@ class CollectionRepairWirePromptTests(unittest.IsolatedAsyncioTestCase):
         proof = {"market_share": [{"source_id": "s", "exact_quote": "Basic 100 yuan"}]}
         await self.exercise([proof, proof], finishes=["length", "stop"])
         self.assertEqual(self.budgets, [8192, 16384])
+        self.assertEqual(self.thinking_modes, ["disabled", "disabled"])
         self.assertEqual(self.results[0], self.before)
         self.assertEqual(self.results[1]["Rival"].market_share, "据[s]原文：Basic 100 yuan")
         self.assertEqual(self.outcomes[0][0]["finish_reason"], "length")

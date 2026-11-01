@@ -11,7 +11,7 @@ from models.domain import Citation, CompetitorData, FeatureItem, PricingTier, Qu
 
 class CollectionRepairTextEvidenceTests(unittest.IsolatedAsyncioTestCase):
     async def repair(self, payload, *, feedback="Expected: these percentages use active users as denominator.",
-                     source_mutator=None):
+                     source_mutator=None, response_override=None):
         self.agent = CollectionAgent()
         self.before = {"Orion": CompetitorData("Orion",
             product_features=[FeatureItem("Named model", "Only model X", ["Orion:s1"])],
@@ -29,9 +29,12 @@ class CollectionRepairTextEvidenceTests(unittest.IsolatedAsyncioTestCase):
                   QualityIssue("warning", "citation", "Orion.pricing_tiers[0].price", "Price")]
         self.plan = build_collection_repair_plan(self.before, issues)
         self.prompts = []
+        self.request_options = []
         async def transport(system, prompt, **kwargs):
             self.prompts.append(prompt)
-            return {"content": json.dumps(payload), "finish_reason": "stop"}
+            self.request_options.append(kwargs)
+            return response_override if response_override is not None else {
+                "content": json.dumps(payload), "finish_reason": "stop"}
         with patch("config.ENABLE_LLM", True), patch("agents.base_agent.async_llm_call", transport):
             result = await self.agent.async_reextract_saved_sources("Target", "Research scope", self.before,
                 self.sources, feedback, repair_plan=self.plan)
@@ -118,6 +121,26 @@ class CollectionRepairTextEvidenceTests(unittest.IsolatedAsyncioTestCase):
             source_mutator=lambda rows: setattr(rows[0], "snippet", None))
         self.assertEqual(result, self.before)
         self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
+
+    async def test_saved_source_selection_uses_one_disabled_thinking_request_and_final_content(self):
+        payload = {"market_share": [{"source_id": "Orion:s1", "exact_quote": "Shares: Orion 12%, Vega 8%."}]}
+        result = await self.repair(payload, response_override={"content": json.dumps(payload),
+            "reasoning_content": '{"market_share":"An unsupported relationship"}', "finish_reason": "stop"})
+        self.assertEqual(self.request_options[0].get("thinking"), "disabled")
+        self.assertEqual(self.request_options[0]["max_tokens"], 8192)
+        self.assertEqual(result["Orion"].market_share,
+                         "据《Community repost》[Orion:s1]原文：Shares: Orion 12%, Vega 8%.")
+        self.assertEqual(self.agent.llm_logs[-1]["thinking"], "disabled")
+
+    async def test_reasoning_cannot_replace_missing_invalid_or_truncated_final_json(self):
+        payload = {"market_share": [{"source_id": "Orion:s1", "exact_quote": "Shares: Orion 12%, Vega 8%."}]}
+        for final, finish in [("", "stop"), ("not JSON", "stop"), (json.dumps(payload), "length")]:
+            with self.subTest(final=final, finish=finish):
+                result = await self.repair(payload, response_override={"content": final,
+                    "reasoning_content": json.dumps(payload), "finish_reason": finish})
+                self.assertEqual(result, self.before)
+                self.assertEqual(self.agent.get_repair_outcomes()[0]["status"], "failed")
+                self.assertEqual(self.request_options[0].get("thinking"), "disabled")
 
 
 if __name__ == "__main__":

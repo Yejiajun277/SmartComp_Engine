@@ -222,7 +222,8 @@ class CollectionAgent(BaseAgent):
                        + json.dumps(self._repair_output_example(authority), ensure_ascii=False, indent=2)
                        + "\n```")
             log_count = len(self.llm_logs)
-            result, reason = await self.async_ask_llm_json_with_reason(prompt, max_tokens=request_budget, temperature=0)
+            result, reason = await self.async_ask_llm_json_with_reason(
+                prompt, max_tokens=request_budget, temperature=0, thinking="disabled")
             response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
             outcome.update(request_max_tokens=request_budget, finish_reason=response.get("finish_reason", ""))
             if (reason != "success" or response.get("finish_reason") != "stop"
