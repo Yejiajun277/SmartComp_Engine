@@ -32,11 +32,21 @@ def invented(name):
             "summary": "品牌全球份额47%，评分8.5/10，18-35岁占80%，全球增长999%。"}
 
 
+def selection(names, *, share=False, review=False):
+    return {"entity_sources": {name: {
+        "market_share": [f"{name}:q0:r0"] if share else [],
+        "user_reviews": [f"{name}:q1:r1"] if review else [],
+        "channels": [],
+    } for name in names}}
+
+
 class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
     async def run_agent(self, data, target=None, responses=None, *, llm=True):
         self.agent = MarketAgent()
         self.requests = []
-        queue = list(responses or [(invented(next(iter(data), "Target")), "stop")])
+        default = invented(next(iter(data), "Target"))
+        default["entity_sources"] = selection((["Target"] if target is not None else []) + list(data))["entity_sources"]
+        queue = list(responses or [(default, "stop")])
         before, before_target = deepcopy(data), deepcopy(target)
 
         async def transport(system, prompt, **kwargs):
@@ -138,7 +148,8 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
     async def test_chunked_recovery_keeps_one_target_and_never_merges_entity_statistics(self):
         data = {name: entity(name) for name in ["Alpha", "Beta", "Gamma"]}
         result = await self.run_agent(data, entity("Target"),
-            [(invented("Target"), "length"), (invented("Alpha"), "stop"), (invented("Beta"), "stop")])
+            [(selection(["Target", *data]), "length"), (selection(["Target", "Alpha"]), "stop"),
+             (selection(["Target", "Beta", "Gamma"]), "stop")])
         self.assertEqual(len(self.requests), 3)
         self.assertTrue(all(budget == 8192 for _, budget in self.requests))
         self.assertEqual([row.competitor for row in result.market_share_data].count("Target"), 1)
@@ -148,10 +159,10 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chunked_recovery_keeps_review_source_bindings_per_entity(self):
         data = {name: entity(name) for name in ["Alpha", "Beta"]}
-        selector = {"entity_sources": {name: {"user_reviews": [f"{name}:q1:r1"]}
-                                        for name in ["Target", "Alpha", "Beta"]}}
+        selector = selection(["Target", "Alpha", "Beta"], review=True)
         result = await self.run_agent(data, entity("Target"),
-            [(selector, "length"), (selector, "stop"), (selector, "stop")])
+            [(selector, "length"), (selection(["Target", "Alpha"], review=True), "stop"),
+             (selection(["Target", "Beta"], review=True), "stop")])
         for name in ["Target", "Alpha", "Beta"]:
             self.assertEqual(result.user_reputation[name].citations, [f"{name}:q1:r1"])
 
@@ -159,7 +170,7 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
         for finish in ["length", "content_filter", "", "unknown"]:
             with self.subTest(finish=finish):
                 item = entity("Rival")
-                selector = {"entity_sources": {"Rival": {"market_share": ["Rival:q1:r1"]}}}
+                selector = selection(["Rival"], share=True)
                 result = await self.run_agent({"Rival": item}, responses=[(selector, finish)])
                 self.assertEqual(len(self.requests), 1)
                 self.assertEqual(result.market_share_data[0].citations, [])
@@ -175,15 +186,17 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_completed_source_selection_cannot_borrow_another_entity_catalog(self):
         alpha, beta = entity("Alpha"), entity("Beta")
-        payload = {"entity_sources": {"Alpha": {"market_share": ["Beta:q0:r0", "Alpha:q0:r0"]}}}
+        payload = selection(["Alpha", "Beta"], share=True)
+        payload["entity_sources"]["Alpha"]["market_share"].append("Beta:q0:r0")
         result = await self.run_agent({"Alpha": alpha, "Beta": beta}, responses=[(payload, "stop")])
         rows = {row.competitor: row for row in result.market_share_data}
-        self.assertEqual(rows["Alpha"].citations, ["Alpha:q0:r0"])
+        self.assertEqual(rows["Alpha"].citations, [])
         self.assertNotIn("Beta:q0:r0", rows["Alpha"].citations)
+        self.assertIn("来源对应核对未完成", result.summary)
 
     async def test_completed_source_review_is_distinct_from_failed_and_unrequested_review(self):
         data = {"Rival": entity("Rival", rated=True)}
-        selector = {"entity_sources": {"Rival": {"user_reviews": ["Rival:q1:r1"]}}}
+        selector = selection(["Rival"], review=True)
         complete = await self.run_agent(data, responses=[(selector, "stop")])
         failed = await self.run_agent(data, responses=[(selector, "length")])
         local = await self.run_agent(data, llm=False)
@@ -198,10 +211,10 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_partial_recovery_marks_only_unfinished_entities_without_losing_checked_target(self):
         data = {name: entity(name) for name in ["Alpha", "Beta"]}
-        selector = {"entity_sources": {name: {"user_reviews": [f"{name}:q1:r1"]}
-                                        for name in ["Target", "Alpha", "Beta"]}}
+        selector = selection(["Target", "Alpha", "Beta"], review=True)
         result = await self.run_agent(data, entity("Target"),
-            [(selector, "length"), (selector, "stop"), (selector, "length")])
+            [(selector, "length"), (selection(["Target", "Alpha"], review=True), "stop"),
+             (selection(["Target", "Beta"], review=True), "length")])
         note = result.summary.split("\n", 1)[0]
         self.assertIn("来源对应核对未完成：Beta", note)
         self.assertIn("已完成：Target、Alpha", note)
@@ -215,10 +228,11 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_nested_unfinished_review_names_survive_merge_and_invalid_schema_is_not_completed(self):
         data = {name: entity(name) for name in ["A", "B", "C", "D"]}
-        good = {"entity_sources": {name: {"market_share": [f"{name}:q0:r0"]} for name in data}}
-        invalid = {"entity_sources": {"C": {"market_share": "C:q0:r0"}}}
-        result = await self.run_agent(data, responses=[(good, "length"), (good, "stop"),
-            (good, "length"), (invalid, "stop"), (good, "stop")])
+        good = selection(data, share=True)
+        invalid = selection(["C"], share=True)
+        invalid["entity_sources"]["C"]["market_share"] = "C:q0:r0"
+        result = await self.run_agent(data, responses=[(good, "length"), (selection(["A", "B"], share=True), "stop"),
+            (selection(["C", "D"], share=True), "length"), (invalid, "stop"), (selection(["D"], share=True), "stop")])
         note = result.summary.split("\n", 1)[0]
         self.assertIn("来源对应核对未完成：C", note)
         self.assertIn("已完成：A、B、D", note)
@@ -226,6 +240,75 @@ class MarketScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows["C"].citations, [])
         self.assertEqual(rows["D"].citations, ["D:q0:r0"])
         self.assertEqual(rows["C"].share_estimate, SHARE)
+
+    async def test_empty_missing_and_unknown_source_selection_fields_cannot_claim_completion(self):
+        complete = selection(["Target", "Rival"])
+        cases = {"empty_mapping": {"entity_sources": {}}, "missing_target": selection(["Rival"]),
+                 "missing_rival": selection(["Target"]), "unknown_entity": selection(["Target", "Rival", "Stranger"])}
+        for field in ["market_share", "user_reviews", "channels"]:
+            missing = deepcopy(complete)
+            del missing["entity_sources"]["Rival"][field]
+            cases["missing_" + field] = missing
+        for label, bad_fields in [("empty_fields", {}), ("unknown_field", {**complete["entity_sources"]["Rival"], "ages": []}),
+                ("bad_refs", {**complete["entity_sources"]["Rival"], "channels": "Rival:q0:r0"}),
+                ("bad_ref_item", {**complete["entity_sources"]["Rival"], "channels": [None]})]:
+            payload = deepcopy(complete)
+            payload["entity_sources"]["Rival"] = bad_fields
+            cases[label] = payload
+        for label, payload in cases.items():
+            with self.subTest(label=label):
+                result = await self.run_agent({"Rival": entity("Rival")}, entity("Target"), [(payload, "stop")])
+                self.assertIn("来源对应核对未完成：Target、Rival", result.summary)
+                self.assertNotIn("来源对应核对已完成", result.summary)
+                self.assertEqual(len(self.requests), 1)
+                self.assertTrue(all(row.share_estimate == SHARE for row in result.market_share_data))
+
+    async def test_full_explicit_empty_source_arrays_are_a_real_completed_selection(self):
+        result = await self.run_agent({"Rival": entity("Rival")}, entity("Target"),
+                                      [(selection(["Target", "Rival"]), "stop")])
+        self.assertIn("来源对应核对已完成", result.summary)
+        self.assertNotIn("未完成", result.summary.split("\n")[0])
+        self.assertTrue(all(row.citations == [] for row in result.market_share_data))
+
+    async def test_completed_selection_requires_a_new_successful_stop_log(self):
+        valid = selection(["Rival"])
+        for current_log in [None, {"finish_reason": "stop", "success": False},
+                            {"finish_reason": "stop"}, {"finish_reason": "length", "success": True},
+                            {"finish_reason": "stop", "success": True, "parse_error": "schema_failure"}]:
+            with self.subTest(current_log=current_log):
+                agent = MarketAgent()
+                agent.llm_logs.append({"finish_reason": "stop", "success": True})
+                async def fake_response(*args, **kwargs):
+                    if current_log is not None:
+                        agent.llm_logs.append(dict(current_log))
+                    return valid, False
+                with patch.object(agent, "async_ask_llm_json_with_truncation_check", fake_response):
+                    payload, incomplete = await agent._request_selection("Target", {"Rival": entity("Rival")}, None, "")
+                self.assertTrue(incomplete)
+                self.assertEqual(payload, {})
+
+    async def test_stop_with_missing_fields_uses_bounded_recovery_and_preserves_unfinished_rival(self):
+        data = {name: entity(name) for name in ["Alpha", "Beta"]}
+        initial = selection(["Target", *data])
+        del initial["entity_sources"]["Alpha"]["channels"]
+        bad_leaf = selection(["Target", "Beta"])
+        del bad_leaf["entity_sources"]["Beta"]["user_reviews"]
+        result = await self.run_agent(data, entity("Target"), responses=[(initial, "stop"),
+            (selection(["Target", "Alpha"], share=True), "stop"), (bad_leaf, "stop")])
+        self.assertEqual(len(self.requests), 3)
+        note = result.summary.split("\n", 1)[0]
+        self.assertIn("来源对应核对未完成：Beta", note)
+        self.assertIn("已完成：Target、Alpha", note)
+        self.assertTrue(all(row.share_estimate == SHARE for row in result.market_share_data))
+        self.assertEqual({row.competitor: row.citations for row in result.market_share_data},
+                         {"Target": ["Target:q0:r0"], "Alpha": ["Alpha:q0:r0"], "Beta": []})
+
+    async def test_repeated_empty_stop_responses_exhaust_only_the_existing_recovery_bound(self):
+        data = {name: entity(name) for name in ["A", "B", "C", "D"]}
+        result = await self.run_agent(data, responses=[({"entity_sources": {}}, "stop")] * 7)
+        self.assertEqual(len(self.requests), 7)
+        self.assertIn("来源对应核对未完成：A、B、C、D", result.summary)
+        self.assertTrue(all(row.share_estimate == SHARE and not row.citations for row in result.market_share_data))
 
 
 if __name__ == "__main__":

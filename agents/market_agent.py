@@ -45,15 +45,19 @@ class MarketAgent(BaseAgent):
         return json.dumps(records, ensure_ascii=False, indent=2)
 
     @classmethod
-    def _valid_selection(cls, result):
+    def _valid_selection(cls, result, entities):
         if not isinstance(result, dict) or not isinstance(result.get("entity_sources"), dict):
             return False
+        if set(result["entity_sources"]) != set(entities):
+            return False
         for name, fields in result["entity_sources"].items():
-            if not isinstance(name, str) or not isinstance(fields, dict):
+            if (not isinstance(name, str) or not isinstance(fields, dict)
+                    or set(fields) != cls._SOURCE_FIELDS):
                 return False
+            catalog = cls._source_catalog(name, entities[name])
             for field, refs in fields.items():
                 if field not in cls._SOURCE_FIELDS or not isinstance(refs, list) or any(
-                        not isinstance(cid, str) for cid in refs):
+                        not isinstance(cid, str) or cid not in catalog for cid in refs):
                     return False
         return True
 
@@ -65,7 +69,10 @@ class MarketAgent(BaseAgent):
         log_count = len(self.llm_logs)
         result, truncated = await self.async_ask_llm_json_with_truncation_check(prompt, max_tokens=8192)
         response = self.llm_logs[-1] if len(self.llm_logs) > log_count else {}
-        complete = not truncated and response.get("finish_reason") == "stop" and self._valid_selection(result)
+        complete = (not truncated and response.get("finish_reason") == "stop"
+                    and response.get("success") is True and not response.get("parse_error")
+                    and self._valid_selection(result, self._entities(
+                        product_name, competitors_data, target_product_data)))
         # Parseable length/content-filter responses are not completed selections.
         return (result, False) if complete else ({}, True)
 

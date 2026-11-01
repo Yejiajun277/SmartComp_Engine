@@ -204,6 +204,26 @@ class PricingScopeIntegrityTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(result.comparable_basis, basis)
                     self.assertEqual(result.value_ranking, ["B", "A"])
 
+    async def test_unpriced_trailing_offering_cannot_borrow_another_offerings_price(self):
+        source = Citation("A:price", snippet="United States Individual Plus $10.99/month, compared to Individual")
+        data = CompetitorData("A", pricing_tiers=[PricingTier("Individual", "$10.99/month", citations=[source.id])], citations=[source])
+        result = await self.analyze({"dimension_comparison": [{"feature": "Quote", "values": {"A": "US $10.99/month"}, "citations": [source.id]}]}, {"A": data})
+        self.assertNotIn("US ", result.dimension_comparison[0].values["A"])
+        self.assertIn("未注明地区", result.dimension_comparison[0].values["A"])
+        self.assertIn("$10.99/month", " ".join(result.source_scope_notes["A"]))
+        self.assertEqual(data.citations[0].snippet, source.snippet)
+
+    async def test_multiple_quotes_in_one_sentence_cannot_share_a_country_or_date(self):
+        for other_price in ["$20.99", "$10.99"]:
+            with self.subTest(other_price=other_price):
+                source = Citation("A:price", snippet="Individual $10.99/month in Canada, 2025-01-01, Family " + other_price + "/month in United States, 2026-01-01")
+                data = CompetitorData("A", pricing_tiers=[PricingTier("Individual", "$10.99/month", citations=[source.id])], citations=[source])
+                result = await self.analyze({"dimension_comparison": [{"feature": "Quote", "values": {"A": "US $10.99/month"}, "citations": [source.id]}]}, {"A": data})
+                self.assertNotIn("US ", result.dimension_comparison[0].values["A"])
+                self.assertIn("未注明地区", result.dimension_comparison[0].values["A"])
+                self.assertEqual(PricingAgent._quote_sentences(data, data.pricing_tiers[0], [source.id]), [])
+                self.assertIn("$10.99/month", " ".join(result.source_scope_notes["A"]))
+
 
 if __name__ == "__main__":
     unittest.main()

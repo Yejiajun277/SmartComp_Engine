@@ -93,7 +93,9 @@ class PricingAgent(BaseAgent):
         for match in re.finditer(pattern, sentence, re.I):
             tail = sentence[match.end():]
             price = next(_MONEY_TOKEN.finditer(tail), None)
-            gap = tail[:price.start()] if price else tail
+            if price is None:
+                continue
+            gap = tail[:price.start()]
             gap = _US_REGION.sub("", gap)
             gap = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", gap)
             gap = re.sub(r"\b(?:plan|package|tier|sku|price|priced|cost|costs|at|is|now|in|the|for)\b", "", gap, flags=re.I)
@@ -117,6 +119,11 @@ class PricingAgent(BaseAgent):
                 continue
             # Do not borrow a region from an unrelated paragraph of a source.
             for sentence in re.split(r"[。；;\n]|(?<!\d)\.(?!\d)", cite.snippet):
+                # A sentence listing multiple prices cannot establish which
+                # offering owns a later region/date. Keep its raw quote, but
+                # do not combine those clauses into a common comparison basis.
+                if sum(1 for _ in _MONEY_TOKEN.finditer(sentence)) != 1:
+                    continue
                 if amounts <= cls._money_amounts(sentence) and cls._offering_matches(label, sentence):
                     result.append(sentence)
         return result
